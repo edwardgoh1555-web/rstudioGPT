@@ -1,0 +1,2091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>R/StudioGPT</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="screen">
+        <div class="login-container">
+            <div class="login-card glass-card">
+                <div class="login-header">
+                    <div class="logo">
+                        <div class="logo-icon">
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="24" cy="24" r="20" stroke="url(#gradient)" stroke-width="2"/>
+                                <path d="M24 12v24M12 24h24" stroke="url(#gradient)" stroke-width="2" stroke-linecap="round"/>
+                                <circle cx="24" cy="24" r="8" fill="url(#gradient)" opacity="0.3"/>
+                                <circle cx="24" cy="24" r="4" fill="url(#gradient)"/>
+                                <defs>
+                                    <linearGradient id="gradient" x1="0" y1="0" x2="48" y2="48">
+                                        <stop offset="0%" stop-color="#6366f1"/>
+                                        <stop offset="100%" stop-color="#8b5cf6"/>
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                        </div>
+                        <h1>R/StudioGPT</h1>
+                        <p class="subtitle">Data Retrieval & Schema Application</p>
+                    </div>
+                </div>
+                <form id="loginForm" class="login-form">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" placeholder="Enter your username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full">
+                        <span>Sign In</span>
+                        <svg class="btn-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"/>
+                        </svg>
+                    </button>
+                    <p id="loginError" class="error-message"></p>
+                </form>
+                <div class="demo-credentials">
+                    <p class="demo-label">Demo Credentials</p>
+                    <div class="demo-users">
+                        <button type="button" class="demo-user" data-user="client.lead" data-pass="demo123">
+                            <span class="demo-role">Client Lead</span>
+                        </button>
+                        <button type="button" class="demo-user" data-user="admin" data-pass="admin123">
+                            <span class="demo-role">Admin</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="login-decoration">
+                <div class="decoration-orb orb-1"></div>
+                <div class="decoration-orb orb-2"></div>
+                <div class="decoration-orb orb-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div id="mainApp" class="screen hidden">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="logo-icon small">
+                        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="24" cy="24" r="20" stroke="url(#gradient2)" stroke-width="2"/>
+                            <path d="M24 12v24M12 24h24" stroke="url(#gradient2)" stroke-width="2" stroke-linecap="round"/>
+                            <circle cx="24" cy="24" r="4" fill="url(#gradient2)"/>
+                            <defs>
+                                <linearGradient id="gradient2" x1="0" y1="0" x2="48" y2="48">
+                                    <stop offset="0%" stop-color="#6366f1"/>
+                                    <stop offset="100%" stop-color="#8b5cf6"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <span class="sidebar-title">R/Studio</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-view="dashboard">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-view="generate">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    <span>Generate</span>
+                </button>
+                <button class="nav-item" data-view="video">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                    <span>Generate Video</span>
+                </button>
+                <button class="nav-item" data-view="history">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="9"/>
+                        <path d="M12 6v6l4 2"/>
+                    </svg>
+                    <span>History</span>
+                </button>
+                <button class="nav-item admin-only" data-view="admin">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+                    </svg>
+                    <span>Admin</span>
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar">JD</div>
+                    <div class="user-details">
+                        <span class="user-name" id="userName">John Doe</span>
+                        <span class="user-role" id="userRole">Client Lead</span>
+                    </div>
+                </div>
+                <button id="logoutBtn" class="logout-btn" title="Sign Out">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
+                    </svg>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Dashboard View -->
+            <section id="dashboardView" class="view">
+                <header class="view-header">
+                    <div class="header-content">
+                        <h2>Welcome back, <span id="welcomeName">User</span></h2>
+                        <p class="header-subtitle">R/StudioGPT - Data Retrieval & Schema Application</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" id="quickGenerateBtn">
+                            <svg viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M10 3a.75.75 0 01.75.75v5.5h5.5a.75.75 0 010 1.5h-5.5v5.5a.75.75 0 01-1.5 0v-5.5h-5.5a.75.75 0 010-1.5h5.5v-5.5A.75.75 0 0110 3z"/>
+                            </svg>
+                            Generate Source Pack
+                        </button>
+                    </div>
+                </header>
+                
+                <div class="dashboard-grid">
+                    <!-- Stats Cards -->
+                    <div class="stats-row">
+                        <div class="stat-card glass-card">
+                            <div class="stat-icon blue">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 12h6M9 16h6M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-value" id="statPacks">0</span>
+                                <span class="stat-label">Source Packs</span>
+                            </div>
+                        </div>
+                        <div class="stat-card glass-card">
+                            <div class="stat-icon green">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-value" id="statReady">0</span>
+                                <span class="stat-label">Ready</span>
+                            </div>
+                        </div>
+                        <div class="stat-card glass-card">
+                            <div class="stat-icon yellow">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                </svg>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-value" id="statCaveats">0</span>
+                                <span class="stat-label">With Caveats</span>
+                            </div>
+                        </div>
+                        <div class="stat-card glass-card">
+                            <div class="stat-icon purple">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                </svg>
+                            </div>
+                            <div class="stat-content">
+                                <span class="stat-value" id="statClients">8</span>
+                                <span class="stat-label">Active Clients</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- API Status -->
+                    <div class="section-card glass-card">
+                        <div class="section-header">
+                            <h3>Data Source Status</h3>
+                            <span class="status-badge online">All Systems Operational</span>
+                        </div>
+                        <div class="api-status-grid">
+                            <div class="api-status-item">
+                                <div class="api-icon alphasense">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                    </svg>
+                                </div>
+                                <div class="api-info">
+                                    <span class="api-name">AlphaSense</span>
+                                    <span class="api-desc">Analyst Insights</span>
+                                </div>
+                                <span class="api-status-indicator" id="statusAlphasense">
+                                    <span class="status-dot"></span>
+                                    Demo Mode
+                                </span>
+                            </div>
+                            <div class="api-status-item">
+                                <div class="api-icon arc">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                                    </svg>
+                                </div>
+                                <div class="api-info">
+                                    <span class="api-name">ARC Database</span>
+                                    <span class="api-desc">Industry Benchmarks</span>
+                                </div>
+                                <span class="api-status-indicator placeholder" id="statusArc">
+                                    <span class="status-dot"></span>
+                                    Placeholder
+                                </span>
+                            </div>
+                            <div class="api-status-item">
+                                <div class="api-icon openai">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                                    </svg>
+                                </div>
+                                <div class="api-info">
+                                    <span class="api-name">OpenAI</span>
+                                    <span class="api-desc">AI Client Analysis</span>
+                                </div>
+                                <span class="api-status-indicator demo" id="statusOpenai">
+                                    <span class="status-dot"></span>
+                                    Not Configured
+                                </span>
+                            </div>
+                            <div class="api-status-item">
+                                <div class="api-icon internet">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/>
+                                    </svg>
+                                </div>
+                                <div class="api-info">
+                                    <span class="api-name">Internet Sources</span>
+                                    <span class="api-desc">Regulatory & News</span>
+                                </div>
+                                <span class="api-status-indicator online" id="statusInternet">
+                                    <span class="status-dot"></span>
+                                    Active
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions & Recent Activity -->
+                    <div class="two-column">
+                        <div class="section-card glass-card">
+                            <div class="section-header">
+                                <h3>Quick Actions</h3>
+                            </div>
+                            <div class="quick-actions">
+                                <button class="quick-action-btn" id="btnNewSourcePack">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M9 12h6M12 9v6M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <span>New Source Pack</span>
+                                </button>
+                                <button class="quick-action-btn" id="btnViewClients">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                                    </svg>
+                                    <span>View Clients</span>
+                                </button>
+                                <button class="quick-action-btn" id="btnViewSchema">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+                                    </svg>
+                                    <span>View Schema</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="section-card glass-card">
+                            <div class="section-header">
+                                <h3>Recent Activity</h3>
+                            </div>
+                            <div class="activity-list" id="activityList">
+                                <div class="activity-item">
+                                    <div class="activity-icon success">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                    </div>
+                                    <div class="activity-content">
+                                        <span class="activity-text">System initialized</span>
+                                        <span class="activity-time">Just now</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Generate View -->
+            <section id="generateView" class="view hidden">
+                <header class="view-header">
+                    <div class="header-content">
+                        <h2>Generate Source Pack</h2>
+                        <p class="header-subtitle">Select a client and configure context to generate a schema-validated intelligence pack</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-ghost" id="startOverBtn" title="Start a new generation">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 6px;">
+                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                                <path d="M3 3v5h5"/>
+                            </svg>
+                            Start Over
+                        </button>
+                    </div>
+                </header>
+
+                <div class="generate-container">
+                    <!-- Step Indicator -->
+                    <div class="step-indicator">
+                        <div class="step active" data-step="1">
+                            <div class="step-number">1</div>
+                            <span class="step-label">Select Client</span>
+                        </div>
+                        <div class="step-line"></div>
+                        <div class="step" data-step="2">
+                            <div class="step-number">2</div>
+                            <span class="step-label">Configure</span>
+                        </div>
+                        <div class="step-line"></div>
+                        <div class="step" data-step="3">
+                            <div class="step-number">3</div>
+                            <span class="step-label">Generate Source Pack</span>
+                        </div>
+                        <div class="step-line"></div>
+                        <div class="step" data-step="4">
+                            <div class="step-number">4</div>
+                            <span class="step-label">Add Additional Docs</span>
+                        </div>
+                        <div class="step-line"></div>
+                        <div class="step" data-step="5">
+                            <div class="step-number">5</div>
+                            <span class="step-label">Narrative Builder</span>
+                        </div>
+                        <div class="step-line"></div>
+                        <div class="step" data-step="6">
+                            <div class="step-number">6</div>
+                            <span class="step-label">Narrative</span>
+                        </div>
+                    </div>
+
+                    <!-- Step Content -->
+                    <div class="step-content">
+                        <!-- Step 1: Client Selection -->
+                        <div class="step-panel active" data-step="1">
+                            <div class="panel-header">
+                                <h3>Select Client</h3>
+                                <div class="search-box ai-search">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8"/>
+                                        <path d="m21 21-4.35-4.35"/>
+                                    </svg>
+                                    <input type="text" id="clientSearch" placeholder="Search or type a new client name (e.g., 'Apple', 'Tesla', 'Microsoft')...">
+                                    <button type="button" id="aiCreateClientBtn" class="ai-create-btn hidden" title="Create client with AI">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                                        </svg>
+                                        <span>Create with AI</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- AI Client Creation Card -->
+                            <div id="aiClientCreation" class="ai-client-creation hidden">
+                                <div class="ai-creation-header">
+                                    <div class="ai-icon-pulse">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                                        </svg>
+                                    </div>
+                                    <div class="ai-creation-text">
+                                        <h4 id="aiCreationTitle">Creating client profile...</h4>
+                                        <p id="aiCreationSubtitle">AI is analyzing company data and generating context</p>
+                                    </div>
+                                </div>
+                                <div class="ai-creation-progress">
+                                    <div class="ai-progress-bar">
+                                        <div class="ai-progress-fill" id="aiProgressFill"></div>
+                                    </div>
+                                    <div class="ai-progress-steps">
+                                        <span class="ai-step active" data-step="analyze">Analyzing</span>
+                                        <span class="ai-step" data-step="industry">Industry</span>
+                                        <span class="ai-step" data-step="geography">Geography</span>
+                                        <span class="ai-step" data-step="sector">Sector</span>
+                                        <span class="ai-step" data-step="complete">Complete</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="client-grid" id="clientGrid">
+                                <!-- Clients will be populated here -->
+                            </div>
+                        </div>
+
+                        <!-- Step 2: Context Configuration -->
+                        <div class="step-panel" data-step="2">
+                            <div class="panel-header">
+                                <h3>Configure Context</h3>
+                            </div>
+                            <div class="selected-client-banner" id="selectedClientBanner">
+                                <div class="client-info">
+                                    <span class="client-name" id="selectedClientName">-</span>
+                                    <span class="client-meta" id="selectedClientMeta">-</span>
+                                </div>
+                                <button class="btn btn-ghost" id="changeClientBtn">Change</button>
+                            </div>
+                            <form class="context-form" id="contextForm">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="industry">Industry / Sub-sector</label>
+                                        <input type="text" id="industry" name="industry" placeholder="Auto-populated from client">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="geography">Geography</label>
+                                        <select id="geography" name="geography">
+                                            <option value="Global">Global</option>
+                                            <option value="North America">North America</option>
+                                            <option value="Europe">Europe</option>
+                                            <option value="APAC">APAC</option>
+                                            <option value="LATAM">LATAM</option>
+                                            <option value="MEA">Middle East & Africa</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="timeHorizon">Time Horizon</label>
+                                        <select id="timeHorizon" name="timeHorizon">
+                                            <option value="30">Last 30 days</option>
+                                            <option value="90" selected>Last 90 days</option>
+                                            <option value="180">Last 180 days</option>
+                                            <option value="365">Last 365 days</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="outputIntent">Output Intent</label>
+                                        <select id="outputIntent" name="outputIntent">
+                                            <option value="CEO Narrative">CEO Narrative</option>
+                                            <option value="Board Pack">Board Pack</option>
+                                            <option value="Strategy Brief">Strategy Brief</option>
+                                            <option value="Industry Report">Industry Report</option>
+                                            <option value="Competitive Analysis">Competitive Analysis</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <!-- Client Point of Contact Upload -->
+                                <div class="form-section poc-upload-section">
+                                    <label class="section-label">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 6px;">
+                                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                            <circle cx="9" cy="7" r="4"/>
+                                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                        </svg>
+                                        Client Point of Contact Info
+                                        <span class="optional-label">(Optional)</span>
+                                    </label>
+                                    <p class="section-hint">Upload a document with client stakeholder details to personalize the narrative tone</p>
+                                    <div class="poc-upload-area" id="pocUploadArea">
+                                        <div class="poc-empty" id="pocEmpty">
+                                            <button type="button" class="btn btn-secondary btn-sm" id="browsePocBtn">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 6px;">
+                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                    <polyline points="17 8 12 3 7 8"/>
+                                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                                </svg>
+                                                Upload POC File
+                                            </button>
+                                            <span class="poc-hint">PDF, DOCX, or TXT</span>
+                                        </div>
+                                        <div class="poc-file-info hidden" id="pocFileInfo">
+                                            <div class="poc-file-details">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                                    <polyline points="14 2 14 8 20 8"/>
+                                                    <line x1="16" y1="13" x2="8" y2="13"/>
+                                                    <line x1="16" y1="17" x2="8" y2="17"/>
+                                                </svg>
+                                                <span class="poc-file-name" id="pocFileName">-</span>
+                                            </div>
+                                            <button type="button" class="btn btn-ghost btn-sm" id="removePocBtn" title="Remove file">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                                    <path d="M6 18L18 6M6 6l12 12"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Fast Generate Option -->
+                                <div class="form-section fast-generate-section">
+                                    <label class="checkbox-label fast-generate-label">
+                                        <input type="checkbox" id="fastGenerateCheckbox" name="fastGenerate">
+                                        <span class="checkbox-custom"></span>
+                                        <span class="checkbox-text">
+                                            <strong>Fast Generate Mode</strong>
+                                            <span class="checkbox-hint">Uses cheaper models and cached data for faster, lower-cost testing</span>
+                                        </span>
+                                    </label>
+                                </div>
+                            </form>
+                            <div class="panel-actions">
+                                <button class="btn btn-ghost" id="backToStep1">Back</button>
+                                <button class="btn btn-primary" id="proceedToGenerate">Continue to Generate</button>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Generation Progress -->
+                        <div class="step-panel" data-step="3">
+                            <div class="generation-progress">
+                                <div class="progress-header">
+                                    <div class="progress-icon spinning">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                        </svg>
+                                    </div>
+                                    <h3>Generating Source Pack</h3>
+                                    <p id="progressMessage">Initializing...</p>
+                                </div>
+                                <div class="progress-stages" id="progressStages">
+                                    <div class="progress-stage" data-stage="auth">
+                                        <div class="stage-indicator pending">
+                                            <svg class="progress-ring" viewBox="0 0 36 36">
+                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
+                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
+                                            </svg>
+                                            <span class="stage-icon"></span>
+                                        </div>
+                                        <span class="stage-label">Authenticating to data sources</span>
+                                        <span class="stage-status"></span>
+                                    </div>
+                                    <div class="progress-stage" data-stage="alphasense">
+                                        <div class="stage-indicator pending">
+                                            <svg class="progress-ring" viewBox="0 0 36 36">
+                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
+                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
+                                            </svg>
+                                            <span class="stage-icon"></span>
+                                        </div>
+                                        <span class="stage-label">Pulling AlphaSense insights</span>
+                                        <span class="stage-status"></span>
+                                    </div>
+                                    <div class="progress-stage" data-stage="arc">
+                                        <div class="stage-indicator pending">
+                                            <svg class="progress-ring" viewBox="0 0 36 36">
+                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
+                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
+                                            </svg>
+                                            <span class="stage-icon"></span>
+                                        </div>
+                                        <span class="stage-label">Pulling ARC benchmarks</span>
+                                        <span class="stage-status"></span>
+                                    </div>
+                                    <div class="progress-stage" data-stage="internet">
+                                        <div class="stage-indicator pending">
+                                            <svg class="progress-ring" viewBox="0 0 36 36">
+                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
+                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
+                                            </svg>
+                                            <span class="stage-icon"></span>
+                                        </div>
+                                        <span class="stage-label">Compiling deep research report</span>
+                                        <span class="stage-status"></span>
+                                    </div>
+                                    <div class="progress-stage" data-stage="normalize">
+                                        <div class="stage-indicator pending">
+                                            <svg class="progress-ring" viewBox="0 0 36 36">
+                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
+                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
+                                            </svg>
+                                            <span class="stage-icon"></span>
+                                        </div>
+                                        <span class="stage-label">Normalising and validating</span>
+                                        <span class="stage-status"></span>
+                                    </div>
+                                    <div class="progress-stage" data-stage="complete">
+                                        <div class="stage-indicator pending">
+                                            <svg class="progress-ring" viewBox="0 0 36 36">
+                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
+                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
+                                            </svg>
+                                            <span class="stage-icon"></span>
+                                        </div>
+                                        <span class="stage-label">Finalising Source Pack</span>
+                                        <span class="stage-status"></span>
+                                    </div>
+                                </div>
+                                <div class="progress-timer">
+                                    <span>Elapsed: <span id="elapsedTime">0:00</span></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 4: Add Additional Documents -->
+                        <div class="step-panel" data-step="4">
+                            <div class="add-documents-container">
+                                <div class="add-docs-header">
+                                    <div class="add-docs-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <path d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                        </svg>
+                                    </div>
+                                    <h3>Review Sources & Add Documents</h3>
+                                    <p class="add-docs-subtitle">Review auto-generated sources and add any supplementary materials</p>
+                                </div>
+                                
+                                <div class="add-docs-content">
+                                    <!-- Source Status Section (always visible) -->
+                                    <div class="source-status-section" id="sourceStatusSection">
+                                        <h4 class="section-divider-title">Generated Sources</h4>
+                                        <div class="source-status-grid" id="sourceStatusGrid">
+                                            <!-- Dynamically populated with source status cards -->
+                                        </div>
+                                    </div>
+
+                                    <!-- Failed Source Replacement Section -->
+                                    <div class="placeholder-replacement-section hidden" id="placeholderReplacementSection">
+                                        <div class="placeholder-section-header">
+                                            <div class="placeholder-warning-icon">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <h4>Sources Requiring Replacement</h4>
+                                                <p>Some sources couldn't be generated. Upload replacement files below.</p>
+                                            </div>
+                                        </div>
+                                        <div class="placeholder-items-list" id="placeholderItemsList">
+                                            <!-- Dynamically populated -->
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Additional Documents Section -->
+                                    <div class="additional-docs-section">
+                                        <h4 class="section-divider-title">Additional Documents (Optional)</h4>
+                                        <div class="drop-zone" id="documentDropZone">
+                                        <div class="drop-zone-content">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                                            </svg>
+                                            <p>Drag and drop files here</p>
+                                            <span class="drop-zone-or">or</span>
+                                            <button type="button" class="btn btn-secondary" id="browseFilesBtn">Browse Files</button>
+                                            <p class="drop-zone-hint">Supports PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, JSON</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="added-files-section hidden" id="addedFilesSection">
+                                        <div class="added-files-header">
+                                            <h4>Added Documents</h4>
+                                            <span class="file-count" id="addedFileCount">0 files</span>
+                                        </div>
+                                        <div class="added-files-list" id="addedFilesList">
+                                            <!-- Files will be listed here -->
+                                        </div>
+                                    </div>
+                                    </div><!-- End additional-docs-section -->
+                                    
+                                    <div class="add-docs-info glass-card">
+                                        <div class="info-icon">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                        </div>
+                                        <div class="info-content">
+                                            <p><strong>Source Pack Contents:</strong></p>
+                                            <ul style="font-size: 0.85rem; color: var(--text-secondary); margin: 8px 0; padding-left: 20px;">
+                                                <li>ChatGPT Research Report</li>
+                                                <li>ARC Assets Report</li>
+                                                <li>AlphaSense Market Report</li>
+                                                <li>Client PoC Document</li>
+                                                <li>Additional Materials (if added)</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="panel-actions panel-actions-end">
+                                    <button class="btn btn-primary" id="proceedWithDocs">
+                                        <span id="proceedWithDocsText">Continue to Review</span>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-left: 8px;">
+                                            <path d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 5: Narrative Builder - Guided Prompt Creation -->
+                        <div class="step-panel" data-step="5">
+                            <div class="source-chat-container">
+                                <div class="source-chat-header">
+                                    <div class="source-chat-icon narrative-builder-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+                                        </svg>
+                                    </div>
+                                    <div class="source-chat-title">
+                                        <h3>Narrative Builder</h3>
+                                        <p class="source-chat-subtitle">Let's craft the perfect narrative prompt together based on your sources</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="source-chat-context glass-card">
+                                    <div class="context-badge">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                            <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                                        </svg>
+                                        <span id="chatSourceCount">0 sources loaded</span>
+                                    </div>
+                                    <div class="context-client">
+                                        <span id="chatClientName">--</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="source-chat-messages" id="sourceChatMessages">
+                                    <!-- Welcome message populated by JS -->
+                                </div>
+                                
+                                <div class="source-chat-input-area">
+                                    <div class="source-chat-input-wrapper">
+                                        <textarea id="sourceChatInput" placeholder="Type your response..." rows="1"></textarea>
+                                        <button class="btn btn-primary source-chat-send" id="sourceChatSendBtn" title="Send message">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <p class="source-chat-hint">Press Enter to send, Shift+Enter for new line</p>
+                                </div>
+                                
+                                <!-- Generated Prompt Preview (hidden until ready) -->
+                                <div class="generated-prompt-preview glass-card hidden" id="generatedPromptPreview">
+                                    <div class="prompt-preview-header">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
+                                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        <span>Generated Narrative Prompt</span>
+                                    </div>
+                                    <div class="prompt-preview-content" id="generatedPromptContent">
+                                        <!-- Prompt will be inserted here -->
+                                    </div>
+                                    <div class="prompt-preview-actions">
+                                        <button class="btn btn-ghost" id="editPromptBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                                <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                            </svg>
+                                            Edit in Next Step
+                                        </button>
+                                        <button class="btn btn-primary" id="usePromptBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                                <path d="M5 13l4 4L19 7"/>
+                                            </svg>
+                                            Use This Prompt
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="panel-actions panel-actions-spread">
+                                    <button class="btn btn-ghost" id="backToAddDocsBtn">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
+                                            <path d="M11 17l-5-5m0 0l5-5m-5 5h12"/>
+                                        </svg>
+                                        Back
+                                    </button>
+                                    <div class="action-buttons-group">
+                                        <button class="btn btn-ghost" id="exportSourcePackBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
+                                                <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                            </svg>
+                                            <span>Export Source Pack</span>
+                                        </button>
+                                        <button class="btn btn-secondary" id="skipBuilderBtn">
+                                            <span>Skip to Manual Input</span>
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-left: 8px;">
+                                                <path d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 6: Narrative Generation -->
+                        <div class="step-panel" data-step="6">
+                            <div class="narrative-container">
+                                <div class="narrative-scrollable-content">
+                                <div class="narrative-header">
+                                    <div class="narrative-icon">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                        </svg>
+                                    </div>
+                                    <h3>Generate Narrative Document</h3>
+                                    <p class="narrative-subtitle">Transform your Source Pack into a polished narrative using AI</p>
+                                </div>
+                                
+                                <div class="narrative-content">
+                                    <!-- Agent Instructions (Primary) -->
+                                    <div class="narrative-section">
+                                        <label class="section-label">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+                                            </svg>
+                                            Narrative Instructions
+                                        </label>
+                                        <textarea id="narrativeAgentPrompt" class="agent-prompt-input" rows="12" placeholder="Enter your narrative template and instructions here...&#10;&#10;The AI will follow these instructions to generate the narrative from your Source Pack documents.&#10;&#10;Tip: Paste your full template structure here, including section headings and guidance for each section."></textarea>
+                                        <p class="field-hint">The AI will use your Source Pack documents to populate the narrative according to these instructions.</p>
+                                    </div>
+                                    
+                                    <!-- Source Pack Summary -->
+                                    <div class="narrative-section">
+                                        <label class="section-label">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                                            </svg>
+                                            Source Pack Summary
+                                        </label>
+                                        <div class="source-pack-summary glass-card" id="sourcePackSummary">
+                                            <div class="summary-item">
+                                                <span class="summary-label">Client:</span>
+                                                <span class="summary-value" id="narrativeClientName">--</span>
+                                            </div>
+                                            <div class="summary-item">
+                                                <span class="summary-label">Documents:</span>
+                                                <span class="summary-value" id="narrativeDocCount">--</span>
+                                            </div>
+                                            <div class="summary-item">
+                                                <span class="summary-label">Generated:</span>
+                                                <span class="summary-value" id="narrativeGenDate">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Potential Client Contacts (researched during generation) -->
+                                    <div class="narrative-section contacts-section">
+                                        <label class="section-label">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 6px;">
+                                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                                <circle cx="12" cy="7" r="4"/>
+                                            </svg>
+                                            Current C-Suite Executives
+                                            <span class="contacts-status" id="currentContactsStatus">
+                                                <span class="contacts-loading hidden" id="currentContactsLoading">
+                                                    <span class="mini-spinner"></span> Searching web...
+                                                </span>
+                                            </span>
+                                        </label>
+                                        <p class="section-hint">Live web search for current leadership (researched in background)</p>
+                                        <div class="contacts-grid" id="currentContactsGrid">
+                                            <div class="contact-card" data-slot="1">
+                                                <div class="contact-placeholder">
+                                                    <span class="contact-placeholder-text">Searching...</span>
+                                                </div>
+                                            </div>
+                                            <div class="contact-card" data-slot="2">
+                                                <div class="contact-placeholder">
+                                                    <span class="contact-placeholder-text">Searching...</span>
+                                                </div>
+                                            </div>
+                                            <div class="contact-card" data-slot="3">
+                                                <div class="contact-placeholder">
+                                                    <span class="contact-placeholder-text">Searching...</span>
+                                                </div>
+                                            </div>
+                                            <div class="contact-card" data-slot="4">
+                                                <div class="contact-placeholder">
+                                                    <span class="contact-placeholder-text">Searching...</span>
+                                                </div>
+                                            </div>
+                                            <div class="contact-card" data-slot="5">
+                                                <div class="contact-placeholder">
+                                                    <span class="contact-placeholder-text">Searching...</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Recently Exited Senior Leaders -->
+                                    <div class="narrative-section contacts-section">
+                                        <label class="section-label">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 6px;">
+                                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                                <circle cx="8.5" cy="7" r="4"/>
+                                                <path d="M20 8l-4 4m0-4l4 4"/>
+                                            </svg>
+                                            Recently Exited Senior Leaders
+                                            <span class="contacts-status" id="exitedContactsStatus">
+                                                <span class="contacts-loading hidden" id="exitedContactsLoading">
+                                                    <span class="mini-spinner"></span> Searching web...
+                                                </span>
+                                            </span>
+                                        </label>
+                                        <p class="section-hint">Live web search for recent C-suite departures</p>
+                                        <div class="contacts-grid" id="exitedContactsGrid">
+                                            <div class="contact-card exited" data-slot="1">
+                                                <div class="contact-placeholder">
+                                                    <span class="contact-placeholder-text">Searching...</span>
+                                                </div>
+                                            </div>
+                                            <div class="contact-card exited" data-slot="2">
+                                                <div class="contact-placeholder">
+                                                    <span class="contact-placeholder-text">Searching...</span>
+                                                </div>
+                                            </div>
+                                            <div class="contact-card exited" data-slot="3">
+                                                <div class="contact-placeholder">
+                                                    <span class="contact-placeholder-text">Searching...</span>
+                                                </div>
+                                            </div>
+                                            <div class="contact-card exited" data-slot="4">
+                                                <div class="contact-placeholder">
+                                                    <span class="contact-placeholder-text">Searching...</span>
+                                                </div>
+                                            </div>
+                                            <div class="contact-card exited" data-slot="5">
+                                                <div class="contact-placeholder">
+                                                    <span class="contact-placeholder-text">Searching...</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Generated Narrative Display - Split Layout -->
+                                <div class="narrative-display-section" id="narrativeDisplaySection" style="display: none;">
+                                    <div class="narrative-split-container">
+                                        <!-- Left Panel: Generated Narrative -->
+                                        <div class="narrative-split-left">
+                                            <div class="narrative-display-header">
+                                                <div class="narrative-display-title">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
+                                                        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                                    </svg>
+                                                    <h4>Generated Narrative</h4>
+                                                </div>
+                                                <div class="narrative-display-actions">
+                                                    <button class="btn btn-sm btn-ghost" id="copyNarrativeBtn" title="Copy to clipboard">
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                                            <path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                                        </svg>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-ghost" id="downloadNarrativeBtn" title="Download as Word">
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                                            <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="narrative-display-meta" id="narrativeDisplayMeta">
+                                                <span class="narrative-meta-item">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                                        <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                    </svg>
+                                                    <span id="narrativeTimestamp">--</span>
+                                                </span>
+                                            </div>
+                                            <div class="narrative-display-content glass-card" id="narrativeDisplayContent">
+                                                <!-- Narrative content will be rendered here -->
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Right Panel: Narrative Chat -->
+                                        <div class="narrative-split-right">
+                                            <div class="narrative-chat-container">
+                                                <div class="narrative-chat-header">
+                                                    <div class="narrative-chat-icon">
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                            <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                                        </svg>
+                                                    </div>
+                                                    <div class="narrative-chat-title">
+                                                        <h4>Ask Questions</h4>
+                                                        <p>Interrogate your sources and narrative</p>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="narrative-chat-messages" id="narrativeChatMessages">
+                                                    <div class="chat-message assistant">
+                                                        <div class="chat-avatar">
+                                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                                <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+                                                            </svg>
+                                                        </div>
+                                                        <div class="chat-content">
+                                                            <div class="chat-bubble">
+                                                                <p>I can answer questions about the narrative and source documents. Ask me anything!</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="narrative-chat-input-area">
+                                                    <div class="narrative-chat-input-wrapper">
+                                                        <textarea id="narrativeChatInput" placeholder="Ask about the narrative or sources..." rows="1"></textarea>
+                                                        <button class="btn btn-primary narrative-chat-send" id="narrativeChatSendBtn" title="Send message">
+                                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Previous Narratives -->
+                                    <div class="narrative-history-section" id="narrativeHistorySection" style="display: none;">
+                                        <div class="narrative-history-header">
+                                            <h5>Previous Narratives</h5>
+                                            <span class="narrative-history-count" id="narrativeHistoryCount">0</span>
+                                        </div>
+                                        <div class="narrative-history-list" id="narrativeHistoryList">
+                                            <!-- Previous narratives will be listed here -->
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Generate Client Intel Pack -->
+                                    <div class="client-intel-pack-section glass-card" id="clientIntelPackSection" style="display: none;">
+                                        <div class="intel-pack-header">
+                                            <div class="intel-pack-title">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
+                                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                                    <circle cx="9" cy="7" r="4"/>
+                                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                                </svg>
+                                                <h4>Generate Client Intel Pack</h4>
+                                            </div>
+                                            <p class="intel-pack-desc">Create a stakeholder cheat sheet for consultants approaching senior leaders</p>
+                                        </div>
+                                        
+                                        <button class="btn btn-secondary btn-lg intel-pack-btn" id="generateIntelPackBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                                <polyline points="14 2 14 8 20 8"/>
+                                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                                <line x1="16" y1="17" x2="8" y2="17"/>
+                                                <polyline points="10 9 9 9 8 9"/>
+                                            </svg>
+                                            <span>Generate Client Intel Pack</span>
+                                        </button>
+                                        
+                                        <!-- Intel Pack Loading State -->
+                                        <div id="intelPackLoading" class="intel-pack-loading" style="display: none;">
+                                            <div class="intel-pack-spinner"></div>
+                                            <div class="intel-pack-loading-text">
+                                                <p class="loading-title">Analyzing stakeholders...</p>
+                                                <p class="loading-subtitle">Creating your executive briefing document</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Intel Pack Success -->
+                                        <div id="intelPackSuccess" class="intel-pack-success" style="display: none;">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 24px; height: 24px;">
+                                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                                <polyline points="22 4 12 14.01 9 11.01"/>
+                                            </svg>
+                                            <p>Client Intel Pack generated successfully!</p>
+                                            <a id="intelPackDownloadLink" class="intel-pack-link" href="#">Open folder</a>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Generate Audio from Narrative -->
+                                    <div class="narrative-audio-section glass-card" id="narrativeAudioSection" style="display: none;">
+                                        <div class="narrative-audio-header">
+                                            <div class="narrative-audio-title">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
+                                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                                    <line x1="12" y1="19" x2="12" y2="23"/>
+                                                    <line x1="8" y1="23" x2="16" y2="23"/>
+                                                </svg>
+                                                <h4>Generate Audio Narration</h4>
+                                            </div>
+                                            <p class="narrative-audio-desc">Transform your narrative into a compelling audio script, crafted for executive impact</p>
+                                        </div>
+                                        
+                                        <div class="narrative-audio-options">
+                                            <div class="narrative-audio-option-group">
+                                                <label>Voice</label>
+                                                <select id="narrativeAudioVoice">
+                                                    <option value="pNInz6obpgDQGcFmaJgB" selected>Adam (Male, Professional)</option>
+                                                    <option value="21m00Tcm4TlvDq8ikWAM">Rachel (Female, Warm)</option>
+                                                    <option value="yoZ06aMxZJJ28mfd3POQ">Sam (Male, Narrative)</option>
+                                                    <option value="EXAVITQu4vr4xnSDxMaL">Bella (Female, Soft)</option>
+                                                </select>
+                                            </div>
+                                            <div class="narrative-audio-option-group">
+                                                <label>Tone</label>
+                                                <select id="narrativeAudioTone">
+                                                    <option value="inspiring" selected>Inspiring & Visionary</option>
+                                                    <option value="confident">Confident & Authoritative</option>
+                                                    <option value="empathetic">Empathetic & Understanding</option>
+                                                    <option value="urgent">Urgent & Action-Oriented</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        
+                                        <button class="btn btn-secondary btn-lg narrative-audio-btn" id="generateNarrativeAudioBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
+                                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                            </svg>
+                                            <span id="generateNarrativeAudioText">Generate Audio Narrative</span>
+                                        </button>
+                                        
+                                        <!-- Audio Generation Status -->
+                                        <div id="narrativeAudioStatus" class="narrative-audio-status hidden">
+                                            <div class="narrative-audio-loading">
+                                                <div class="narrative-audio-spinner"></div>
+                                                <div class="narrative-audio-loading-text">
+                                                    <p class="loading-title" id="narrativeAudioLoadingTitle">Crafting your script...</p>
+                                                    <p class="loading-subtitle" id="narrativeAudioLoadingSubtitle">AI is transforming your narrative into an executive-ready script</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Generated Script Preview -->
+                                        <div id="narrativeScriptPreview" class="narrative-script-preview hidden">
+                                            <div class="script-preview-header">
+                                                <h5>
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                                        <polyline points="14 2 14 8 20 8"/>
+                                                    </svg>
+                                                    Generated Script
+                                                </h5>
+                                                <button class="btn btn-ghost btn-sm" id="toggleScriptPreview" title="Toggle preview">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                                        <path d="M19 9l-7 7-7-7"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            <div class="script-preview-content" id="scriptPreviewContent">
+                                                <!-- Script content will be shown here -->
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Audio Player -->
+                                        <div id="narrativeAudioPlayer" class="narrative-audio-player hidden">
+                                            <div class="audio-player-header">
+                                                <h5>Your Narrative Audio</h5>
+                                                <button class="btn btn-secondary btn-sm" id="downloadNarrativeAudioBtn">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                                                    </svg>
+                                                    Download MP3
+                                                </button>
+                                            </div>
+                                            <audio id="narrativeAudioElement" controls class="narrative-audio-element">
+                                                Your browser does not support the audio element.
+                                            </audio>
+                                        </div>
+                                        
+                                        <!-- Error State -->
+                                        <div id="narrativeAudioError" class="narrative-audio-error hidden">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 24px; height: 24px;">
+                                                <circle cx="12" cy="12" r="10"/>
+                                                <line x1="12" y1="8" x2="12" y2="12"/>
+                                                <line x1="12" y1="16" x2="12.01" y2="16"/>
+                                            </svg>
+                                            <p id="narrativeAudioErrorText">Failed to generate audio</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Generate Video Narrative Section -->
+                                    <div class="narrative-video-section glass-card" id="narrativeVideoSection" style="display: none;">
+                                        <div class="narrative-video-header">
+                                            <div class="narrative-video-title">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
+                                                    <polygon points="23 7 16 12 23 17 23 7"/>
+                                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                                                </svg>
+                                                <h4>Generate Video Narrative</h4>
+                                            </div>
+                                            <p class="narrative-video-desc">Create a cinematic montage video with AI-generated scenes synchronized to your narration</p>
+                                        </div>
+                                        
+                                        <div class="narrative-video-input-section">
+                                            <label for="videoNarrationScript" class="video-script-label">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                                    <polyline points="14 2 14 8 20 8"/>
+                                                </svg>
+                                                Narration Script
+                                            </label>
+                                            <textarea id="videoNarrationScript" class="video-script-textarea" placeholder="Paste your narration script here...&#10;&#10;The script will be broken into segments, each converted into a cinematic video scene.&#10;&#10;Tip: Use clear, descriptive language that can inspire visual scenes."></textarea>
+                                            <div class="video-script-info">
+                                                <span id="videoScriptWordCount">0 words</span>
+                                                <span class="video-script-estimate" id="videoScriptEstimate">~0 segments, ~0s video</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="narrative-video-options">
+                                            <div class="narrative-video-option-group">
+                                                <label>Aspect Ratio</label>
+                                                <select id="videoNarrativeRatio">
+                                                    <option value="1920:1080" selected>16:9 (Landscape)</option>
+                                                    <option value="1080:1920">9:16 (Portrait)</option>
+                                                    <option value="1080:1080">1:1 (Square)</option>
+                                                </select>
+                                            </div>
+                                            <div class="narrative-video-option-group">
+                                                <label>Visual Style</label>
+                                                <select id="videoNarrativeStyle">
+                                                    <option value="cinematic" selected>Cinematic</option>
+                                                    <option value="corporate">Corporate</option>
+                                                    <option value="documentary">Documentary</option>
+                                                    <option value="abstract">Abstract/Artistic</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        
+                                        <button class="btn btn-secondary btn-lg narrative-video-btn" id="generateVideoNarrativeBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
+                                                <polygon points="23 7 16 12 23 17 23 7"/>
+                                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                                            </svg>
+                                            <span id="generateVideoNarrativeText">Generate Video Narrative</span>
+                                        </button>
+                                        
+                                        <!-- Video Generation Progress -->
+                                        <div id="videoNarrativeProgress" class="video-narrative-progress hidden">
+                                            <div class="video-progress-header">
+                                                <h5>Generating Video Narrative</h5>
+                                                <span class="video-progress-stage" id="videoProgressStage">Initializing...</span>
+                                            </div>
+                                            <div class="video-progress-bar-container">
+                                                <div class="video-progress-bar">
+                                                    <div class="video-progress-bar-fill" id="videoProgressBarFill" style="width: 0%"></div>
+                                                </div>
+                                                <span class="video-progress-percent" id="videoProgressPercent">0%</span>
+                                            </div>
+                                            <div class="video-segment-list" id="videoSegmentList">
+                                                <!-- Segment progress items will be populated here -->
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Final Video Player -->
+                                        <div id="videoNarrativePlayer" class="video-narrative-player hidden">
+                                            <div class="video-player-header">
+                                                <h5>Your Video Narrative</h5>
+                                                <button class="btn btn-secondary btn-sm" id="downloadVideoNarrativeBtn">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                                                    </svg>
+                                                    Download MP4
+                                                </button>
+                                            </div>
+                                            <video id="videoNarrativeElement" controls class="video-narrative-element">
+                                                Your browser does not support the video tag.
+                                            </video>
+                                        </div>
+                                        
+                                        <!-- Error State -->
+                                        <div id="videoNarrativeError" class="video-narrative-error hidden">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 24px; height: 24px;">
+                                                <circle cx="12" cy="12" r="10"/>
+                                                <line x1="12" y1="8" x2="12" y2="12"/>
+                                                <line x1="12" y1="16" x2="12.01" y2="16"/>
+                                            </svg>
+                                            <p id="videoNarrativeErrorText">Failed to generate video</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                </div><!-- End narrative-scrollable-content -->
+                                
+                                <div class="panel-actions panel-actions-spread">
+                                    <button class="btn btn-ghost" id="backToReviewBtn">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
+                                            <path d="M11 17l-5-5m0 0l5-5m-5 5h12"/>
+                                        </svg>
+                                        Back
+                                    </button>
+                                    <div class="action-buttons-group">
+                                        <button class="btn btn-ghost" id="exportSourcePackBtnStep6">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
+                                                <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                            </svg>
+                                            <span>Export Source Pack</span>
+                                        </button>
+                                        <button class="btn btn-secondary" id="downloadWorkshopBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
+                                                <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                            </svg>
+                                            <span id="downloadWorkshopText">Download Workshop Materials</span>
+                                        </button>
+                                        <button class="btn btn-primary" id="generateNarrativeBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
+                                                <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                            </svg>
+                                            <span id="generateNarrativeText">Generate Narrative</span>
+                                        </button>
+                                        <button class="btn btn-danger hidden" id="cancelNarrativeBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
+                                                <circle cx="12" cy="12" r="10"/>
+                                                <path d="M15 9l-6 6M9 9l6 6"/>
+                                            </svg>
+                                            <span>Cancel</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Video Generation View -->
+            <section id="videoView" class="view hidden">
+                <header class="view-header">
+                    <div class="header-content">
+                        <h2>Generate Video</h2>
+                        <p class="header-subtitle">Create AI-generated videos using Runway ML</p>
+                    </div>
+                </header>
+                <div class="video-gen-container">
+                    <div class="video-gen-panel glass-card">
+                        <div class="video-prompt-section">
+                            <label for="videoPromptInput" class="video-prompt-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
+                                    <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                                Video Prompt
+                            </label>
+                            <textarea id="videoPromptInput" class="video-prompt-textarea" placeholder="Describe the video you want to create...&#10;&#10;Example: A cinematic aerial shot of a futuristic city at sunset, with flying cars and neon lights reflecting off glass buildings."></textarea>
+                            <div class="video-options">
+                                <div class="video-option-group">
+                                    <label>Duration</label>
+                                    <select id="videoDuration">
+                                        <option value="4">4 seconds</option>
+                                        <option value="6">6 seconds</option>
+                                        <option value="8" selected>8 seconds</option>
+                                    </select>
+                                </div>
+                                <div class="video-option-group">
+                                    <label>Aspect Ratio</label>
+                                    <select id="videoRatio">
+                                        <option value="1920:1080" selected>16:9 (Landscape)</option>
+                                        <option value="1080:1920">9:16 (Portrait)</option>
+                                        <option value="1280:720">HD 720p</option>
+                                        <option value="720:1280">HD 720p Portrait</option>
+                                    </select>
+                                </div>
+                                <div class="video-option-group">
+                                    <label>Audio</label>
+                                    <select id="videoAudio">
+                                        <option value="true" selected>With Audio</option>
+                                        <option value="false">No Audio</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button id="generateVideoBtn" class="btn btn-primary btn-lg video-generate-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
+                                    <polygon points="5 3 19 12 5 21 5 3"/>
+                                </svg>
+                                <span id="generateVideoText">Generate Video</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Video Output Section -->
+                        <div id="videoOutputSection" class="video-output-section hidden">
+                            <div class="video-output-header">
+                                <h3>Generated Video</h3>
+                                <button id="downloadVideoBtn" class="btn btn-secondary btn-sm hidden">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                                    </svg>
+                                    Download
+                                </button>
+                            </div>
+                            <div id="videoLoadingState" class="video-loading-state">
+                                <div class="video-spinner"></div>
+                                <p class="video-loading-text">Generating your video...</p>
+                                <p class="video-loading-subtext">This may take 1-3 minutes</p>
+                            </div>
+                            <div id="videoPlayerContainer" class="video-player-container hidden">
+                                <video id="generatedVideoPlayer" controls class="generated-video-player">
+                                    Your browser does not support the video tag.
+                                </video>
+                            </div>
+                            <div id="videoErrorState" class="video-error-state hidden">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px; color: var(--error);">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="12" y1="8" x2="12" y2="12"/>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                                </svg>
+                                <p class="video-error-text" id="videoErrorText">Failed to generate video</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Narration Generation Section -->
+                    <div class="narration-gen-panel glass-card">
+                        <div class="narration-header">
+                            <div class="narration-title">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 22px; height: 22px;">
+                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                    <line x1="12" y1="19" x2="12" y2="23"/>
+                                    <line x1="8" y1="23" x2="16" y2="23"/>
+                                </svg>
+                                <h3>Generate Narration</h3>
+                            </div>
+                            <p class="narration-subtitle">Convert text to lifelike speech using ElevenLabs AI voices</p>
+                        </div>
+                        
+                        <div class="narration-prompt-section">
+                            <label for="narrationTextInput" class="narration-prompt-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
+                                    <line x1="16" y1="13" x2="8" y2="13"/>
+                                    <line x1="16" y1="17" x2="8" y2="17"/>
+                                    <polyline points="10 9 9 9 8 9"/>
+                                </svg>
+                                Narrative Text
+                            </label>
+                            <textarea id="narrationTextInput" class="narration-prompt-textarea" placeholder="Paste your narrative text here to convert to speech...&#10;&#10;The AI will generate a natural-sounding voice reading of your text."></textarea>
+                            <div class="narration-char-count">
+                                <span id="narrationCharCount">0</span> / 5,000 characters
+                            </div>
+                        </div>
+                        
+                        <div class="narration-options">
+                            <div class="narration-option-group">
+                                <label>Voice</label>
+                                <select id="narrationVoice">
+                                    <option value="21m00Tcm4TlvDq8ikWAM" selected>Rachel (Female, Warm)</option>
+                                    <option value="EXAVITQu4vr4xnSDxMaL">Bella (Female, Soft)</option>
+                                    <option value="ErXwobaYiN019PkySvjV">Antoni (Male, Neutral)</option>
+                                    <option value="VR6AewLTigWG4xSOukaG">Arnold (Male, Deep)</option>
+                                    <option value="pNInz6obpgDQGcFmaJgB">Adam (Male, Professional)</option>
+                                    <option value="yoZ06aMxZJJ28mfd3POQ">Sam (Male, Narrative)</option>
+                                </select>
+                            </div>
+                            <div class="narration-option-group">
+                                <label>Model</label>
+                                <select id="narrationModel">
+                                    <option value="eleven_multilingual_v2" selected>Multilingual v2 (Best)</option>
+                                    <option value="eleven_turbo_v2_5">Turbo v2.5 (Fast)</option>
+                                    <option value="eleven_monolingual_v1">English v1</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <button id="generateNarrationBtn" class="btn btn-primary btn-lg narration-generate-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                            </svg>
+                            <span id="generateNarrationText">Generate Narration</span>
+                        </button>
+                        
+                        <!-- Narration Output Section -->
+                        <div id="narrationOutputSection" class="narration-output-section hidden">
+                            <div class="narration-output-header">
+                                <h4>Generated Audio</h4>
+                                <button id="downloadNarrationBtn" class="btn btn-secondary btn-sm hidden">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                                    </svg>
+                                    Download MP3
+                                </button>
+                            </div>
+                            <div id="narrationLoadingState" class="narration-loading-state">
+                                <div class="narration-spinner"></div>
+                                <p class="narration-loading-text">Generating narration...</p>
+                                <p class="narration-loading-subtext">This usually takes 10-30 seconds</p>
+                            </div>
+                            <div id="narrationPlayerContainer" class="narration-player-container hidden">
+                                <audio id="generatedNarrationPlayer" controls class="generated-narration-player">
+                                    Your browser does not support the audio element.
+                                </audio>
+                            </div>
+                            <div id="narrationErrorState" class="narration-error-state hidden">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 32px; height: 32px; color: var(--error);">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="12" y1="8" x2="12" y2="12"/>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                                </svg>
+                                <p class="narration-error-text" id="narrationErrorText">Failed to generate narration</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Narration History -->
+                        <div id="narrationHistorySection" class="narration-history-section">
+                            <div class="narration-history-header">
+                                <h4>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <polyline points="12 6 12 12 16 14"/>
+                                    </svg>
+                                    Recent Narrations
+                                </h4>
+                                <button id="clearNarrationHistoryBtn" class="btn btn-ghost btn-sm hidden">
+                                    Clear All
+                                </button>
+                            </div>
+                            <div id="narrationHistoryEmpty" class="narration-history-empty">
+                                <p>No narrations generated yet</p>
+                            </div>
+                            <div id="narrationHistoryList" class="narration-history-list hidden">
+                                <!-- Narration history items will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- History View -->
+            <section id="historyView" class="view hidden">
+                <header class="view-header">
+                    <div class="header-content">
+                        <h2>Generation History</h2>
+                        <p class="header-subtitle">View and manage previously generated Source Packs</p>
+                    </div>
+                </header>
+                <div class="history-container">
+                    <div class="empty-state" id="historyEmpty">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <h3>No History Yet</h3>
+                        <p>Generated Source Packs will appear here</p>
+                        <button class="btn btn-primary" id="historyGenerateBtn">Generate Your First Source Pack</button>
+                    </div>
+                    <div class="history-list hidden" id="historyList">
+                        <!-- History items will be populated here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Admin View -->
+            <section id="adminView" class="view hidden">
+                <header class="view-header">
+                    <div class="header-content">
+                        <h2>Administration</h2>
+                        <p class="header-subtitle">Configure API credentials and system settings</p>
+                    </div>
+                </header>
+                <div class="admin-container">
+                    <!-- API Credentials -->
+                    <div class="admin-section glass-card">
+                        <div class="section-header">
+                            <h3>API Credentials</h3>
+                            <span class="section-badge">Encrypted at Rest</span>
+                        </div>
+                        <div class="credentials-grid">
+                            <!-- AlphaSense -->
+                            <div class="credential-card">
+                                <div class="credential-header">
+                                    <div class="credential-icon alphasense">AS</div>
+                                    <div class="credential-title">
+                                        <span class="credential-name">AlphaSense</span>
+                                        <span class="credential-status" id="credStatusAlphasense">Not Configured</span>
+                                    </div>
+                                </div>
+                                <form class="credential-form" id="alphasenseCredForm">
+                                    <div class="form-group">
+                                        <label>API Key</label>
+                                        <input type="password" name="apiKey" placeholder="Enter API key">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Client ID</label>
+                                        <input type="text" name="clientId" placeholder="Enter client ID">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Client Secret</label>
+                                        <input type="password" name="clientSecret" placeholder="Enter client secret">
+                                    </div>
+                                    <div class="credential-actions">
+                                        <button type="button" class="btn btn-ghost test-connection" data-provider="alphasense">Test</button>
+                                        <button type="submit" class="btn btn-primary">Save</button>
+                                    </div>
+                                </form>
+                            </div>
+                            <!-- ARC Database -->
+                            <div class="credential-card">
+                                <div class="credential-header">
+                                    <div class="credential-icon arc">ARC</div>
+                                    <div class="credential-title">
+                                        <span class="credential-name">ARC Database</span>
+                                        <span class="credential-status placeholder" id="credStatusArc">Placeholder</span>
+                                    </div>
+                                </div>
+                                <form class="credential-form" id="arcCredForm">
+                                    <div class="form-group">
+                                        <label>API Key</label>
+                                        <input type="password" name="apiKey" placeholder="Enter API key">
+                                    </div>
+                                    <div class="credential-actions">
+                                        <button type="button" class="btn btn-ghost test-connection" data-provider="arc">Test</button>
+                                        <button type="submit" class="btn btn-primary">Save</button>
+                                    </div>
+                                </form>
+                            </div>
+                            <!-- OpenAI -->
+                            <div class="credential-card">
+                                <div class="credential-header">
+                                    <div class="credential-icon openai">AI</div>
+                                    <div class="credential-title">
+                                        <span class="credential-name">OpenAI</span>
+                                        <span class="credential-status" id="credStatusOpenai">Not Configured</span>
+                                    </div>
+                                </div>
+                                <form class="credential-form" id="openaiCredForm">
+                                    <div class="form-group">
+                                        <label>API Key</label>
+                                        <input type="password" name="apiKey" placeholder="sk-...">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Model</label>
+                                        <select name="model">
+                                            <option value="gpt-5.2" selected>GPT-5.2 (Latest & Most Capable)</option>
+                                            <option value="gpt-5">GPT-5</option>
+                                            <option value="o3-mini">O3 Mini (Reasoning)</option>
+                                            <option value="gpt-4.5-preview">GPT-4.5 Preview</option>
+                                            <option value="gpt-4o">GPT-4o</option>
+                                            <option value="gpt-4o-mini">GPT-4o Mini (Fast & Affordable)</option>
+                                        </select>
+                                    </div>
+                                    <div class="credential-actions">
+                                        <button type="button" class="btn btn-ghost test-connection" data-provider="openai">Test</button>
+                                        <button type="submit" class="btn btn-primary">Save</button>
+                                    </div>
+                                </form>
+                            </div>
+                            <!-- Runway ML -->
+                            <div class="credential-card">
+                                <div class="credential-header">
+                                    <div class="credential-icon runway">RW</div>
+                                    <div class="credential-title">
+                                        <span class="credential-name">Runway ML</span>
+                                        <span class="credential-status" id="credStatusRunway">Not Configured</span>
+                                    </div>
+                                </div>
+                                <form class="credential-form" id="runwayCredForm">
+                                    <div class="form-group">
+                                        <label>API Secret</label>
+                                        <input type="password" name="apiKey" placeholder="Enter Runway API secret">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Model</label>
+                                        <select name="model">
+                                            <option value="veo3" selected>Veo 3 (Best Quality)</option>
+                                            <option value="veo3.1">Veo 3.1</option>
+                                            <option value="veo3.1_fast">Veo 3.1 Fast</option>
+                                        </select>
+                                    </div>
+                                    <div class="credential-actions">
+                                        <button type="button" class="btn btn-ghost test-connection" data-provider="runway">Test</button>
+                                        <button type="submit" class="btn btn-primary">Save</button>
+                                    </div>
+                                </form>
+                            </div>
+                            <!-- ElevenLabs -->
+                            <div class="credential-card">
+                                <div class="credential-header">
+                                    <div class="credential-icon elevenlabs">11</div>
+                                    <div class="credential-title">
+                                        <span class="credential-name">ElevenLabs</span>
+                                        <span class="credential-status" id="credStatusElevenlabs">Not Configured</span>
+                                    </div>
+                                </div>
+                                <form class="credential-form" id="elevenlabsCredForm">
+                                    <div class="form-group">
+                                        <label>API Key</label>
+                                        <input type="password" name="apiKey" placeholder="Enter ElevenLabs API key">
+                                    </div>
+                                    <div class="credential-actions">
+                                        <button type="button" class="btn btn-ghost test-connection" data-provider="elevenlabs">Test</button>
+                                        <button type="submit" class="btn btn-primary">Save</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Default Agent Prompt -->
+                    <div class="admin-section glass-card">
+                        <div class="section-header">
+                            <h3>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px; margin-right: 8px;">
+                                    <path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+                                </svg>
+                                Default Agent Prompt
+                            </h3>
+                            <button class="btn btn-primary btn-sm" id="saveDefaultPromptBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 6px;">
+                                    <path d="M5 13l4 4L19 7"/>
+                                </svg>
+                                Save
+                            </button>
+                        </div>
+                        <p class="section-description">Set the default instructions that will be pre-populated for the narrative generation agent. Users can modify these instructions for individual generations.</p>
+                        <textarea id="adminDefaultPrompt" class="admin-prompt-textarea" placeholder="Enter default instructions for the narrative agent...&#10;&#10;Examples:&#10;• Maintain a professional executive tone&#10;• Focus on actionable insights and recommendations&#10;• Include relevant data points and metrics&#10;• Structure content with clear headings and sections"></textarea>
+                    </div>
+
+                    <!-- Source Generation Prompts -->
+                    <div class="admin-section glass-card">
+                        <div class="section-header">
+                            <h3>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px; margin-right: 8px;">
+                                    <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                Source Generation Prompts
+                            </h3>
+                            <button class="btn btn-primary btn-sm" id="saveSourcePromptsBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 6px;">
+                                    <path d="M5 13l4 4L19 7"/>
+                                </svg>
+                                Save All
+                            </button>
+                        </div>
+                        <p class="section-description">Configure the prompts used to generate each of the 3 core source reports. These prompts are sent to each respective API to generate research content.</p>
+                        
+                        <div class="source-prompts-grid">
+                            <!-- ChatGPT Prompt -->
+                            <div class="source-prompt-card">
+                                <div class="source-prompt-header">
+                                    <div class="source-prompt-icon chatgpt">
+                                        <svg viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/>
+                                        </svg>
+                                    </div>
+                                    <div class="source-prompt-title">
+                                        <span class="source-prompt-name">ChatGPT Report</span>
+                                        <span class="source-prompt-status" id="sourcePromptStatusChatgpt">Default prompt</span>
+                                    </div>
+                                </div>
+                                <textarea id="sourcePromptChatgpt" class="source-prompt-textarea" placeholder="Enter the prompt for ChatGPT research generation...&#10;&#10;Available variables:&#10;{{client_name}}, {{industry}}, {{geography}}, {{time_horizon}}"></textarea>
+                            </div>
+                            
+                            <!-- ARC Prompt -->
+                            <div class="source-prompt-card">
+                                <div class="source-prompt-header">
+                                    <div class="source-prompt-icon arc">ARC</div>
+                                    <div class="source-prompt-title">
+                                        <span class="source-prompt-name">ARC Report</span>
+                                        <span class="source-prompt-status" id="sourcePromptStatusArc">Default prompt</span>
+                                    </div>
+                                </div>
+                                <textarea id="sourcePromptArc" class="source-prompt-textarea" placeholder="Enter the prompt for ARC asset research...&#10;&#10;Available variables:&#10;{{client_name}}, {{industry}}, {{geography}}, {{time_horizon}}"></textarea>
+                            </div>
+                            
+                            <!-- AlphaSense Prompt -->
+                            <div class="source-prompt-card">
+                                <div class="source-prompt-header">
+                                    <div class="source-prompt-icon alphasense">AS</div>
+                                    <div class="source-prompt-title">
+                                        <span class="source-prompt-name">AlphaSense Report</span>
+                                        <span class="source-prompt-status" id="sourcePromptStatusAlphasense">Default prompt</span>
+                                    </div>
+                                </div>
+                                <textarea id="sourcePromptAlphasense" class="source-prompt-textarea" placeholder="Enter the prompt for AlphaSense market research...&#10;&#10;Available variables:&#10;{{client_name}}, {{industry}}, {{geography}}, {{time_horizon}}"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Workshop Templates -->
+                    <div class="admin-section glass-card">
+                        <div class="section-header">
+                            <h3>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px; margin-right: 8px;">
+                                    <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                                Workshop Templates
+                            </h3>
+                        </div>
+                        <p class="section-description">Upload PowerPoint and Word templates for workshop materials. When users download workshop materials, these files will be provided.</p>
+                        
+                        <div class="workshop-templates-grid">
+                            <!-- PPTX Template -->
+                            <div class="workshop-template-card">
+                                <div class="workshop-template-icon pptx">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                                        <path d="M12 3v6h6"/>
+                                    </svg>
+                                </div>
+                                <div class="workshop-template-info">
+                                    <span class="workshop-template-label">PowerPoint Template</span>
+                                    <span class="workshop-template-status" id="workshopPptxStatus">No file uploaded</span>
+                                    <span class="workshop-template-filename" id="workshopPptxFilename"></span>
+                                </div>
+                                <div class="workshop-template-actions">
+                                    <button class="btn btn-secondary btn-sm" id="uploadWorkshopPptxBtn">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 4px;">
+                                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                                        </svg>
+                                        Upload
+                                    </button>
+                                    <button class="btn btn-ghost btn-sm" id="clearWorkshopPptxBtn" style="display: none;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                            <path d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- DOCX Template -->
+                            <div class="workshop-template-card">
+                                <div class="workshop-template-icon docx">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                                        <path d="M12 3v6h6"/>
+                                        <path d="M9 13h6M9 17h4"/>
+                                    </svg>
+                                </div>
+                                <div class="workshop-template-info">
+                                    <span class="workshop-template-label">Word Template</span>
+                                    <span class="workshop-template-status" id="workshopDocxStatus">No file uploaded</span>
+                                    <span class="workshop-template-filename" id="workshopDocxFilename"></span>
+                                </div>
+                                <div class="workshop-template-actions">
+                                    <button class="btn btn-secondary btn-sm" id="uploadWorkshopDocxBtn">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 4px;">
+                                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                                        </svg>
+                                        Upload
+                                    </button>
+                                    <button class="btn btn-ghost btn-sm" id="clearWorkshopDocxBtn" style="display: none;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                            <path d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Template Placeholders -->
+                    <div class="admin-section glass-card">
+                        <div class="section-header">
+                            <h3>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px; margin-right: 8px;">
+                                    <path d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
+                                </svg>
+                                Template Placeholders
+                            </h3>
+                            <button class="btn btn-primary btn-sm" id="addPlaceholderBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                    <path d="M12 4v16m8-8H4"/>
+                                </svg>
+                                Add Placeholder
+                            </button>
+                        </div>
+                        <p class="section-description">Define placeholders that can be used in your PPTX/DOCX templates. Use <code>{{placeholder_name}}</code> syntax in your templates. For list placeholders, use <code>{{name[1]}}</code>, <code>{{name[2]}}</code>, etc. The AI will use the prompt to generate content from the Source Pack.</p>
+                        
+                        <div class="built-in-placeholders">
+                            <span class="placeholder-hint">Built-in placeholders (always available):</span>
+                            <div class="placeholder-tags">
+                                <code>{{client_name}}</code>
+                                <code>{{industry}}</code>
+                                <code>{{geography}}</code>
+                                <code>{{date}}</code>
+                            </div>
+                        </div>
+                        
+                        <div class="placeholders-list" id="placeholdersList">
+                            <!-- Placeholders will be populated here -->
+                            <div class="empty-placeholders" id="emptyPlaceholders">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
+                                </svg>
+                                <p>No custom placeholders defined</p>
+                                <span class="hint">Click "Add Placeholder" to create AI-powered template fields</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Audit Logs -->
+                    <div class="admin-section glass-card">
+                        <div class="section-header">
+                            <h3>Audit Logs</h3>
+                            <button class="btn btn-ghost" id="refreshLogsBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                    <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                                Refresh
+                            </button>
+                        </div>
+                        <div class="audit-log-table">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Category</th>
+                                        <th>Action</th>
+                                        <th>User</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="auditLogBody">
+                                    <!-- Logs will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Schema Modal -->
+    <div id="schemaModal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content glass-card">
+            <div class="modal-header">
+                <h3>Canonical Schema Definition</h3>
+                <button class="modal-close" id="closeSchemaModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <pre class="schema-code" id="schemaCode"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Placeholder Modal -->
+    <div id="placeholderModal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content glass-card" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 id="placeholderModalTitle">Add Placeholder</h3>
+                <button class="modal-close" id="closePlaceholderModal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="placeholderForm">
+                    <div class="form-group">
+                        <label for="placeholderName">Placeholder Name</label>
+                        <input type="text" id="placeholderName" placeholder="e.g., situation_summary" required pattern="[a-zA-Z0-9_]+" title="Use only letters, numbers, and underscores">
+                        <p class="field-hint">This becomes <code>{{name}}</code> in your templates</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="placeholderPrompt">AI Prompt</label>
+                        <textarea id="placeholderPrompt" rows="6" placeholder="Describe how the AI should generate this content from the Source Pack..." required></textarea>
+                        <p class="field-hint">The AI will use this prompt along with the Source Pack content</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="placeholderIsList">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text">List Placeholder</span>
+                        </label>
+                        <p class="field-hint" id="listPlaceholderHint" style="display: none;">
+                            For lists, your prompt should ask for multiple items (e.g., "Generate 5 key strategic pillars").<br>
+                            In templates, use <code>{{name[1]}}</code>, <code>{{name[2]}}</code>, etc. to place individual items.
+                        </p>
+                    </div>
+                    <div class="form-group" id="listCountGroup" style="display: none;">
+                        <label for="placeholderListCount">Expected List Items</label>
+                        <input type="number" id="placeholderListCount" min="2" max="20" value="5" placeholder="e.g., 5">
+                        <p class="field-hint">How many items should the AI generate?</p>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-ghost" id="cancelPlaceholderBtn">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="savePlaceholderBtn">Save Placeholder</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content glass-card" style="max-width: 420px;">
+            <div class="modal-header">
+                <div class="confirm-icon" id="confirmModalIcon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                </div>
+                <h3 id="confirmModalTitle">Confirm Action</h3>
+            </div>
+            <div class="modal-body">
+                <p id="confirmModalMessage" class="confirm-message">Are you sure you want to proceed?</p>
+            </div>
+            <div class="modal-actions confirm-actions">
+                <button type="button" class="btn btn-ghost" id="confirmModalCancel">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmModalConfirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating AI Agent Console (Admin Only) -->
+    <div class="ai-console-floating hidden" id="aiConsoleSection">
+        <div class="ai-console-header">
+            <div class="console-title">
+                <div class="console-icon-indicator" id="consoleStatus">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                        <path d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+                <span class="console-title-text">AI Console</span>
+            </div>
+            <div class="console-controls">
+                <button class="btn btn-ghost btn-sm" id="clearConsoleBtn" title="Clear Console">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
+                        <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+                <button class="btn btn-ghost btn-sm" id="minimizeConsoleBtn" title="Minimize/Expand">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;" id="minimizeIcon">
+                        <path d="M20 12H4"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div class="ai-console-body" id="aiConsoleBody">
+            <div class="ai-console-output" id="aiConsoleOutput">
+                <div class="console-welcome">
+                    <span class="console-timestamp">[--:--:--]</span>
+                    <span class="agent-label agent-system">SYS</span>
+                    <span class="console-message">AI Console ready. Logs appear during generation.</span>
+                </div>
+            </div>
+        </div>
+        <div class="ai-console-legend">
+            <span class="legend-item"><span class="agent-dot agent-researcher"></span>Research</span>
+            <span class="legend-item"><span class="agent-dot agent-analyst"></span>Analyst</span>
+            <span class="legend-item"><span class="agent-dot agent-strategist"></span>Strategy</span>
+            <span class="legend-item"><span class="agent-dot agent-narrator"></span>Narrator</span>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
