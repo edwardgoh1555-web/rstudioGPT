@@ -1435,12 +1435,44 @@ input[type="file"] {
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: var(--spacing-xs);
+    gap: var(--spacing-xs);
 }
 
 .client-name {
     font-weight: 600;
     color: var(--text-primary);
     font-size: 0.9rem;
+    flex: 1;
+}
+
+.client-delete-btn {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.client-card:hover .client-delete-btn {
+    opacity: 0.5;
+}
+
+.client-delete-btn:hover {
+    opacity: 1 !important;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.client-delete-btn svg {
+    width: 14px;
+    height: 14px;
+    color: var(--danger, #ef4444);
 }
 
 .client-check {

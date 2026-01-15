@@ -576,6 +576,28 @@ ipcMain.handle('clients:get', async (event, { id }) => {
     return appState.clients.find(c => c.id === id);
 });
 
+// Delete a client
+ipcMain.handle('clients:delete', async (event, { id }) => {
+    const clientIndex = appState.clients.findIndex(c => c.id === id);
+    if (clientIndex === -1) {
+        return { success: false, error: 'Client not found' };
+    }
+    
+    const deletedClient = appState.clients[clientIndex];
+    appState.clients.splice(clientIndex, 1);
+    
+    // Persist the updated clients list
+    credentialManager.saveAppData('clients', appState.clients);
+    
+    auditLogger.log('CLIENT', 'DELETED', { 
+        clientId: id,
+        clientName: deletedClient.name,
+        user: appState.user?.username 
+    });
+    
+    return { success: true, clientName: deletedClient.name };
+});
+
 // AI-powered client creation
 ipcMain.handle('clients:aiCreate', async (event, { companyName }) => {
     const requestId = uuidv4();
@@ -609,6 +631,7 @@ ipcMain.handle('clients:aiCreate', async (event, { companyName }) => {
             geography: aiResult.geography,
             headquartersCountry: aiResult.headquartersCountry,
             sector: aiResult.sector,
+            isGovernment: aiResult.isGovernment || false,
             aiGenerated: true,
             createdAt: new Date().toISOString()
         };
@@ -656,6 +679,7 @@ ipcMain.handle('clients:researchContacts', async (event, { client, type }) => {
     const parentCompany = client.parentCompany || '';
     const headquarters = client.headquarters || '';
     const headquartersCountry = client.headquartersCountry || '';
+    const isGovernment = client.isGovernment || false;
     
     console.log(`[Contacts] Researching ${type} contacts for ${companyName} (${headquartersCountry || geography}) via web search...`);
     
@@ -689,29 +713,43 @@ ipcMain.handle('clients:researchContacts', async (event, { client, type }) => {
             contextString += ` in the ${industry} industry`;
         }
         
+        // Build government-specific context if applicable
+        const govContext = isGovernment ? `
+THIS IS A GOVERNMENT ENTITY belonging to ${headquartersCountry || 'a specific country'}.
+- Search for "${companyName}" ${headquartersCountry || ''} government officials
+- This is NOT the US Department of Defense unless headquartersCountry is "United States"
+- This is NOT the UK Ministry of Defence unless headquartersCountry is "United Kingdom"
+- Search for the EXACT country's government officials only` : '';
+        
         let searchQuery;
         if (type === 'current') {
             searchQuery = `Search the web for the current C-suite executives and senior leadership team at ${contextString}. Today is ${today}.
 
-IMPORTANT DISAMBIGUATION - READ CAREFULLY:
-- The company/organization is: ${companyName}
-${headquartersCountry ? `- COUNTRY: ${headquartersCountry} (this is critical - search for THIS country's organization)` : ''}
+CRITICAL DISAMBIGUATION - YOU MUST READ THIS:
+- The organization is: ${companyName}
+${headquartersCountry ? `- COUNTRY: ${headquartersCountry} - THIS IS THE KEY IDENTIFIER. Search ONLY for this country's organization.` : ''}
+${isGovernment ? `- TYPE: Government entity of ${headquartersCountry || geography}` : ''}
 ${geography ? `- Region: ${geography}` : ''}
 ${headquarters ? `- Headquarters: ${headquarters}` : ''}
 ${industry ? `- Industry: ${industry}` : ''}
 ${parentCompany ? `- Parent company: ${parentCompany}` : ''}
-- Do NOT confuse this with similarly named organizations in other countries.
-- If this is a government entity, make sure you search for the ${headquartersCountry || geography || 'correct country'}'s government.
+${govContext}
 
-I need you to find the CURRENT top executives - CEO, CFO, COO, CTO, CMO, CHRO, CIO, Secretary, Minister, Permanent Secretary, and other C-level or senior positions.
+DISAMBIGUATION EXAMPLES:
+- "Ministry of Defence" + "United Kingdom" = UK MOD (Secretary of State for Defence, Permanent Secretary, etc.)
+- "Department of Defense" + "United States" = US DoD (Secretary of Defense, Deputy Secretary, etc.)
+- These are COMPLETELY DIFFERENT organizations. Do NOT mix them up.
+
+I need you to find the CURRENT top executives/officials:
+${isGovernment ? '- Ministers, Secretaries of State, Permanent Secretaries, Chiefs of Staff, Directors General' : '- CEO, CFO, COO, CTO, CMO, CHRO, CIO, and other C-level or senior positions'}
 
 CRITICAL REQUIREMENTS:
 1. You MUST use web search to find current, up-to-date information
-2. ONLY include people who are CURRENTLY in these roles (not former executives)
+2. ONLY include people who are CURRENTLY in these roles (not former officials)
 3. DO NOT make up or guess any names - if you can't find someone, don't include them
-4. Verify from reputable sources like company website, LinkedIn, Bloomberg, Reuters, official government websites, press releases
-5. For each executive, find their name, current title, and a brief background
-6. VERIFY you are searching for ${companyName} in ${headquartersCountry || geography || 'the correct country'}
+4. Verify from ${isGovernment ? 'official government websites, gov.uk, parliament records, news sources' : 'company website, LinkedIn, Bloomberg, Reuters, press releases'}
+5. For each person, find their name, current title, and a brief background
+6. DOUBLE-CHECK: You are searching for ${companyName} in ${headquartersCountry || geography || 'the specified country'} - NOT any other country
 
 Return ONLY a JSON array in this exact format (no other text):
 [
@@ -722,35 +760,41 @@ Return ONLY a JSON array in this exact format (no other text):
   }
 ]
 
-If you cannot find verified current executives, return: []`;
+If you cannot find verified current officials, return: []`;
         } else {
-            searchQuery = `Search the web for senior executives who have RECENTLY LEFT or DEPARTED from ${contextString} within the last 2 years. Today is ${today}.
+            searchQuery = `Search the web for senior officials who have RECENTLY LEFT or DEPARTED from ${contextString} within the last 2 years. Today is ${today}.
 
-IMPORTANT DISAMBIGUATION - READ CAREFULLY:
-- The company/organization is: ${companyName}
-${headquartersCountry ? `- COUNTRY: ${headquartersCountry} (this is critical - search for THIS country's organization)` : ''}
+CRITICAL DISAMBIGUATION - YOU MUST READ THIS:
+- The organization is: ${companyName}
+${headquartersCountry ? `- COUNTRY: ${headquartersCountry} - THIS IS THE KEY IDENTIFIER. Search ONLY for this country's organization.` : ''}
+${isGovernment ? `- TYPE: Government entity of ${headquartersCountry || geography}` : ''}
 ${geography ? `- Region: ${geography}` : ''}
 ${headquarters ? `- Headquarters: ${headquarters}` : ''}
 ${industry ? `- Industry: ${industry}` : ''}
 ${parentCompany ? `- Parent company: ${parentCompany}` : ''}
-- Do NOT confuse this with similarly named organizations in other countries.
-- If this is a government entity, make sure you search for the ${headquartersCountry || geography || 'correct country'}'s government.
+${govContext}
 
-I need to find C-suite and senior leadership DEPARTURES - people who have stepped down, resigned, retired, or been replaced.
+DISAMBIGUATION EXAMPLES:
+- "Ministry of Defence" + "United Kingdom" = UK MOD departures only
+- "Department of Defense" + "United States" = US DoD departures only
+- These are COMPLETELY DIFFERENT organizations. Do NOT mix them up.
+
+I need to find senior leadership DEPARTURES - people who have stepped down, resigned, retired, or been replaced.
+${isGovernment ? 'Look for: Ministers, Secretaries of State, Permanent Secretaries, Chiefs of Staff, Directors General who have left' : 'Look for: CEO, CFO, COO, CTO, and other C-level departures'}
 
 CRITICAL REQUIREMENTS:
-1. You MUST use web search to find actual news about executive departures
+1. You MUST use web search to find actual news about departures from ${headquartersCountry || geography || 'this specific'} organization
 2. ONLY include people who have ACTUALLY left (not rumors or speculation)
 3. DO NOT make up or guess any names or dates - if you can't verify, don't include them
-4. Look for news articles, press releases, official announcements about departures
+4. Look for ${isGovernment ? 'official government announcements, parliament records, news sources' : 'news articles, press releases, official announcements'} about departures
 5. Find when they left and where they went (if known)
-6. VERIFY you are searching for ${companyName} in ${headquartersCountry || geography || 'the correct country'}
+6. DOUBLE-CHECK: You are searching for ${companyName} in ${headquartersCountry || geography || 'the specified country'} - NOT any other country
 
 Return ONLY a JSON array in this exact format (no other text):
 [
   {
     "name": "Full Name",
-    "title": "Former Title at Company",
+    "title": "Former Title at Organization",
     "departureDate": "Month Year they left",
     "bio": "Brief context - reason for leaving or where they went"
   }
@@ -776,6 +820,170 @@ If you cannot find verified recent departures, return: []`;
         console.error('[Contacts] Research error:', error);
         emitAiConsoleLog('researcher', `Error researching contacts: ${error.message}`, 'error');
         return { success: false, error: error.message, contacts: [] };
+    }
+});
+
+// Extract contacts from POC file using AI
+ipcMain.handle('clients:extractContactsFromPOC', async (event, { pocFile, client }) => {
+    const companyName = client?.name || 'the organization';
+    const fileName = pocFile?.name || pocFile?.originalName || 'poc_file.txt';
+    const filePath = pocFile?.path;
+    
+    console.log(`[Contacts] Extracting contacts from POC file "${fileName}" for ${companyName}...`);
+    console.log(`[Contacts] File path: ${filePath}`);
+    
+    try {
+        const openaiCreds = credentialManager.getCredentials('openai');
+        
+        if (!openaiCreds || !openaiCreds.apiKey) {
+            return { success: false, error: 'OpenAI API key not configured', currentContacts: [] };
+        }
+        
+        emitAiConsoleLog('researcher', `Extracting key contacts from POC file for ${companyName}...`, 'info');
+        
+        // FIRST: Try to get EXTRACTED POC text from the source pack (properly parsed from PDF/DOCX)
+        // This is the same approach used by Intel Pack
+        let pocText = '';
+        
+        if (appState.pendingSourcePack?.documents) {
+            const allKeys = Object.keys(appState.pendingSourcePack.documents);
+            console.log(`[Contacts] Source pack has ${allKeys.length} documents`);
+            
+            const pocKeys = allKeys.filter(key => 
+                key.includes('Client_Point_of_Contact_Info') || key.includes('poc_info')
+            );
+            console.log(`[Contacts] Found ${pocKeys.length} POC-related keys:`, pocKeys);
+            
+            if (pocKeys.length > 0) {
+                // Combine all POC-related documents (skip index files)
+                pocText = pocKeys.map(key => {
+                    const content = appState.pendingSourcePack.documents[key];
+                    if (key.endsWith('_INDEX.md')) return '';
+                    console.log(`[Contacts] POC key "${key}" has ${content?.length || 0} chars`);
+                    return content;
+                }).filter(c => c).join('\n\n---\n\n');
+                
+                console.log(`[Contacts] Using extracted POC text from source pack (${pocText.length} chars)`);
+            }
+        } else {
+            console.log('[Contacts] Source pack not available yet (will read file directly)');
+        }
+        
+        // FALLBACK: If no extracted text in source pack, read file directly from disk
+        if (!pocText || pocText.length < 100) {
+            console.log('[Contacts] No extracted POC in source pack, reading file directly...');
+            
+            if (filePath && fs.existsSync(filePath)) {
+                console.log(`[Contacts] Reading file from: ${filePath}`);
+                try {
+                    const contentBuffer = fs.readFileSync(filePath);
+                    console.log(`[Contacts] Read ${contentBuffer.length} bytes from disk`);
+                    
+                    // Extract text using the document extractor
+                    const extracted = await extractDocumentText(contentBuffer, fileName);
+                    console.log(`[Contacts] Extraction result: converted=${extracted.converted}, textLength=${extracted.text?.length || 0}`);
+                    
+                    if (extracted.text && extracted.text.length > 50) {
+                        pocText = extracted.text;
+                        console.log(`[Contacts] Successfully extracted ${pocText.length} chars from document`);
+                    }
+                } catch (readError) {
+                    console.error(`[Contacts] Error reading file:`, readError.message);
+                }
+            } else {
+                console.log(`[Contacts] File path not available or file doesn't exist: ${filePath}`);
+            }
+        }
+        
+        // Log preview
+        if (pocText && pocText.length > 0) {
+            console.log(`[Contacts] POC text preview: ${pocText.substring(0, 300)}...`);
+        } else {
+            console.log('[Contacts] POC text is empty after all extraction attempts');
+        }
+        
+        if (!pocText || pocText.length < 50) {
+            emitAiConsoleLog('researcher', 'POC document appears empty or unreadable', 'warning');
+            return { success: false, error: 'Could not read POC document', currentContacts: [] };
+        }
+        
+        // Truncate if too long (keep first 15000 chars for context)
+        if (pocText.length > 15000) {
+            pocText = pocText.substring(0, 15000) + '\n\n[... document truncated for processing ...]';
+        }
+        
+        const prompt = `Analyze this POC (Point of Contact) document and extract the key stakeholders and contacts mentioned.
+
+DOCUMENT CONTENT:
+${pocText}
+
+YOUR TASK:
+Extract all people mentioned in this document who appear to be key stakeholders, decision-makers, or important contacts at ${companyName}. 
+
+For each person, provide:
+1. Their full name (EXACT name as written in the document)
+2. Their title/role
+3. A brief bio or context (what is mentioned about them in the document)
+
+Return ONLY a valid JSON object in this exact format (no other text):
+{
+  "currentContacts": [
+    {
+      "name": "Full Name",
+      "title": "Their Role/Title",
+      "bio": "Brief context from the document about this person"
+    }
+  ]
+}
+
+CRITICAL RULES:
+- ONLY include people whose names are EXPLICITLY mentioned in the document
+- Do NOT make up or invent any names
+- Do NOT use placeholder names like "John Smith" or "Jane Doe"
+- Maximum 5 contacts (prioritize the most senior/important ones)
+- If no real names are found, return: {"currentContacts": []}`;
+
+        const messages = [
+            {
+                role: 'system',
+                content: 'You are an expert at extracting contact information from business documents. Extract only information that is explicitly stated in the document. Never invent or fabricate names.'
+            },
+            {
+                role: 'user',
+                content: prompt
+            }
+        ];
+        
+        const model = openaiCreds.model || 'gpt-4o';
+        const content = await callOpenAI(openaiCreds.apiKey, model, messages, 2000);
+        
+        if (!content) {
+            emitAiConsoleLog('researcher', 'Failed to extract contacts from POC', 'error');
+            return { success: false, error: 'No response from AI', currentContacts: [], exitedContacts: [] };
+        }
+        
+        // Parse JSON response
+        let jsonStr = content.trim();
+        if (jsonStr.startsWith('```')) {
+            jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+        }
+        
+        const result = JSON.parse(jsonStr);
+        
+        const currentCount = result.currentContacts?.length || 0;
+        
+        emitAiConsoleLog('researcher', `✓ Extracted ${currentCount} stakeholder${currentCount !== 1 ? 's' : ''} from POC`, 'success');
+        
+        return {
+            success: true,
+            currentContacts: result.currentContacts || [],
+            source: 'poc'
+        };
+        
+    } catch (error) {
+        console.error('[Contacts] POC extraction error:', error);
+        emitAiConsoleLog('researcher', `Error extracting contacts from POC: ${error.message}`, 'error');
+        return { success: false, error: error.message, currentContacts: [] };
     }
 });
 
@@ -919,48 +1127,71 @@ async function callOpenAIWithWebSearch(apiKey, query) {
 async function analyzeCompanyWithOpenAI(companyName, apiKey, model = 'gpt-5.2') {
     const isO1Model = model.startsWith('o1');
     
-    const prompt = `Analyze this company name and provide ACCURATE information about it. If it's a well-known company, provide verified details based on facts.
+    const prompt = `Analyze this company/organization name and provide ACCURATE information about it. You must identify the SPECIFIC organization being referenced.
 
-Company Name: "${companyName}"
+Organization Name: "${companyName}"
 
-CRITICAL INSTRUCTIONS:
-1. GEOGRAPHY must be based on the company's HEADQUARTERS location, not where they operate
-2. Be very careful with company names that exist in multiple countries - verify which one is most likely:
-   - "Nationwide" = Nationwide Building Society, UK's largest building society (Europe, NOT North America)
-   - "Santander" = Spanish bank headquartered in Spain (Europe)
-   - "HSBC" = British bank headquartered in London (Europe)
-   - "Toyota" = Japanese company (APAC, not North America despite US operations)
-3. Do NOT assume American companies - verify the actual headquarters country
-4. Use these geography values based on HEADQUARTERS:
+CRITICAL DISAMBIGUATION RULES:
+
+1. GOVERNMENT ENTITIES & MINISTRIES:
+   - Many countries have similarly named government departments. You MUST identify which country's entity this is.
+   - "Ministry of Defence" (with 'c') = UNITED KINGDOM's defence ministry (headquartersCountry: "United Kingdom")
+   - "Ministry of Defense" (with 's') = Could be multiple countries - if ambiguous, look for context clues
+   - "Department of Defense" / "DoD" = UNITED STATES (headquartersCountry: "United States")
+   - "Ministry of Finance", "Ministry of Health", etc. - ALWAYS identify the specific country
+   - For ANY government entity, the headquartersCountry is the country whose government it belongs to
+
+2. SPELLING CLUES FOR UK vs US:
+   - British spelling: Defence, Colour, Organisation, Centre = likely UK
+   - American spelling: Defense, Color, Organization, Center = likely US
+   - "Ministry of..." is typically UK/Commonwealth terminology
+   - "Department of..." is typically US terminology
+
+3. COMPANIES WITH SIMILAR NAMES IN MULTIPLE COUNTRIES:
+   - "Nationwide" = Nationwide Building Society, UK (Europe), NOT Nationwide Insurance US
+   - "Santander" = Spanish bank (Europe)
+   - "HSBC" = British bank (Europe)
+   - Always verify the actual headquarters country
+
+4. GEOGRAPHY must be based on HEADQUARTERS location:
    - North America: USA, Canada, Mexico
    - Europe: UK, EU countries, Switzerland, Norway
    - APAC: Japan, China, Korea, Australia, India, Southeast Asia
    - LATAM: South America, Central America, Caribbean
    - MEA: Middle East, Africa
-   - Global: Only for truly multinational HQ structures (rare)
+   - Global: ONLY for truly multinational HQ structures (very rare)
+
+5. NEVER use "Global" for government entities - they always belong to ONE specific country.
+
+6. If the organization name is ambiguous and could refer to multiple entities in different countries, make your BEST determination based on:
+   - Spelling conventions (Defence vs Defense)
+   - Terminology (Ministry vs Department)
+   - Common usage and prominence
+   - Set confidence lower (0.7-0.8) if ambiguous
 
 Respond ONLY with a valid JSON object (no markdown, no explanation) in this exact format:
 {
-    "officialName": "Full official company name",
-    "industry": "Primary industry (e.g., Technology, Healthcare, Financial Services, Retail, Energy, Manufacturing, etc.)",
-    "geography": "Primary region based on HEADQUARTERS (North America, Europe, APAC, Global, LATAM, MEA)",
-    "headquartersCountry": "Specific country where HQ is located (e.g., United Kingdom, United States, Japan)",
-    "sector": "Specific sector or sub-industry",
+    "officialName": "Full official name of the organization",
+    "industry": "Primary industry (Government, Technology, Healthcare, Financial Services, etc.)",
+    "geography": "Region based on HEADQUARTERS (North America, Europe, APAC, LATAM, MEA)",
+    "headquartersCountry": "SPECIFIC country (e.g., United Kingdom, United States, France, Germany)",
+    "sector": "Specific sector (e.g., Defence & National Security, Central Banking, Retail Banking)",
+    "isGovernment": true/false,
     "confidence": 0.95
 }
 
-Set confidence between 0.7-0.99 based on how certain you are about this company.`;
+IMPORTANT: headquartersCountry must ALWAYS be filled in with a specific country name. Never leave it empty or use a region.`;
 
     // Build messages array - o1 models don't support system messages
     const messages = isO1Model ? [
         {
             role: 'user',
-            content: 'You are a business intelligence assistant that provides accurate company information. Always respond with valid JSON only, no markdown formatting.\n\n' + prompt
+            content: 'You are a business intelligence assistant that provides accurate company and organization information. You are especially careful to correctly identify government entities and distinguish between similarly-named organizations in different countries. Always respond with valid JSON only, no markdown formatting.\n\n' + prompt
         }
     ] : [
         {
             role: 'system',
-            content: 'You are a business intelligence assistant that provides accurate company information. Always respond with valid JSON only, no markdown formatting.'
+            content: 'You are a business intelligence assistant that provides accurate company and organization information. You are especially careful to correctly identify government entities and distinguish between similarly-named organizations in different countries. Always respond with valid JSON only, no markdown formatting.'
         },
         {
             role: 'user',
@@ -993,6 +1224,7 @@ Set confidence between 0.7-0.99 based on how certain you are about this company.
             geography: result.geography || 'Global',
             headquartersCountry: result.headquartersCountry || '',
             sector: result.sector || 'General Business',
+            isGovernment: result.isGovernment || false,
             confidence: result.confidence || 0.8,
             source: 'openai'
         };
@@ -2523,7 +2755,9 @@ ipcMain.handle('workshop:generate', async (event, { client }) => {
         
         const saveDir = filePaths[0];
         const clientName = (client?.name || 'Client').replace(/[^a-zA-Z0-9\s]/g, '').trim();
-        const timestamp = new Date().toISOString().slice(0, 10);
+        // Include time in timestamp to avoid file conflicts when regenerating
+        const now = new Date();
+        const timestamp = `${now.toISOString().slice(0, 10)}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
         const savedFiles = [];
         
         // Handle PPTX - use uploaded template with placeholder processing
@@ -3589,28 +3823,45 @@ async function concatenateVideos(videoPaths, tempDir) {
 
 // Get all placeholders
 ipcMain.handle('placeholders:getAll', async () => {
+    console.log(`[Placeholders] getAll called, count: ${appState.placeholders?.length || 0}`);
     return appState.placeholders || [];
 });
 
 // Add placeholder
 ipcMain.handle('placeholders:add', async (event, placeholder) => {
+    console.log(`[Placeholders] Adding placeholder: ${placeholder.name}`);
+    console.log(`[Placeholders] Current count before add: ${appState.placeholders?.length || 0}`);
+    
+    // Ensure array exists
+    if (!appState.placeholders) {
+        appState.placeholders = [];
+    }
+    
     const newPlaceholder = {
         id: 'ph_' + Date.now(),
         name: placeholder.name.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
         prompt: placeholder.prompt,
         isList: placeholder.isList || false,
         listCount: placeholder.listCount || null,
+        hasTitleBody: placeholder.hasTitleBody || false,
+        maxChars: placeholder.maxChars || null,
+        maxCharsTitle: placeholder.maxCharsTitle || null,
+        maxCharsBody: placeholder.maxCharsBody || null,
         createdAt: new Date().toISOString()
     };
     
     appState.placeholders.push(newPlaceholder);
-    credentialManager.saveAppData('placeholders', appState.placeholders);
+    console.log(`[Placeholders] Count after add: ${appState.placeholders.length}`);
+    
+    const saved = credentialManager.saveAppData('placeholders', appState.placeholders);
+    console.log(`[Placeholders] Saved to disk: ${saved}`);
     
     auditLogger.log('ADMIN', 'PLACEHOLDER_ADDED', { 
         id: newPlaceholder.id, 
         name: newPlaceholder.name,
         isList: newPlaceholder.isList,
-        listCount: newPlaceholder.listCount
+        listCount: newPlaceholder.listCount,
+        hasTitleBody: newPlaceholder.hasTitleBody
     });
     
     return { success: true, placeholder: newPlaceholder };
@@ -3629,6 +3880,10 @@ ipcMain.handle('placeholders:update', async (event, { id, placeholder }) => {
         prompt: placeholder.prompt,
         isList: placeholder.isList || false,
         listCount: placeholder.listCount || null,
+        hasTitleBody: placeholder.hasTitleBody || false,
+        maxChars: placeholder.maxChars || null,
+        maxCharsTitle: placeholder.maxCharsTitle || null,
+        maxCharsBody: placeholder.maxCharsBody || null,
         updatedAt: new Date().toISOString()
     };
     
@@ -3659,6 +3914,204 @@ ipcMain.handle('placeholders:delete', async (event, id) => {
     });
     
     return { success: true };
+});
+
+// Export placeholders to Excel
+ipcMain.handle('placeholders:export', async () => {
+    const XLSX = require('xlsx');
+    
+    if (!appState.placeholders || appState.placeholders.length === 0) {
+        return { success: false, error: 'No placeholders to export' };
+    }
+    
+    // Convert placeholders to Excel-friendly format
+    const data = appState.placeholders.map(p => ({
+        'placeholder': p.name,
+        'prompt': p.prompt,
+        'list': p.isList ? 'TRUE' : 'FALSE',
+        'list_items': p.isList ? (p.listCount || 5) : '',
+        'title_body_placeholder': p.hasTitleBody ? 'TRUE' : 'FALSE',
+        'max_characters_per_box': p.maxChars || '',
+        'max_chars_title': p.maxCharsTitle || '',
+        'max_chars_body': p.maxCharsBody || ''
+    }));
+    
+    // Create workbook
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Placeholders');
+    
+    // Set column widths
+    ws['!cols'] = [
+        { wch: 25 },  // placeholder
+        { wch: 60 },  // prompt
+        { wch: 10 },  // list
+        { wch: 12 },  // list_items
+        { wch: 20 },  // title_body_placeholder
+        { wch: 20 },  // max_characters_per_box
+        { wch: 15 },  // max_chars_title
+        { wch: 15 }   // max_chars_body
+    ];
+    
+    // Show save dialog
+    const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: `Placeholders_Export_${new Date().toISOString().slice(0,10)}.xlsx`,
+        filters: [{ name: 'Excel Files', extensions: ['xlsx'] }]
+    });
+    
+    if (result.canceled) {
+        return { success: false, canceled: true };
+    }
+    
+    try {
+        XLSX.writeFile(wb, result.filePath);
+        
+        auditLogger.log('ADMIN', 'PLACEHOLDERS_EXPORTED', {
+            count: appState.placeholders.length,
+            filePath: result.filePath
+        });
+        
+        return { success: true, filePath: result.filePath, count: appState.placeholders.length };
+    } catch (error) {
+        console.error('Failed to export placeholders:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Import placeholders from Excel
+ipcMain.handle('placeholders:import', async () => {
+    const XLSX = require('xlsx');
+    
+    // Show open dialog
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Import Placeholders from Excel',
+        filters: [{ name: 'Excel Files', extensions: ['xlsx', 'xls'] }],
+        properties: ['openFile']
+    });
+    
+    if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+    }
+    
+    try {
+        const filePath = result.filePaths[0];
+        const workbook = XLSX.readFile(filePath);
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(worksheet);
+        
+        if (!rows || rows.length === 0) {
+            return { success: false, error: 'Excel file is empty or has no data rows' };
+        }
+        
+        // Validate and convert rows to placeholders
+        const imported = [];
+        const errors = [];
+        
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const rowNum = i + 2; // Excel is 1-indexed and has header row
+            
+            // Get column values (handle different case variations)
+            const name = row['placeholder'] || row['Placeholder'] || row['PLACEHOLDER'];
+            const prompt = row['prompt'] || row['Prompt'] || row['PROMPT'];
+            const listVal = row['list'] || row['List'] || row['LIST'];
+            const listItemsVal = row['list_items'] || row['List_Items'] || row['LIST_ITEMS'] || row['list items'] || row['List Items'];
+            const titleBodyVal = row['title_body_placeholder'] || row['Title_Body_Placeholder'] || row['TITLE_BODY_PLACEHOLDER'] || row['title/body placeholder'] || row['Title/Body Placeholder'];
+            const maxCharsVal = row['max_characters_per_box'] || row['Max_Characters_Per_Box'] || row['MAX_CHARACTERS_PER_BOX'] || row['max characters per box'] || row['Max Characters Per Box'];
+            const maxCharsTitleVal = row['max_chars_title'] || row['Max_Chars_Title'] || row['MAX_CHARS_TITLE'] || row['max chars title'] || row['Max Chars Title'];
+            const maxCharsBodyVal = row['max_chars_body'] || row['Max_Chars_Body'] || row['MAX_CHARS_BODY'] || row['max chars body'] || row['Max Chars Body'];
+            
+            // Validate required fields
+            if (!name) {
+                errors.push(`Row ${rowNum}: Missing placeholder name`);
+                continue;
+            }
+            if (!prompt) {
+                errors.push(`Row ${rowNum}: Missing prompt for "${name}"`);
+                continue;
+            }
+            
+            // Parse boolean values
+            const isList = listVal === true || listVal === 'TRUE' || listVal === 'true' || listVal === '1' || listVal === 1;
+            const hasTitleBody = titleBodyVal === true || titleBodyVal === 'TRUE' || titleBodyVal === 'true' || titleBodyVal === '1' || titleBodyVal === 1;
+            
+            // Parse list items count
+            let listCount = 5; // Default
+            if (listItemsVal !== undefined && listItemsVal !== '' && listItemsVal !== null) {
+                const parsed = parseInt(listItemsVal);
+                if (!isNaN(parsed) && parsed > 0) {
+                    listCount = parsed;
+                }
+            }
+            
+            // Parse max chars
+            let maxChars = null;
+            if (maxCharsVal !== undefined && maxCharsVal !== '' && maxCharsVal !== null) {
+                const parsed = parseInt(maxCharsVal);
+                if (!isNaN(parsed) && parsed > 0) {
+                    maxChars = parsed;
+                }
+            }
+            
+            // Parse max chars title
+            let maxCharsTitle = null;
+            if (maxCharsTitleVal !== undefined && maxCharsTitleVal !== '' && maxCharsTitleVal !== null) {
+                const parsed = parseInt(maxCharsTitleVal);
+                if (!isNaN(parsed) && parsed > 0) {
+                    maxCharsTitle = parsed;
+                }
+            }
+            
+            // Parse max chars body
+            let maxCharsBody = null;
+            if (maxCharsBodyVal !== undefined && maxCharsBodyVal !== '' && maxCharsBodyVal !== null) {
+                const parsed = parseInt(maxCharsBodyVal);
+                if (!isNaN(parsed) && parsed > 0) {
+                    maxCharsBody = parsed;
+                }
+            }
+            
+            // Create placeholder object
+            const placeholder = {
+                id: 'ph_' + Date.now() + '_' + i,
+                name: String(name).toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+                prompt: String(prompt),
+                isList: isList,
+                listCount: isList ? listCount : null,
+                hasTitleBody: hasTitleBody,
+                maxChars: maxChars,
+                maxCharsTitle: maxCharsTitle,
+                maxCharsBody: maxCharsBody,
+                createdAt: new Date().toISOString()
+            };
+            
+            imported.push(placeholder);
+        }
+        
+        if (imported.length === 0) {
+            return { success: false, error: 'No valid placeholders found in file. Errors: ' + errors.join('; ') };
+        }
+        
+        // Replace existing placeholders with imported ones
+        appState.placeholders = imported;
+        credentialManager.saveAppData('placeholders', appState.placeholders);
+        
+        auditLogger.log('ADMIN', 'PLACEHOLDERS_IMPORTED', {
+            count: imported.length,
+            errors: errors.length,
+            filePath: filePath
+        });
+        
+        return { 
+            success: true, 
+            count: imported.length, 
+            errors: errors.length > 0 ? errors : null 
+        };
+    } catch (error) {
+        console.error('Failed to import placeholders:', error);
+        return { success: false, error: error.message };
+    }
 });
 
 // Helper: Process template with placeholders
@@ -3770,21 +4223,211 @@ async function processTemplateWithPlaceholders(templateBuffer, client, fileType)
         // Prepare data object with built-ins
         const data = { ...builtInData };
         
-        // Store for list placeholder items
+        // Store for list placeholder items (each item can be string or {title, body} object)
         const listPlaceholderData = {};
         
-        // Pre-generate AI content for all defined custom placeholders
-        // This ensures content is ready before template rendering
-        for (const placeholder of definedPlaceholders) {
-            const placeholderName = placeholder.name;
+        // Store for title/body placeholder data (non-list)
+        const titleBodyPlaceholderData = {};
+        
+        // Track generation state for dependency resolution
+        const generationState = {
+            completed: new Set(Object.keys(builtInData)), // Built-ins are already "generated"
+            inProgress: new Set(), // For circular dependency detection
+        };
+        
+        // Helper: Find placeholder references in a prompt
+        const findPlaceholderReferences = (prompt) => {
+            const matches = prompt.matchAll(/\{\{([a-z_]+)\}\}/gi);
+            const refs = [];
+            for (const match of matches) {
+                const refName = match[1].toLowerCase();
+                // Don't count self-references or built-ins
+                if (!builtInData.hasOwnProperty(refName)) {
+                    refs.push(refName);
+                }
+            }
+            return [...new Set(refs)]; // Dedupe
+        };
+        
+        // Helper: Replace placeholder references in a prompt with generated content
+        const resolvePromptReferences = (prompt) => {
+            return prompt.replace(/\{\{([a-z_]+)\}\}/gi, (match, name) => {
+                const refName = name.toLowerCase();
+                
+                // Check all data sources for the referenced content
+                if (data[refName]) {
+                    return data[refName];
+                }
+                if (listPlaceholderData[refName]) {
+                    const items = listPlaceholderData[refName];
+                    if (items[0] && typeof items[0] === 'object') {
+                        // Title/body list - format as readable text
+                        return items.map((item, i) => `${i + 1}. ${item.title}: ${item.body}`).join('\n');
+                    } else {
+                        // Simple list
+                        return items.map((item, i) => `${i + 1}. ${item}`).join('\n');
+                    }
+                }
+                if (titleBodyPlaceholderData[refName]) {
+                    const tb = titleBodyPlaceholderData[refName];
+                    return `${tb.title}: ${tb.body}`;
+                }
+                if (builtInData[refName]) {
+                    return builtInData[refName];
+                }
+                
+                // Not found - leave as is
+                return match;
+            });
+        };
+        
+        // Helper: Get placeholder config by name
+        const getPlaceholderConfig = (name) => {
+            return definedPlaceholders.find(p => p.name === name);
+        };
+        
+        // Recursive function to generate a placeholder with dependency resolution
+        const generatePlaceholderWithDeps = async (placeholderName, depth = 0) => {
+            const indent = '  '.repeat(depth);
             
-            // Skip if it's a built-in
-            if (builtInData.hasOwnProperty(placeholderName)) {
-                continue;
+            // Skip if already generated
+            if (generationState.completed.has(placeholderName)) {
+                console.log(`${indent}[Deps] ${placeholderName} already generated, skipping`);
+                return;
             }
             
-            if (placeholder.isList) {
-                // Handle list placeholder
+            // Circular dependency check
+            if (generationState.inProgress.has(placeholderName)) {
+                mainWindow.webContents.send('ai-console-log', {
+                    agent: 'workshop',
+                    message: `⚠ Circular dependency detected for {{${placeholderName}}} - skipping`,
+                    type: 'warning'
+                });
+                console.log(`${indent}[Deps] Circular dependency for ${placeholderName}!`);
+                return;
+            }
+            
+            const placeholder = getPlaceholderConfig(placeholderName);
+            if (!placeholder) {
+                console.log(`${indent}[Deps] ${placeholderName} not found in defined placeholders`);
+                return;
+            }
+            
+            // Mark as in-progress
+            generationState.inProgress.add(placeholderName);
+            
+            // Find dependencies in the prompt
+            const dependencies = findPlaceholderReferences(placeholder.prompt);
+            
+            if (dependencies.length > 0) {
+                mainWindow.webContents.send('ai-console-log', {
+                    agent: 'workshop',
+                    message: `{{${placeholderName}}} depends on: ${dependencies.map(d => `{{${d}}}`).join(', ')}`,
+                    type: 'info'
+                });
+                console.log(`${indent}[Deps] ${placeholderName} depends on: ${dependencies.join(', ')}`);
+                
+                // Generate dependencies first
+                for (const dep of dependencies) {
+                    if (!generationState.completed.has(dep)) {
+                        console.log(`${indent}[Deps] Generating dependency ${dep} first...`);
+                        await generatePlaceholderWithDeps(dep, depth + 1);
+                    }
+                }
+            }
+            
+            // Now generate this placeholder with resolved prompt
+            const resolvedPrompt = resolvePromptReferences(placeholder.prompt);
+            
+            // Build character limit instruction if specified (for regular placeholders)
+            const charLimitInstruction = placeholder.maxChars 
+                ? `\n\nCRITICAL LENGTH CONSTRAINT: Your response MUST be ${placeholder.maxChars} characters or fewer (including spaces). This is a strict limit - be concise and impactful. Do not exceed ${placeholder.maxChars} characters.`
+                : '';
+            
+            // For list items, the char limit applies per item
+            const charLimitPerItemInstruction = placeholder.maxChars
+                ? `\nIMPORTANT: Each item MUST be ${placeholder.maxChars} characters or fewer (including spaces). Be concise.`
+                : '';
+            
+            // Build title/body character limit instructions
+            const titleCharLimit = placeholder.maxCharsTitle || null;
+            const bodyCharLimit = placeholder.maxCharsBody || null;
+            let titleBodyCharInstruction = '';
+            if (titleCharLimit || bodyCharLimit) {
+                const titlePart = titleCharLimit ? `TITLE must be ${titleCharLimit} characters or fewer` : '';
+                const bodyPart = bodyCharLimit ? `BODY must be ${bodyCharLimit} characters or fewer` : '';
+                const combined = [titlePart, bodyPart].filter(Boolean).join('. ');
+                titleBodyCharInstruction = `\nCRITICAL LENGTH CONSTRAINT: ${combined} (including spaces). Be concise and impactful.`;
+            }
+            
+            console.log(`${indent}[Deps] Generating ${placeholderName} with resolved prompt`);
+            
+            // Case 1: List + Title/Body placeholder
+            if (placeholder.isList && placeholder.hasTitleBody) {
+                mainWindow.webContents.send('ai-console-log', {
+                    agent: 'workshop',
+                    message: `Generating list with title/body for {{${placeholderName}}} (${placeholder.listCount} items)...`,
+                    type: 'info'
+                });
+                
+                try {
+                    const listTitleBodyPrompt = `${resolvedPrompt}
+
+IMPORTANT: You MUST respond with EXACTLY ${placeholder.listCount} items.
+Each item MUST have both a TITLE and a BODY.${titleBodyCharInstruction}
+
+Format your response EXACTLY like this (including the markers):
+[ITEM 1]
+TITLE: Short descriptive title here
+BODY: Longer body content here that explains the point in detail.
+
+[ITEM 2]
+TITLE: Another short title
+BODY: Another body paragraph with more details.
+
+...continue for all ${placeholder.listCount} items.
+
+Do NOT include any preamble, explanation, or conclusion - ONLY the formatted items.`;
+                    
+                    const aiContent = await generatePlaceholderContent(
+                        listTitleBodyPrompt,
+                        client,
+                        sourcePackContent
+                    );
+                    
+                    if (aiContent && !aiContent.startsWith('[Error:')) {
+                        const items = parseListTitleBodyContent(aiContent, placeholder.listCount);
+                        listPlaceholderData[placeholderName] = items;
+                        
+                        mainWindow.webContents.send('ai-console-log', {
+                            agent: 'workshop',
+                            message: `✓ Generated ${items.length} title/body items for {{${placeholderName}}}`,
+                            type: 'success'
+                        });
+                        
+                        items.forEach((item, idx) => {
+                            mainWindow.webContents.send('ai-console-log', {
+                                agent: 'workshop',
+                                message: `  [${idx + 1}] Title: "${item.title.substring(0, 40)}..."`,
+                                type: 'info'
+                            });
+                        });
+                    } else {
+                        listPlaceholderData[placeholderName] = Array(placeholder.listCount).fill({
+                            title: `[Error]`,
+                            body: `[Error generating ${placeholderName}]`
+                        });
+                    }
+                } catch (aiError) {
+                    console.error(`[Workshop] Error generating list title/body for ${placeholderName}:`, aiError);
+                    listPlaceholderData[placeholderName] = Array(placeholder.listCount).fill({
+                        title: `[Error]`,
+                        body: `[Error: ${aiError.message}]`
+                    });
+                }
+            }
+            // Case 2: List only placeholder
+            else if (placeholder.isList) {
                 mainWindow.webContents.send('ai-console-log', {
                     agent: 'workshop',
                     message: `Generating list content for {{${placeholderName}}} (${placeholder.listCount} items)...`,
@@ -3792,10 +4435,9 @@ async function processTemplateWithPlaceholders(templateBuffer, client, fileType)
                 });
                 
                 try {
-                    // Modify prompt to ensure list output
-                    const listPrompt = `${placeholder.prompt}
+                    const listPrompt = `${resolvedPrompt}
 
-IMPORTANT: You MUST respond with EXACTLY ${placeholder.listCount} items.
+IMPORTANT: You MUST respond with EXACTLY ${placeholder.listCount} items.${charLimitPerItemInstruction}
 Format your response as a numbered list:
 1. First item
 2. Second item
@@ -3811,7 +4453,6 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
                     );
                     
                     if (aiContent && !aiContent.startsWith('[Error:')) {
-                        // Parse the numbered list into individual items
                         const items = parseListContent(aiContent, placeholder.listCount);
                         listPlaceholderData[placeholderName] = items;
                         
@@ -3821,7 +4462,6 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
                             type: 'success'
                         });
                         
-                        // Log each item for debugging
                         items.forEach((item, idx) => {
                             mainWindow.webContents.send('ai-console-log', {
                                 agent: 'workshop',
@@ -3835,7 +4475,6 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
                             message: `⚠ AI error for list {{${placeholderName}}}: ${aiContent}`,
                             type: 'error'
                         });
-                        // Create placeholder items
                         listPlaceholderData[placeholderName] = Array(placeholder.listCount).fill(`[Error generating ${placeholderName}]`);
                     }
                 } catch (aiError) {
@@ -3847,8 +4486,62 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
                         type: 'error'
                     });
                 }
-            } else {
-                // Handle regular (non-list) placeholder
+            }
+            // Case 3: Title/Body only (non-list)
+            else if (placeholder.hasTitleBody) {
+                mainWindow.webContents.send('ai-console-log', {
+                    agent: 'workshop',
+                    message: `Generating title/body content for {{${placeholderName}}}...`,
+                    type: 'info'
+                });
+                
+                try {
+                    const titleBodyPrompt = `${resolvedPrompt}
+
+You MUST respond with both a TITLE and a BODY.${titleBodyCharInstruction}
+
+Format your response EXACTLY like this:
+TITLE: Short descriptive title here (keep it concise, under 10 words)
+BODY: Longer body content here that explains the point in detail.
+
+Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
+                    
+                    const aiContent = await generatePlaceholderContent(
+                        titleBodyPrompt,
+                        client,
+                        sourcePackContent
+                    );
+                    
+                    if (aiContent && !aiContent.startsWith('[Error:')) {
+                        const parsed = parseTitleBodyContent(aiContent);
+                        titleBodyPlaceholderData[placeholderName] = parsed;
+                        
+                        mainWindow.webContents.send('ai-console-log', {
+                            agent: 'workshop',
+                            message: `✓ Generated title/body for {{${placeholderName}}}`,
+                            type: 'success'
+                        });
+                        mainWindow.webContents.send('ai-console-log', {
+                            agent: 'workshop',
+                            message: `  Title: "${parsed.title.substring(0, 50)}..."`,
+                            type: 'info'
+                        });
+                    } else {
+                        titleBodyPlaceholderData[placeholderName] = {
+                            title: `[Error]`,
+                            body: `[Error generating ${placeholderName}]`
+                        };
+                    }
+                } catch (aiError) {
+                    console.error(`[Workshop] Error generating title/body for ${placeholderName}:`, aiError);
+                    titleBodyPlaceholderData[placeholderName] = {
+                        title: `[Error]`,
+                        body: `[Error: ${aiError.message}]`
+                    };
+                }
+            }
+            // Case 4: Regular placeholder
+            else {
                 mainWindow.webContents.send('ai-console-log', {
                     agent: 'workshop',
                     message: `Generating AI content for {{${placeholderName}}}...`,
@@ -3856,13 +4549,17 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
                 });
                 
                 try {
+                    // Add character limit to prompt if specified
+                    const promptWithLimit = charLimitInstruction 
+                        ? `${resolvedPrompt}${charLimitInstruction}`
+                        : resolvedPrompt;
+                    
                     const aiContent = await generatePlaceholderContent(
-                        placeholder.prompt,
+                        promptWithLimit,
                         client,
                         sourcePackContent
                     );
                     
-                    // Check if AI returned an error
                     if (aiContent && aiContent.startsWith('[Error:')) {
                         data[placeholderName] = aiContent;
                         mainWindow.webContents.send('ai-console-log', {
@@ -3888,6 +4585,24 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
                     });
                 }
             }
+            
+            // Mark as completed
+            generationState.inProgress.delete(placeholderName);
+            generationState.completed.add(placeholderName);
+        };
+        
+        // Generate all placeholders with dependency resolution
+        for (const placeholder of definedPlaceholders) {
+            const placeholderName = placeholder.name;
+            
+            // Skip if it's a built-in or already generated
+            if (builtInData.hasOwnProperty(placeholderName)) {
+                continue;
+            }
+            
+            if (!generationState.completed.has(placeholderName)) {
+                await generatePlaceholderWithDeps(placeholderName);
+            }
         }
         
         // Handle any placeholders found in template but not defined
@@ -3907,6 +4622,73 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
             message: `Data prepared with ${Object.keys(data).length} placeholders: ${Object.keys(data).join(', ')}`,
             type: 'info'
         });
+        
+        // Helper function to ensure text wrapping is enabled in PPTX text boxes
+        // This modifies <a:bodyPr> elements to enable word wrap
+        const ensureTextWrapping = (xmlContent, fileType) => {
+            if (fileType !== 'pptx') return xmlContent;
+            
+            let result = xmlContent;
+            
+            // Find all <a:bodyPr .../> or <a:bodyPr ...>...</a:bodyPr> elements
+            // Ensure they have wrap="square" for proper word wrapping
+            
+            // Pattern 1: Self-closing <a:bodyPr ... />
+            result = result.replace(/<a:bodyPr([^>]*?)\/>/g, (match, attrs) => {
+                // Check if wrap attribute already exists
+                if (/wrap\s*=/.test(attrs)) {
+                    // Replace existing wrap value with "square"
+                    attrs = attrs.replace(/wrap\s*=\s*["'][^"']*["']/g, 'wrap="square"');
+                } else {
+                    // Add wrap="square" attribute
+                    attrs = attrs + ' wrap="square"';
+                }
+                return `<a:bodyPr${attrs}/>`;
+            });
+            
+            // Pattern 2: Opening tag <a:bodyPr ...>
+            result = result.replace(/<a:bodyPr([^>]*?)>/g, (match, attrs) => {
+                // Skip if this is a self-closing tag (already handled above)
+                if (attrs.endsWith('/')) return match;
+                
+                // Check if wrap attribute already exists
+                if (/wrap\s*=/.test(attrs)) {
+                    // Replace existing wrap value with "square"
+                    attrs = attrs.replace(/wrap\s*=\s*["'][^"']*["']/g, 'wrap="square"');
+                } else {
+                    // Add wrap="square" attribute
+                    attrs = attrs + ' wrap="square"';
+                }
+                return `<a:bodyPr${attrs}>`;
+            });
+            
+            return result;
+        };
+        
+        // Helper function to escape XML and convert line breaks for Office formats
+        const escapeForOfficeXml = (text, fileType) => {
+            let safeValue = String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&apos;');
+            
+            // For PPTX, convert line breaks to soft breaks that work within text runs
+            // Using &#xA; (line feed) which PowerPoint will render as a line break
+            if (fileType === 'pptx') {
+                safeValue = safeValue.replace(/\r\n/g, '&#xA;').replace(/\n/g, '&#xA;').replace(/\r/g, '&#xA;');
+            }
+            
+            // For DOCX, we can use similar approach
+            if (fileType === 'docx') {
+                // In DOCX, we should ideally use <w:br/> but that requires more complex XML manipulation
+                // For now, use the same approach
+                safeValue = safeValue.replace(/\r\n/g, '&#xA;').replace(/\n/g, '&#xA;').replace(/\r/g, '&#xA;');
+            }
+            
+            return safeValue;
+        };
         
         // Helper function to merge split placeholder tags
         // In PPTX/DOCX, {{placeholder}} can be split across multiple XML runs
@@ -3962,10 +4744,34 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
         
         // For list placeholders, also add indexed versions like name[1], name[2], name [1], name [2], etc.
         for (const [listName, items] of Object.entries(listPlaceholderData)) {
+            // If items have title/body structure, add non-indexed patterns for sequential replacement
+            if (items[0] && typeof items[0] === 'object') {
+                allPlaceholderNames.push(`${listName}[title]`);
+                allPlaceholderNames.push(`${listName}[body]`);
+                allPlaceholderNames.push(`${listName} [title]`);
+                allPlaceholderNames.push(`${listName} [body]`);
+            }
+            
             for (let i = 1; i <= items.length; i++) {
                 allPlaceholderNames.push(`${listName}[${i}]`);      // No space: name[1]
                 allPlaceholderNames.push(`${listName} [${i}]`);     // With space: name [1]
+                
+                // If items have title/body structure, add indexed patterns too
+                if (items[0] && typeof items[0] === 'object') {
+                    allPlaceholderNames.push(`${listName}[${i}][title]`);
+                    allPlaceholderNames.push(`${listName}[${i}][body]`);
+                    allPlaceholderNames.push(`${listName} [${i}][title]`);
+                    allPlaceholderNames.push(`${listName} [${i}][body]`);
+                }
             }
+        }
+        
+        // For title/body only placeholders
+        for (const tbName of Object.keys(titleBodyPlaceholderData)) {
+            allPlaceholderNames.push(`${tbName}[title]`);
+            allPlaceholderNames.push(`${tbName}[body]`);
+            allPlaceholderNames.push(`${tbName} [title]`);
+            allPlaceholderNames.push(`${tbName} [body]`);
         }
         
         // Now process template - do direct string replacement in XML files
@@ -3974,7 +4780,14 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
             let content = zip.files[xmlFile].asText();
             let modified = false;
             
-            // First, merge any split placeholders
+            // First, ensure text wrapping is enabled for PPTX files
+            const contentBeforeWrap = content;
+            content = ensureTextWrapping(content, fileType);
+            if (content !== contentBeforeWrap) {
+                modified = true;
+            }
+            
+            // Next, merge any split placeholders
             const originalContent = content;
             content = mergeSplitPlaceholders(content, allPlaceholderNames);
             
@@ -4032,61 +4845,121 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
             
             // First, replace list placeholder items
             for (const [listName, items] of Object.entries(listPlaceholderData)) {
-                // Method 1: Replace explicitly indexed placeholders like {{name[1]}} or {{name [1]}} (with optional space)
+                // Check if items have title/body structure
+                const hasTitleBody = items.length > 0 && typeof items[0] === 'object' && items[0].title !== undefined;
+                
+                // Method 1: Replace explicitly indexed placeholders
                 for (let i = 0; i < items.length; i++) {
-                    // Escape special XML characters in the replacement value
-                    const safeValue = String(items[i])
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;')
-                        .replace(/'/g, '&apos;');
-                    
-                    // Try both formats: with and without space before [N]
-                    const indexedNoSpace = `{{${listName}[${i + 1}]}}`;
-                    const indexedWithSpace = `{{${listName} [${i + 1}]}}`;
-                    
-                    if (content.includes(indexedNoSpace)) {
-                        content = content.split(indexedNoSpace).join(safeValue);
-                        modified = true;
-                        mainWindow.webContents.send('ai-console-log', {
-                            agent: 'workshop',
-                            message: `✓ Replaced {{${listName}[${i + 1}]}} in ${path.basename(xmlFile)}`,
-                            type: 'success'
-                        });
-                    }
-                    
-                    if (content.includes(indexedWithSpace)) {
-                        content = content.split(indexedWithSpace).join(safeValue);
-                        modified = true;
-                        mainWindow.webContents.send('ai-console-log', {
-                            agent: 'workshop',
-                            message: `✓ Replaced {{${listName} [${i + 1}]}} in ${path.basename(xmlFile)}`,
-                            type: 'success'
-                        });
+                    if (hasTitleBody) {
+                        // Title/body structure: handle {{name[N][title]}} and {{name[N][body]}}
+                        const item = items[i];
+                        const safeTitleValue = escapeForOfficeXml(item.title, fileType);
+                        const safeBodyValue = escapeForOfficeXml(item.body, fileType);
+                        
+                        // Title patterns
+                        const titlePatterns = [
+                            `{{${listName}[${i + 1}][title]}}`,
+                            `{{${listName} [${i + 1}][title]}}`,
+                            `{{${listName}[${i + 1}] [title]}}`,
+                            `{{${listName} [${i + 1}] [title]}}`
+                        ];
+                        
+                        for (const pattern of titlePatterns) {
+                            if (content.includes(pattern)) {
+                                content = content.split(pattern).join(safeTitleValue);
+                                modified = true;
+                                mainWindow.webContents.send('ai-console-log', {
+                                    agent: 'workshop',
+                                    message: `✓ Replaced ${pattern} in ${path.basename(xmlFile)}`,
+                                    type: 'success'
+                                });
+                            }
+                        }
+                        
+                        // Body patterns
+                        const bodyPatterns = [
+                            `{{${listName}[${i + 1}][body]}}`,
+                            `{{${listName} [${i + 1}][body]}}`,
+                            `{{${listName}[${i + 1}] [body]}}`,
+                            `{{${listName} [${i + 1}] [body]}}`
+                        ];
+                        
+                        for (const pattern of bodyPatterns) {
+                            if (content.includes(pattern)) {
+                                content = content.split(pattern).join(safeBodyValue);
+                                modified = true;
+                                mainWindow.webContents.send('ai-console-log', {
+                                    agent: 'workshop',
+                                    message: `✓ Replaced ${pattern} in ${path.basename(xmlFile)}`,
+                                    type: 'success'
+                                });
+                            }
+                        }
+                        
+                        // Also support {{name[N]}} which will get both title and body combined
+                        const indexedNoSpace = `{{${listName}[${i + 1}]}}`;
+                        const indexedWithSpace = `{{${listName} [${i + 1}]}}`;
+                        const combinedValue = escapeForOfficeXml(`${item.title}\n${item.body}`, fileType);
+                        
+                        if (content.includes(indexedNoSpace)) {
+                            content = content.split(indexedNoSpace).join(combinedValue);
+                            modified = true;
+                        }
+                        if (content.includes(indexedWithSpace)) {
+                            content = content.split(indexedWithSpace).join(combinedValue);
+                            modified = true;
+                        }
+                    } else {
+                        // Simple string items (original behavior)
+                        const safeValue = escapeForOfficeXml(items[i], fileType);
+                        
+                        const indexedNoSpace = `{{${listName}[${i + 1}]}}`;
+                        const indexedWithSpace = `{{${listName} [${i + 1}]}}`;
+                        
+                        if (content.includes(indexedNoSpace)) {
+                            content = content.split(indexedNoSpace).join(safeValue);
+                            modified = true;
+                            mainWindow.webContents.send('ai-console-log', {
+                                agent: 'workshop',
+                                message: `✓ Replaced {{${listName}[${i + 1}]}} in ${path.basename(xmlFile)}`,
+                                type: 'success'
+                            });
+                        }
+                        
+                        if (content.includes(indexedWithSpace)) {
+                            content = content.split(indexedWithSpace).join(safeValue);
+                            modified = true;
+                            mainWindow.webContents.send('ai-console-log', {
+                                agent: 'workshop',
+                                message: `✓ Replaced {{${listName} [${i + 1}]}} in ${path.basename(xmlFile)}`,
+                                type: 'success'
+                            });
+                        }
                     }
                 }
                 
                 // Method 2: Replace non-indexed {{name}} placeholders in order of appearance
-                // This supports the workflow where users put {{name}} in multiple boxes
                 const basePlaceholder = `{{${listName}}}`;
                 let itemIndex = 0;
                 while (content.includes(basePlaceholder) && itemIndex < items.length) {
-                    // Escape special XML characters in the replacement value
-                    const safeValue = String(items[itemIndex])
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;')
-                        .replace(/'/g, '&apos;');
+                    let safeValue;
+                    let previewText;
                     
-                    // Replace only the first occurrence
+                    if (hasTitleBody) {
+                        const item = items[itemIndex];
+                        safeValue = escapeForOfficeXml(`${item.title}\n${item.body}`, fileType);
+                        previewText = item.title.substring(0, 30);
+                    } else {
+                        safeValue = escapeForOfficeXml(items[itemIndex], fileType);
+                        previewText = items[itemIndex].substring(0, 30);
+                    }
+                    
                     content = content.replace(basePlaceholder, safeValue);
                     modified = true;
                     
                     mainWindow.webContents.send('ai-console-log', {
                         agent: 'workshop',
-                        message: `✓ Replaced {{${listName}}} #${itemIndex + 1} with item "${items[itemIndex].substring(0, 30)}..." in ${path.basename(xmlFile)}`,
+                        message: `✓ Replaced {{${listName}}} #${itemIndex + 1} with "${previewText}..." in ${path.basename(xmlFile)}`,
                         type: 'success'
                     });
                     
@@ -4103,19 +4976,138 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
                         type: 'warning'
                     });
                 }
+                
+                // Method 3: For list+title/body, replace {{name[title]}} and {{name[body]}} sequentially
+                if (hasTitleBody) {
+                    // Sequential title replacement
+                    const titlePlaceholderPatterns = [
+                        `{{${listName}[title]}}`,
+                        `{{${listName} [title]}}`
+                    ];
+                    
+                    let titleIndex = 0;
+                    for (const titlePattern of titlePlaceholderPatterns) {
+                        while (content.includes(titlePattern) && titleIndex < items.length) {
+                            const item = items[titleIndex];
+                            const safeTitleValue = escapeForOfficeXml(item.title, fileType);
+                            
+                            content = content.replace(titlePattern, safeTitleValue);
+                            modified = true;
+                            
+                            mainWindow.webContents.send('ai-console-log', {
+                                agent: 'workshop',
+                                message: `✓ Replaced {{${listName}[title]}} #${titleIndex + 1} with "${item.title.substring(0, 30)}..." in ${path.basename(xmlFile)}`,
+                                type: 'success'
+                            });
+                            
+                            titleIndex++;
+                        }
+                    }
+                    
+                    // Fill remaining title placeholders
+                    for (const titlePattern of titlePlaceholderPatterns) {
+                        while (content.includes(titlePattern)) {
+                            content = content.replace(titlePattern, `[No more titles for ${listName}]`);
+                            modified = true;
+                        }
+                    }
+                    
+                    // Sequential body replacement
+                    const bodyPlaceholderPatterns = [
+                        `{{${listName}[body]}}`,
+                        `{{${listName} [body]}}`
+                    ];
+                    
+                    let bodyIndex = 0;
+                    for (const bodyPattern of bodyPlaceholderPatterns) {
+                        while (content.includes(bodyPattern) && bodyIndex < items.length) {
+                            const item = items[bodyIndex];
+                            const safeBodyValue = escapeForOfficeXml(item.body, fileType);
+                            
+                            content = content.replace(bodyPattern, safeBodyValue);
+                            modified = true;
+                            
+                            mainWindow.webContents.send('ai-console-log', {
+                                agent: 'workshop',
+                                message: `✓ Replaced {{${listName}[body]}} #${bodyIndex + 1} in ${path.basename(xmlFile)}`,
+                                type: 'success'
+                            });
+                            
+                            bodyIndex++;
+                        }
+                    }
+                    
+                    // Fill remaining body placeholders
+                    for (const bodyPattern of bodyPlaceholderPatterns) {
+                        while (content.includes(bodyPattern)) {
+                            content = content.replace(bodyPattern, `[No more bodies for ${listName}]`);
+                            modified = true;
+                        }
+                    }
+                }
+            }
+            
+            // Replace title/body only placeholders (non-list)
+            for (const [tbName, tbData] of Object.entries(titleBodyPlaceholderData)) {
+                const safeTitleValue = escapeForOfficeXml(tbData.title, fileType);
+                const safeBodyValue = escapeForOfficeXml(tbData.body, fileType);
+                
+                // Title patterns
+                const titlePatterns = [
+                    `{{${tbName}[title]}}`,
+                    `{{${tbName} [title]}}`
+                ];
+                
+                for (const pattern of titlePatterns) {
+                    if (content.includes(pattern)) {
+                        content = content.split(pattern).join(safeTitleValue);
+                        modified = true;
+                        mainWindow.webContents.send('ai-console-log', {
+                            agent: 'workshop',
+                            message: `✓ Replaced ${pattern} in ${path.basename(xmlFile)}`,
+                            type: 'success'
+                        });
+                    }
+                }
+                
+                // Body patterns
+                const bodyPatterns = [
+                    `{{${tbName}[body]}}`,
+                    `{{${tbName} [body]}}`
+                ];
+                
+                for (const pattern of bodyPatterns) {
+                    if (content.includes(pattern)) {
+                        content = content.split(pattern).join(safeBodyValue);
+                        modified = true;
+                        mainWindow.webContents.send('ai-console-log', {
+                            agent: 'workshop',
+                            message: `✓ Replaced ${pattern} in ${path.basename(xmlFile)}`,
+                            type: 'success'
+                        });
+                    }
+                }
+                
+                // Also support {{name}} which will get both title and body combined
+                const basePlaceholder = `{{${tbName}}}`;
+                if (content.includes(basePlaceholder)) {
+                    const combinedValue = escapeForOfficeXml(`${tbData.title}\n${tbData.body}`, fileType);
+                    content = content.split(basePlaceholder).join(combinedValue);
+                    modified = true;
+                    mainWindow.webContents.send('ai-console-log', {
+                        agent: 'workshop',
+                        message: `✓ Replaced {{${tbName}}} (combined title/body) in ${path.basename(xmlFile)}`,
+                        type: 'success'
+                    });
+                }
             }
             
             // Replace each regular placeholder in the data
             for (const [key, value] of Object.entries(data)) {
                 const placeholder = `{{${key}}}`;
                 if (content.includes(placeholder)) {
-                    // Escape special XML characters in the replacement value
-                    const safeValue = String(value)
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;')
-                        .replace(/'/g, '&apos;');
+                    // Escape XML and handle line breaks for proper text wrapping
+                    const safeValue = escapeForOfficeXml(value, fileType);
                     
                     content = content.split(placeholder).join(safeValue);
                     modified = true;
@@ -4179,6 +5171,85 @@ function parseListContent(content, expectedCount) {
     // Pad or trim to expected count
     while (items.length < expectedCount) {
         items.push(`[Item ${items.length + 1} not generated]`);
+    }
+    
+    return items.slice(0, expectedCount);
+}
+
+// Helper: Parse title/body content from AI response
+function parseTitleBodyContent(content) {
+    if (!content) return { title: '[No title]', body: '[No content]' };
+    
+    // Try to find TITLE: and BODY: markers
+    const titleMatch = content.match(/TITLE:\s*(.+?)(?=\nBODY:|$)/is);
+    const bodyMatch = content.match(/BODY:\s*([\s\S]+?)$/i);
+    
+    if (titleMatch && bodyMatch) {
+        return {
+            title: titleMatch[1].trim(),
+            body: bodyMatch[1].trim()
+        };
+    }
+    
+    // Fallback: first line is title, rest is body
+    const lines = content.split('\n').filter(l => l.trim());
+    if (lines.length >= 2) {
+        return {
+            title: lines[0].replace(/^(TITLE:|Title:)\s*/i, '').trim(),
+            body: lines.slice(1).join('\n').replace(/^(BODY:|Body:)\s*/i, '').trim()
+        };
+    }
+    
+    // Last resort: use entire content as body
+    return {
+        title: '[Title not found]',
+        body: content.trim()
+    };
+}
+
+// Helper: Parse list of title/body items from AI response
+function parseListTitleBodyContent(content, expectedCount) {
+    if (!content) {
+        return Array(expectedCount).fill({ title: '[No title]', body: '[No content]' });
+    }
+    
+    const items = [];
+    
+    // Try to split by [ITEM N] markers
+    const itemBlocks = content.split(/\[ITEM\s*\d+\]/i).filter(block => block.trim());
+    
+    for (const block of itemBlocks) {
+        const titleMatch = block.match(/TITLE:\s*(.+?)(?=\nBODY:|$)/is);
+        const bodyMatch = block.match(/BODY:\s*([\s\S]+?)(?=\[ITEM|\s*$)/i);
+        
+        if (titleMatch || bodyMatch) {
+            items.push({
+                title: titleMatch ? titleMatch[1].trim() : '[No title]',
+                body: bodyMatch ? bodyMatch[1].trim() : '[No body]'
+            });
+        }
+    }
+    
+    // If we couldn't parse with [ITEM] markers, try splitting by TITLE: markers
+    if (items.length === 0) {
+        const titleBlocks = content.split(/(?=TITLE:)/i).filter(block => block.trim());
+        
+        for (const block of titleBlocks) {
+            const titleMatch = block.match(/TITLE:\s*(.+?)(?=\nBODY:|$)/is);
+            const bodyMatch = block.match(/BODY:\s*([\s\S]+?)(?=TITLE:|$)/i);
+            
+            if (titleMatch) {
+                items.push({
+                    title: titleMatch[1].trim(),
+                    body: bodyMatch ? bodyMatch[1].trim() : '[No body]'
+                });
+            }
+        }
+    }
+    
+    // Pad or trim to expected count
+    while (items.length < expectedCount) {
+        items.push({ title: `[Item ${items.length + 1} not generated]`, body: '[No content]' });
     }
     
     return items.slice(0, expectedCount);

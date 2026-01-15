@@ -366,7 +366,7 @@
                         <div class="step-line"></div>
                         <div class="step" data-step="3">
                             <div class="step-number">3</div>
-                            <span class="step-label">Generate Source Pack</span>
+                            <span class="step-label">Generate Source Pack all </span>
                         </div>
                         <div class="step-line"></div>
                         <div class="step" data-step="4">
@@ -887,14 +887,14 @@
                                                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                                                 <circle cx="12" cy="7" r="4"/>
                                             </svg>
-                                            Current C-Suite Executives
+                                            <span id="currentContactsTitle">Current C-Suite Executives</span>
                                             <span class="contacts-status" id="currentContactsStatus">
                                                 <span class="contacts-loading hidden" id="currentContactsLoading">
-                                                    <span class="mini-spinner"></span> Searching web...
+                                                    <span class="mini-spinner"></span> Searching...
                                                 </span>
                                             </span>
                                         </label>
-                                        <p class="section-hint">Live web search for current leadership (researched in background)</p>
+                                        <p class="section-hint" id="currentContactsHint">Live web search for current leadership (researched in background)</p>
                                         <div class="contacts-grid" id="currentContactsGrid">
                                             <div class="contact-card" data-slot="1">
                                                 <div class="contact-placeholder">
@@ -932,14 +932,14 @@
                                                 <circle cx="8.5" cy="7" r="4"/>
                                                 <path d="M20 8l-4 4m0-4l4 4"/>
                                             </svg>
-                                            Recently Exited Senior Leaders
+                                            <span id="exitedContactsTitle">Recently Exited Senior Leaders</span>
                                             <span class="contacts-status" id="exitedContactsStatus">
                                                 <span class="contacts-loading hidden" id="exitedContactsLoading">
-                                                    <span class="mini-spinner"></span> Searching web...
+                                                    <span class="mini-spinner"></span> Searching...
                                                 </span>
                                             </span>
                                         </label>
-                                        <p class="section-hint">Live web search for recent C-suite departures</p>
+                                        <p class="section-hint" id="exitedContactsHint">Live web search for recent C-suite departures</p>
                                         <div class="contacts-grid" id="exitedContactsGrid">
                                             <div class="contact-card exited" data-slot="1">
                                                 <div class="contact-placeholder">
@@ -1888,12 +1888,26 @@
                                 </svg>
                                 Template Placeholders
                             </h3>
-                            <button class="btn btn-primary btn-sm" id="addPlaceholderBtn">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-                                    <path d="M12 4v16m8-8H4"/>
-                                </svg>
-                                Add Placeholder
-                            </button>
+                            <div class="section-header-actions" style="display: flex; gap: 8px;">
+                                <button class="btn btn-ghost btn-sm" id="importPlaceholdersBtn" title="Import from Excel">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                        <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                                    </svg>
+                                    Import
+                                </button>
+                                <button class="btn btn-ghost btn-sm" id="exportPlaceholdersBtn" title="Export to Excel">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                        <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                                    </svg>
+                                    Export
+                                </button>
+                                <button class="btn btn-primary btn-sm" id="addPlaceholderBtn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                                        <path d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    Add Placeholder
+                                </button>
+                            </div>
                         </div>
                         <p class="section-description">Define placeholders that can be used in your PPTX/DOCX templates. Use <code>{{placeholder_name}}</code> syntax in your templates. For list placeholders, use <code>{{name[1]}}</code>, <code>{{name[2]}}</code>, etc. The AI will use the prompt to generate content from the Source Pack.</p>
                         
@@ -2010,6 +2024,36 @@
                         <label for="placeholderListCount">Expected List Items</label>
                         <input type="number" id="placeholderListCount" min="2" max="20" value="5" placeholder="e.g., 5">
                         <p class="field-hint">How many items should the AI generate?</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="placeholderHasTitleBody">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text">Title/Body Placeholder</span>
+                        </label>
+                        <p class="field-hint" id="titleBodyPlaceholderHint" style="display: none;">
+                            Generates both a title and body from the same prompt.<br>
+                            Use <code>{{name[title]}}</code> and <code>{{name[body]}}</code> in templates.<br>
+                            For lists: <code>{{name[1][title]}}</code>, <code>{{name[1][body]}}</code>, etc.
+                        </p>
+                    </div>
+                    <div class="form-group" id="maxCharsGroup">
+                        <label for="placeholderMaxChars">Max Characters (optional)</label>
+                        <input type="number" id="placeholderMaxChars" min="10" max="10000" placeholder="e.g., 200">
+                        <p class="field-hint">Limit content length. For lists, this applies per item. Leave empty for no limit.</p>
+                    </div>
+                    <div class="form-group" id="maxCharsTitleBodyGroup" style="display: none;">
+                        <label>Max Characters - Title/Body (optional)</label>
+                        <div style="display: flex; gap: 12px;">
+                            <div style="flex: 1;">
+                                <input type="number" id="placeholderMaxCharsTitle" min="10" max="1000" placeholder="Title (e.g., 50)">
+                                <p class="field-hint" style="margin-top: 4px;">Title limit</p>
+                            </div>
+                            <div style="flex: 2;">
+                                <input type="number" id="placeholderMaxCharsBody" min="10" max="10000" placeholder="Body (e.g., 300)">
+                                <p class="field-hint" style="margin-top: 4px;">Body limit</p>
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-ghost" id="cancelPlaceholderBtn">Cancel</button>

@@ -26,10 +26,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('clients:list', { search }),
         get: (id) => 
             ipcRenderer.invoke('clients:get', { id }),
+        delete: (id) => 
+            ipcRenderer.invoke('clients:delete', { id }),
         aiCreate: (companyName) => 
             ipcRenderer.invoke('clients:aiCreate', { companyName }),
         researchContacts: (client, type) => 
-            ipcRenderer.invoke('clients:researchContacts', { client, type })
+            ipcRenderer.invoke('clients:researchContacts', { client, type }),
+        extractContactsFromPOC: (pocFile, client) =>
+            ipcRenderer.invoke('clients:extractContactsFromPOC', { pocFile, client })
     },
 
     // Configuration & Credentials
@@ -160,7 +164,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         update: (id, placeholder) => 
             ipcRenderer.invoke('placeholders:update', { id, placeholder }),
         delete: (id) => 
-            ipcRenderer.invoke('placeholders:delete', id)
+            ipcRenderer.invoke('placeholders:delete', id),
+        export: () =>
+            ipcRenderer.invoke('placeholders:export'),
+        import: () =>
+            ipcRenderer.invoke('placeholders:import')
     },
 
     // Client Narratives

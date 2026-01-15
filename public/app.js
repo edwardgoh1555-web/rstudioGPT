@@ -468,6 +468,13 @@ function renderClientGrid(filter = '') {
              data-client-id="${client.id}">
             <div class="client-card-header">
                 <span class="client-name">${client.name}</span>
+                <button class="client-delete-btn" data-client-id="${client.id}" data-client-name="${client.name}" title="Delete client">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14"/>
+                        <line x1="10" y1="11" x2="10" y2="17"/>
+                        <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                </button>
                 <div class="client-check">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                         <path d="M5 13l4 4L19 7"/>
@@ -482,10 +489,54 @@ function renderClientGrid(filter = '') {
         </div>
     `).join('');
     
-    // Add click handlers
+    // Add click handlers for selecting clients
     document.querySelectorAll('.client-card').forEach(card => {
-        card.addEventListener('click', () => selectClient(card.dataset.clientId));
+        card.addEventListener('click', (e) => {
+            // Don't select if clicking delete button
+            if (e.target.closest('.client-delete-btn')) return;
+            selectClient(card.dataset.clientId);
+        });
     });
+    
+    // Add click handlers for delete buttons
+    document.querySelectorAll('.client-delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const clientId = btn.dataset.clientId;
+            const clientName = btn.dataset.clientName;
+            deleteClient(clientId, clientName);
+        });
+    });
+}
+
+// Delete a client
+async function deleteClient(clientId, clientName) {
+    // Confirm deletion
+    if (!confirm(`Are you sure you want to delete "${clientName}"?\n\nThis action cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        const result = await window.electronAPI.clients.delete(clientId);
+        
+        if (result.success) {
+            showToast(`Deleted client: ${result.clientName}`, 'success');
+            
+            // If the deleted client was selected, clear selection
+            if (state.selectedClient?.id === clientId) {
+                state.selectedClient = null;
+            }
+            
+            // Refresh client list
+            await loadClients();
+            renderClientGrid(elements.clientSearch.value);
+        } else {
+            showToast(`Failed to delete client: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting client:', error);
+        showToast('Error deleting client', 'error');
+    }
 }
 
 function selectClient(clientId) {
@@ -660,25 +711,84 @@ function goToStep(stepNumber) {
     // Trigger C-suite web research when entering step 3 (generation starts)
     // This runs in background so results are ready by the time user reaches Step 6
     if (stepNumber === 3 && state.selectedClient) {
-        // Pass full client context for accurate search
-        researchClientContacts(state.selectedClient);
+        // Pass full client context and POC file (if available) for contact extraction
+        researchClientContacts(state.selectedClient, state.pocFile);
     }
 }
 
 // Research C-suite contacts for the selected client
-async function researchClientContacts(client) {
+// Current stakeholders: extracted from POC if available, otherwise web search
+// Exited leaders: ALWAYS web search (POC won't have this info)
+async function researchClientContacts(client, pocFile = null) {
     // Show loading state for both grids
     const currentLoading = document.getElementById('currentContactsLoading');
     const exitedLoading = document.getElementById('exitedContactsLoading');
     const currentGrid = document.getElementById('currentContactsGrid');
     const exitedGrid = document.getElementById('exitedContactsGrid');
+    const currentTitle = document.getElementById('currentContactsTitle');
+    const exitedTitle = document.getElementById('exitedContactsTitle');
+    const currentHint = document.getElementById('currentContactsHint');
+    const exitedHint = document.getElementById('exitedContactsHint');
     
     if (currentLoading) currentLoading.classList.remove('hidden');
     if (exitedLoading) exitedLoading.classList.remove('hidden');
     
-    // Reset grids to loading state
-    resetContactGrid(currentGrid, 'Searching web...');
+    // Exited leaders: ALWAYS use web search (POC won't have departures info)
+    // Reset exited section titles/hints to web search mode
+    if (exitedTitle) exitedTitle.textContent = 'Recently Exited Senior Leaders';
+    if (exitedHint) exitedHint.textContent = 'Live web search for recent C-suite departures';
     resetContactGrid(exitedGrid, 'Searching web...');
+    
+    // Start exited research immediately (runs in parallel)
+    const exitedPromise = (async () => {
+        try {
+            const exitedResult = await window.electronAPI.clients.researchContacts(client, 'exited');
+            if (exitedResult.success && exitedResult.contacts.length > 0) {
+                populateContactGrid(exitedGrid, exitedResult.contacts, 'exited');
+            } else {
+                resetContactGrid(exitedGrid, 'No recent departures found');
+            }
+        } catch (error) {
+            console.error('Error researching exited contacts:', error);
+            resetContactGrid(exitedGrid, 'Research failed');
+        }
+        if (exitedLoading) exitedLoading.classList.add('hidden');
+    })();
+    
+    // Current stakeholders: Check if we have a POC file
+    if (pocFile && pocFile.content) {
+        // Update titles and hints to reflect POC source
+        if (currentTitle) currentTitle.textContent = 'Key Stakeholders (from POC)';
+        if (currentHint) currentHint.textContent = 'Contacts extracted from your uploaded POC document';
+        
+        // Reset grid to loading state
+        resetContactGrid(currentGrid, 'Extracting from POC...');
+        
+        try {
+            // Pass the whole pocFile object (includes name, content, path)
+            const result = await window.electronAPI.clients.extractContactsFromPOC(pocFile, client);
+            
+            if (result.success && result.currentContacts && result.currentContacts.length > 0) {
+                populateContactGrid(currentGrid, result.currentContacts, 'current');
+            } else {
+                resetContactGrid(currentGrid, 'No stakeholders found in POC');
+            }
+        } catch (error) {
+            console.error('Error extracting contacts from POC:', error);
+            resetContactGrid(currentGrid, 'Extraction failed');
+        }
+        
+        if (currentLoading) currentLoading.classList.add('hidden');
+        
+        // Wait for exited research to complete
+        await exitedPromise;
+        return;
+    }
+    
+    // No POC file - use web search for current executives too
+    if (currentTitle) currentTitle.textContent = 'Current C-Suite Executives';
+    if (currentHint) currentHint.textContent = 'Live web search for current leadership (researched in background)';
+    resetContactGrid(currentGrid, 'Searching web...');
     
     // Research current executives - pass full client context
     try {
@@ -694,19 +804,8 @@ async function researchClientContacts(client) {
     }
     if (currentLoading) currentLoading.classList.add('hidden');
     
-    // Research exited executives
-    try {
-        const exitedResult = await window.electronAPI.clients.researchContacts(client, 'exited');
-        if (exitedResult.success && exitedResult.contacts.length > 0) {
-            populateContactGrid(exitedGrid, exitedResult.contacts, 'exited');
-        } else {
-            resetContactGrid(exitedGrid, 'No recent departures found');
-        }
-    } catch (error) {
-        console.error('Error researching exited contacts:', error);
-        resetContactGrid(exitedGrid, 'Research failed');
-    }
-    if (exitedLoading) exitedLoading.classList.add('hidden');
+    // Wait for exited research to complete
+    await exitedPromise;
 }
 
 // Reset a contact grid to show placeholder messages
@@ -5092,17 +5191,25 @@ function renderPlaceholdersList(placeholders) {
     const listEl = document.getElementById('placeholdersList');
     const emptyEl = document.getElementById('emptyPlaceholders');
     
-    if (!listEl) return;
-    
-    if (!placeholders || placeholders.length === 0) {
-        listEl.innerHTML = '';
-        listEl.appendChild(emptyEl);
-        emptyEl.style.display = 'flex';
+    if (!listEl) {
+        console.error('[Placeholders] List element not found');
         return;
     }
     
-    emptyEl.style.display = 'none';
+    console.log(`[Placeholders] Rendering ${placeholders?.length || 0} placeholders`);
     
+    if (!placeholders || placeholders.length === 0) {
+        // Show empty state
+        listEl.innerHTML = `
+            <div id="emptyPlaceholders" class="empty-placeholders" style="display: flex;">
+                <p>No placeholders defined yet</p>
+                <p class="hint">Add placeholders to auto-fill template variables</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Render placeholder items
     listEl.innerHTML = placeholders.map(p => {
         const listBadge = p.isList 
             ? `<span class="placeholder-list-badge" title="List placeholder with ${p.listCount} items">
@@ -5113,9 +5220,41 @@ function renderPlaceholdersList(placeholders) {
                </span>` 
             : '';
         
-        const usageHint = p.isList
-            ? `Use {{${p.name}[1]}}, {{${p.name}[2]}}, ... {{${p.name}[${p.listCount}]}} in templates`
-            : `Use {{${p.name}}} in templates`;
+        const titleBodyBadge = p.hasTitleBody
+            ? `<span class="placeholder-list-badge" title="Generates title and body" style="background: rgba(139, 92, 246, 0.2); color: #a78bfa;">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
+                   <path d="M4 6h16M4 12h10M4 18h14"/>
+                 </svg>
+                 Title/Body
+               </span>`
+            : '';
+        
+        // Build max chars badge based on placeholder type
+        let maxCharsBadge = '';
+        if (p.hasTitleBody && (p.maxCharsTitle || p.maxCharsBody)) {
+            const titlePart = p.maxCharsTitle ? `T≤${p.maxCharsTitle}` : '';
+            const bodyPart = p.maxCharsBody ? `B≤${p.maxCharsBody}` : '';
+            const combined = [titlePart, bodyPart].filter(Boolean).join(' ');
+            maxCharsBadge = `<span class="placeholder-list-badge" title="Title: ${p.maxCharsTitle || 'no limit'}, Body: ${p.maxCharsBody || 'no limit'}" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">
+                 ${combined}
+               </span>`;
+        } else if (p.maxChars) {
+            maxCharsBadge = `<span class="placeholder-list-badge" title="Max ${p.maxChars} characters per output" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">
+                 ≤${p.maxChars}
+               </span>`;
+        }
+        
+        // Build usage hint based on configuration
+        let usageHint;
+        if (p.isList && p.hasTitleBody) {
+            usageHint = `Use {{${p.name}[1][title]}}, {{${p.name}[1][body]}}, ... {{${p.name}[${p.listCount}][title]}}, {{${p.name}[${p.listCount}][body]}}`;
+        } else if (p.isList) {
+            usageHint = `Use {{${p.name}[1]}}, {{${p.name}[2]}}, ... {{${p.name}[${p.listCount}]}} in templates`;
+        } else if (p.hasTitleBody) {
+            usageHint = `Use {{${p.name}[title]}} and {{${p.name}[body]}} in templates`;
+        } else {
+            usageHint = `Use {{${p.name}}} in templates`;
+        }
         
         return `
         <div class="placeholder-item" data-id="${p.id}">
@@ -5123,6 +5262,8 @@ function renderPlaceholdersList(placeholders) {
                 <div class="placeholder-name-container">
                     <code class="placeholder-code">{{${p.name}}}</code>
                     ${listBadge}
+                    ${titleBodyBadge}
+                    ${maxCharsBadge}
                 </div>
                 <div class="placeholder-actions">
                     <button class="btn btn-ghost btn-sm edit-placeholder" data-id="${p.id}" title="Edit">
@@ -5176,6 +5317,13 @@ function showPlaceholderModal(placeholder = null) {
     const listCountInput = document.getElementById('placeholderListCount');
     const listHint = document.getElementById('listPlaceholderHint');
     const listCountGroup = document.getElementById('listCountGroup');
+    const hasTitleBodyCheckbox = document.getElementById('placeholderHasTitleBody');
+    const titleBodyHint = document.getElementById('titleBodyPlaceholderHint');
+    const maxCharsInput = document.getElementById('placeholderMaxChars');
+    const maxCharsGroup = document.getElementById('maxCharsGroup');
+    const maxCharsTitleBodyGroup = document.getElementById('maxCharsTitleBodyGroup');
+    const maxCharsTitleInput = document.getElementById('placeholderMaxCharsTitle');
+    const maxCharsBodyInput = document.getElementById('placeholderMaxCharsBody');
     
     if (!modal) {
         console.error('[Placeholder] Modal not found');
@@ -5191,6 +5339,16 @@ function showPlaceholderModal(placeholder = null) {
         };
     }
     
+    // Setup title/body checkbox toggle - show/hide appropriate char limit fields
+    if (hasTitleBodyCheckbox) {
+        hasTitleBodyCheckbox.onchange = () => {
+            const isTitleBody = hasTitleBodyCheckbox.checked;
+            if (titleBodyHint) titleBodyHint.style.display = isTitleBody ? 'block' : 'none';
+            if (maxCharsGroup) maxCharsGroup.style.display = isTitleBody ? 'none' : 'block';
+            if (maxCharsTitleBodyGroup) maxCharsTitleBodyGroup.style.display = isTitleBody ? 'block' : 'none';
+        };
+    }
+    
     if (placeholder) {
         // Edit mode
         title.textContent = 'Edit Placeholder';
@@ -5202,6 +5360,19 @@ function showPlaceholderModal(placeholder = null) {
         }
         if (listCountInput) {
             listCountInput.value = placeholder.listCount || 5;
+        }
+        if (hasTitleBodyCheckbox) {
+            hasTitleBodyCheckbox.checked = placeholder.hasTitleBody || false;
+            hasTitleBodyCheckbox.onchange(); // Trigger display update
+        }
+        if (maxCharsInput) {
+            maxCharsInput.value = placeholder.maxChars || '';
+        }
+        if (maxCharsTitleInput) {
+            maxCharsTitleInput.value = placeholder.maxCharsTitle || '';
+        }
+        if (maxCharsBodyInput) {
+            maxCharsBodyInput.value = placeholder.maxCharsBody || '';
         }
         editingPlaceholderId = placeholder.id;
     } else {
@@ -5215,6 +5386,19 @@ function showPlaceholderModal(placeholder = null) {
         }
         if (listCountInput) {
             listCountInput.value = 5;
+        }
+        if (hasTitleBodyCheckbox) {
+            hasTitleBodyCheckbox.checked = false;
+            hasTitleBodyCheckbox.onchange(); // Trigger display update
+        }
+        if (maxCharsInput) {
+            maxCharsInput.value = '';
+        }
+        if (maxCharsTitleInput) {
+            maxCharsTitleInput.value = '';
+        }
+        if (maxCharsBodyInput) {
+            maxCharsBodyInput.value = '';
         }
         editingPlaceholderId = null;
     }
@@ -5238,11 +5422,19 @@ async function savePlaceholder(e) {
     const promptInput = document.getElementById('placeholderPrompt');
     const isListCheckbox = document.getElementById('placeholderIsList');
     const listCountInput = document.getElementById('placeholderListCount');
+    const hasTitleBodyCheckbox = document.getElementById('placeholderHasTitleBody');
+    const maxCharsInput = document.getElementById('placeholderMaxChars');
+    const maxCharsTitleInput = document.getElementById('placeholderMaxCharsTitle');
+    const maxCharsBodyInput = document.getElementById('placeholderMaxCharsBody');
     
     const name = nameInput.value.trim();
     const promptText = promptInput.value.trim();
     const isList = isListCheckbox?.checked || false;
     const listCount = isList ? parseInt(listCountInput?.value || 5) : null;
+    const hasTitleBody = hasTitleBodyCheckbox?.checked || false;
+    const maxChars = maxCharsInput?.value ? parseInt(maxCharsInput.value) : null;
+    const maxCharsTitle = maxCharsTitleInput?.value ? parseInt(maxCharsTitleInput.value) : null;
+    const maxCharsBody = maxCharsBodyInput?.value ? parseInt(maxCharsBodyInput.value) : null;
     
     if (!name || !promptText) {
         showToast('Please fill in all fields', 'warning');
@@ -5263,7 +5455,11 @@ async function savePlaceholder(e) {
                 name: name,
                 prompt: promptText,
                 isList: isList,
-                listCount: listCount
+                listCount: listCount,
+                hasTitleBody: hasTitleBody,
+                maxChars: maxChars,
+                maxCharsTitle: maxCharsTitle,
+                maxCharsBody: maxCharsBody
             });
             
             if (result.success) {
@@ -5275,12 +5471,17 @@ async function savePlaceholder(e) {
                 name: name,
                 prompt: promptText,
                 isList: isList,
-                listCount: listCount
+                listCount: listCount,
+                hasTitleBody: hasTitleBody,
+                maxChars: maxChars,
+                maxCharsTitle: maxCharsTitle,
+                maxCharsBody: maxCharsBody
             });
             
             if (result.success) {
                 const listInfo = isList ? ` (list with ${listCount} items)` : '';
-                showToast(`Placeholder {{${result.placeholder.name}}}${listInfo} added`, 'success');
+                const titleBodyInfo = hasTitleBody ? ' (title/body)' : '';
+                showToast(`Placeholder {{${result.placeholder.name}}}${listInfo}${titleBodyInfo} added`, 'success');
             }
         }
         
@@ -5330,6 +5531,66 @@ async function deletePlaceholder(id) {
     } catch (error) {
         console.error('Failed to delete placeholder:', error);
         showToast('Failed to delete placeholder: ' + error.message, 'error');
+    }
+}
+
+// Export placeholders to Excel
+async function exportPlaceholders() {
+    if (!state.isElectron || !window.electronAPI?.placeholders?.export) {
+        showToast('Export requires desktop app', 'warning');
+        return;
+    }
+    
+    try {
+        const result = await window.electronAPI.placeholders.export();
+        
+        if (result.canceled) {
+            return; // User cancelled
+        }
+        
+        if (result.success) {
+            showToast(`Exported ${result.count} placeholders to Excel`, 'success');
+        } else {
+            showToast(result.error || 'Failed to export placeholders', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to export placeholders:', error);
+        showToast('Failed to export: ' + error.message, 'error');
+    }
+}
+
+// Import placeholders from Excel
+async function importPlaceholders() {
+    if (!state.isElectron || !window.electronAPI?.placeholders?.import) {
+        showToast('Import requires desktop app', 'warning');
+        return;
+    }
+    
+    if (!confirm('This will replace all existing placeholders with the imported ones. Continue?')) {
+        return;
+    }
+    
+    try {
+        const result = await window.electronAPI.placeholders.import();
+        
+        if (result.canceled) {
+            return; // User cancelled
+        }
+        
+        if (result.success) {
+            let message = `Imported ${result.count} placeholders`;
+            if (result.errors && result.errors.length > 0) {
+                message += ` (${result.errors.length} rows skipped)`;
+                console.warn('Import errors:', result.errors);
+            }
+            showToast(message, 'success');
+            loadPlaceholders();
+        } else {
+            showToast(result.error || 'Failed to import placeholders', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to import placeholders:', error);
+        showToast('Failed to import: ' + error.message, 'error');
     }
 }
 
@@ -5929,6 +6190,10 @@ function setupEventListeners() {
     } else {
         console.warn('[Admin] Add placeholder button not found');
     }
+    
+    // Export/Import placeholder buttons
+    document.getElementById('exportPlaceholdersBtn')?.addEventListener('click', exportPlaceholders);
+    document.getElementById('importPlaceholdersBtn')?.addEventListener('click', importPlaceholders);
     
     // Placeholder modal controls
     document.getElementById('closePlaceholderModal')?.addEventListener('click', hidePlaceholderModal);

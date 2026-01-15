@@ -57,7 +57,7 @@
     "win": {
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
@@ -67,8 +67,16 @@
       "publisherName": "R/StudioGPT Team",
       "signAndEditExecutable": false
     },
-    "portable": {
-      "artifactName": "R-StudioGPT-Portable.exe"
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "R/StudioGPT",
+      "artifactName": "R-StudioGPT-Setup-${version}.exe"
     },
     "mac": {
       "target": "dmg",
