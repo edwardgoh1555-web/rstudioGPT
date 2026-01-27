@@ -34,7 +34,12 @@ const state = {
     narrativeBuilderPrompt: null,
     // Narrative storage
     clientNarratives: [],
-    currentDisplayedNarrative: null
+    currentDisplayedNarrative: null,
+    // Step 6: Researched contacts (current and exited)
+    researchedContacts: {
+        current: [],
+        exited: []
+    }
 };
 
 // ============================================
@@ -825,6 +830,13 @@ function resetContactGrid(grid, message) {
 // Populate a contact grid with researched contacts
 function populateContactGrid(grid, contacts, type) {
     if (!grid) return;
+    
+    // Store contacts in state for history saving
+    if (type === 'current') {
+        state.researchedContacts.current = contacts;
+    } else if (type === 'exited') {
+        state.researchedContacts.exited = contacts;
+    }
     
     const cards = grid.querySelectorAll('.contact-card');
     
@@ -2225,6 +2237,15 @@ async function generateNarrative() {
             if (result.success) {
                 showToast('Narrative document generated successfully!', 'success');
                 
+                // Store the source pack from the result for chat functionality
+                if (result.sourcePack) {
+                    state.currentSourcePack = result.sourcePack;
+                    console.log('[Narrative] Source pack stored from generation result');
+                }
+                
+                // Get the agent prompt that was used for this generation
+                const usedAgentPrompt = document.getElementById('narrativeAgentPrompt')?.value || '';
+                
                 // Save the narrative for this client
                 if (result.content && state.selectedClient?.id) {
                     const newNarrative = {
@@ -2232,7 +2253,8 @@ async function generateNarrative() {
                         content: result.content,
                         timestamp: new Date().toISOString(),
                         outputIntent: result.outputIntent,
-                        wordCount: result.content?.split(/\s+/).length || 0
+                        wordCount: result.content?.split(/\s+/).length || 0,
+                        agentPrompt: usedAgentPrompt  // Save the instructions used
                     };
                     
                     await saveNarrative(state.selectedClient.id, {
@@ -2243,10 +2265,13 @@ async function generateNarrative() {
                     // Also add to the overall history for quick access
                     addNarrativeToOverallHistory(newNarrative);
                     
+                    // Capture generation signal for learning
+                    captureGenerationSignal(result.content);
+                    
                     // Reload narrative history (but don't auto-display)
                     await loadClientNarratives(state.selectedClient.id);
                     
-                    // Now display the newly generated narrative
+                    // Now display the newly generated narrative (source pack is already in state)
                     displayNarrative(newNarrative);
                 }
             } else if (result.canceled) {
@@ -2362,7 +2387,7 @@ async function loadClientNarratives(clientId) {
 }
 
 // Display a narrative in the display section
-function displayNarrative(narrative) {
+function displayNarrative(narrative, sourcePack = null, chatHistory = null, historyEntryId = null) {
     const section = document.getElementById('narrativeDisplaySection');
     const contentDiv = document.getElementById('narrativeDisplayContent');
     const timestampSpan = document.getElementById('narrativeTimestamp');
@@ -2412,8 +2437,10 @@ function displayNarrative(narrative) {
     // Update active state in history list
     updateNarrativeHistoryActiveState(narrative.id);
     
-    // Initialize narrative chat
-    initializeNarrativeChat(narrative.content);
+    // Initialize narrative chat with source pack and chat history
+    const sourcePackToUse = sourcePack || state.currentSourcePack;
+    const entryId = historyEntryId || narrative.id;
+    initializeNarrativeChat(narrative.content, sourcePackToUse, chatHistory, entryId);
 }
 
 // ============================================
@@ -2424,37 +2451,185 @@ const narrativeChat = {
     messages: [],
     isProcessing: false,
     initialized: false,
-    currentNarrativeContent: null
+    currentNarrativeContent: null,
+    currentSourcePack: null,  // Store the source pack for this chat session
+    currentHistoryEntryId: null,  // Track which history entry this chat belongs to
+    highlightedText: null,  // Store user-highlighted text from narrative
+    currentMode: 'ask',  // 'ask' or 'iterate'
+    abortController: null,  // For cancelling requests
+    awaitingConfirmation: false,  // For full rewrite confirmation
+    pendingIterateRequest: null  // Store pending iterate request during confirmation
 };
 
 // Initialize narrative chat for the displayed narrative
-function initializeNarrativeChat(narrativeContent) {
+function initializeNarrativeChat(narrativeContent, sourcePack = null, chatHistory = null, historyEntryId = null) {
     console.log('[NarrativeChat] Initializing...');
     
     narrativeChat.currentNarrativeContent = narrativeContent;
+    narrativeChat.currentSourcePack = sourcePack || state.currentSourcePack;
+    narrativeChat.currentHistoryEntryId = historyEntryId;
+    narrativeChat.highlightedText = null;
+    narrativeChat.currentMode = 'ask';
+    narrativeChat.awaitingConfirmation = false;
+    narrativeChat.pendingIterateRequest = null;
+    
+    // Reset mode dropdown
+    const modeDropdown = document.getElementById('narrativeChatMode');
+    if (modeDropdown) {
+        modeDropdown.value = 'ask';
+        modeDropdown.classList.remove('iterate-mode');
+    }
+    
+    console.log('[NarrativeChat] Source pack available:', !!narrativeChat.currentSourcePack);
+    console.log('[NarrativeChat] History entry ID:', historyEntryId);
+    console.log('[NarrativeChat] Restoring chat history:', chatHistory?.length || 0, 'messages');
+    
+    // Clear highlighted context box
+    clearHighlightedContext();
     
     // Setup event listeners (only once)
     if (!narrativeChat.initialized) {
         setupNarrativeChatListeners();
+        setupNarrativeTextSelectionListener();
         narrativeChat.initialized = true;
     }
     
-    // Reset chat messages
-    resetNarrativeChatMessages();
+    // Reset or restore chat messages
+    if (chatHistory && chatHistory.length > 0) {
+        // Restore previous chat history
+        restoreNarrativeChatMessages(chatHistory);
+    } else {
+        // Start fresh
+        resetNarrativeChatMessages();
+    }
     
-    // Reset backend history
+    // Reset backend history (will be repopulated as user sends new messages)
     if (state.isElectron && window.electronAPI?.narrativeChat?.reset) {
         window.electronAPI.narrativeChat.reset();
     }
+}
+
+// Restore chat messages from history
+function restoreNarrativeChatMessages(chatHistory) {
+    const messagesContainer = document.getElementById('narrativeChatMessages');
+    if (!messagesContainer) return;
+    
+    // Clear existing messages
+    narrativeChat.messages = [];
+    
+    // Start with the welcome message
+    messagesContainer.innerHTML = `
+        <div class="chat-message assistant">
+            <div class="chat-avatar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
+                </svg>
+            </div>
+            <div class="chat-content">
+                <div class="chat-bubble">
+                    <p>I can answer questions about the narrative and source documents. Ask me anything!</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Restore each message from history
+    for (const msg of chatHistory) {
+        const messageEl = document.createElement('div');
+        messageEl.className = `chat-message ${msg.role}`;
+        
+        const avatarIcon = msg.role === 'assistant' 
+            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>'
+            : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>';
+        
+        // Format content
+        const formattedContent = msg.content
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/\n/g, '<br>');
+        
+        messageEl.innerHTML = `
+            <div class="chat-avatar">${avatarIcon}</div>
+            <div class="chat-content">
+                <div class="chat-bubble">${formattedContent}</div>
+            </div>
+        `;
+        
+        messagesContainer.appendChild(messageEl);
+        narrativeChat.messages.push({ role: msg.role, content: msg.content });
+    }
+    
+    // Scroll to bottom
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// Setup listener for text selection in the narrative display
+function setupNarrativeTextSelectionListener() {
+    const narrativeContent = document.getElementById('narrativeDisplayContent');
+    const contextBox = document.getElementById('highlightedContextBox');
+    const contextContent = document.getElementById('highlightedContextContent');
+    const clearBtn = document.getElementById('clearHighlightedContext');
+    
+    if (!narrativeContent) return;
+    
+    // Listen for mouseup to capture text selection
+    narrativeContent.addEventListener('mouseup', () => {
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        
+        if (selectedText && selectedText.length > 0) {
+            // Store the highlighted text
+            narrativeChat.highlightedText = selectedText;
+            
+            // Show in the context box
+            if (contextBox && contextContent) {
+                // Truncate display if too long (but keep full text for context)
+                const displayText = selectedText.length > 300 
+                    ? selectedText.substring(0, 300) + '...' 
+                    : selectedText;
+                contextContent.textContent = displayText;
+                contextBox.style.display = 'block';
+            }
+            
+            console.log('[NarrativeChat] Text highlighted:', selectedText.substring(0, 50) + '...');
+        }
+    });
+    
+    // Clear button handler
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearHighlightedContext);
+    }
+}
+
+// Clear the highlighted text context
+function clearHighlightedContext() {
+    const contextBox = document.getElementById('highlightedContextBox');
+    const contextContent = document.getElementById('highlightedContextContent');
+    
+    narrativeChat.highlightedText = null;
+    
+    if (contextBox) {
+        contextBox.style.display = 'none';
+    }
+    if (contextContent) {
+        contextContent.textContent = '';
+    }
+    
+    // Also clear the text selection
+    window.getSelection()?.removeAllRanges();
 }
 
 // Setup narrative chat event listeners
 function setupNarrativeChatListeners() {
     const sendBtn = document.getElementById('narrativeChatSendBtn');
     const input = document.getElementById('narrativeChatInput');
+    const modeDropdown = document.getElementById('narrativeChatMode');
     
     if (sendBtn) {
-        sendBtn.addEventListener('click', sendNarrativeChatMessage);
+        sendBtn.addEventListener('click', handleSendOrStop);
     }
     
     if (input) {
@@ -2462,7 +2637,7 @@ function setupNarrativeChatListeners() {
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                sendNarrativeChatMessage();
+                handleSendOrStop();
             }
         });
         
@@ -2471,6 +2646,73 @@ function setupNarrativeChatListeners() {
             input.style.height = 'auto';
             input.style.height = Math.min(input.scrollHeight, 80) + 'px';
         });
+    }
+    
+    // Mode dropdown handler
+    if (modeDropdown) {
+        modeDropdown.addEventListener('change', (e) => {
+            narrativeChat.currentMode = e.target.value;
+            const inputEl = document.getElementById('narrativeChatInput');
+            
+            if (e.target.value === 'iterate') {
+                e.target.classList.add('iterate-mode');
+                if (inputEl) inputEl.placeholder = 'Describe the changes you want to make...';
+            } else {
+                e.target.classList.remove('iterate-mode');
+                if (inputEl) inputEl.placeholder = 'Ask about the narrative or sources...';
+            }
+        });
+    }
+}
+
+// Handle send button click - either send message or stop processing
+function handleSendOrStop() {
+    if (narrativeChat.isProcessing) {
+        // Stop/cancel the current request
+        cancelNarrativeChatRequest();
+    } else {
+        // Send the message
+        sendNarrativeChatMessage();
+    }
+}
+
+// Cancel the current chat request
+function cancelNarrativeChatRequest() {
+    console.log('[NarrativeChat] Cancelling request...');
+    
+    if (narrativeChat.abortController) {
+        narrativeChat.abortController.abort();
+        narrativeChat.abortController = null;
+    }
+    
+    // Also tell the backend to cancel
+    if (state.isElectron && window.electronAPI?.narrativeChat?.cancel) {
+        window.electronAPI.narrativeChat.cancel();
+    }
+    
+    // Remove typing indicator
+    const typingEl = document.getElementById('narrativeChatTypingIndicator');
+    if (typingEl) typingEl.remove();
+    
+    // Reset processing state
+    setProcessingState(false);
+    
+    addNarrativeChatMessage('assistant', '🛑 Request cancelled.');
+}
+
+// Set the processing state and update UI
+function setProcessingState(isProcessing) {
+    narrativeChat.isProcessing = isProcessing;
+    
+    const sendBtn = document.getElementById('narrativeChatSendBtn');
+    if (sendBtn) {
+        if (isProcessing) {
+            sendBtn.classList.add('is-processing');
+            sendBtn.title = 'Stop';
+        } else {
+            sendBtn.classList.remove('is-processing');
+            sendBtn.title = 'Send message';
+        }
     }
 }
 
@@ -2507,25 +2749,85 @@ async function sendNarrativeChatMessage() {
     const message = input.value.trim();
     if (!message || narrativeChat.isProcessing) return;
     
-    narrativeChat.isProcessing = true;
+    // Check if this is a confirmation response for full rewrite
+    if (narrativeChat.awaitingConfirmation) {
+        handleIterateConfirmation(message);
+        input.value = '';
+        input.style.height = 'auto';
+        return;
+    }
+    
+    setProcessingState(true);
     
     // Clear input
     input.value = '';
     input.style.height = 'auto';
     
-    // Add user message to UI
-    addNarrativeChatMessage('user', message);
+    // Get current mode
+    const mode = narrativeChat.currentMode;
     
-    // Add typing indicator
-    const typingEl = addNarrativeChatTypingIndicator();
+    // Build the full message with highlighted context if present
+    let fullMessage = message;
+    let displayMessage = message;
+    const highlightedContext = narrativeChat.highlightedText;
+    
+    if (highlightedContext) {
+        // Append the highlighted text as context for the AI
+        fullMessage = `[User has highlighted the following text from the narrative for context]\n---\n${highlightedContext}\n---\n\nUser ${mode === 'iterate' ? 'edit request' : 'question'}: ${message}`;
+        // Show in UI that context was included
+        displayMessage = `📝 "${highlightedContext.length > 100 ? highlightedContext.substring(0, 100) + '...' : highlightedContext}"\n\n${message}`;
+        
+        // Clear the highlighted context after sending
+        clearHighlightedContext();
+    }
+    
+    // Add mode indicator for iterate
+    if (mode === 'iterate') {
+        displayMessage = `✏️ **[Iterate]** ${displayMessage}`;
+    }
+    
+    // Add user message to UI (show the display version)
+    addNarrativeChatMessage('user', displayMessage);
+    
+    // Check if we have a source pack (old narratives won't have one)
+    if (!narrativeChat.currentSourcePack) {
+        addNarrativeChatMessage('assistant', "⚠️ **Source documents not available**\n\nThis narrative was generated before source packs were saved to history. I can still discuss the narrative content itself, but I won't be able to reference the original source documents.\n\nFor full functionality, please generate a new narrative.");
+        setProcessingState(false);
+        return;
+    }
+    
+    // For iterate mode without highlighted text, check if full rewrite might be needed
+    if (mode === 'iterate' && !highlightedContext) {
+        // Store the request and ask for confirmation
+        narrativeChat.pendingIterateRequest = { fullMessage, displayMessage };
+        narrativeChat.awaitingConfirmation = true;
+        
+        addNarrativeChatMessage('assistant', "⚠️ **No text selected**\n\nYou haven't highlighted any specific text. Depending on your request, this might require editing multiple sections or a full rewrite of the narrative.\n\n**Would you like me to:**\n• Proceed with targeted edits where needed\n• Do a full regeneration of the narrative\n\nPlease respond with your preference (e.g., \"proceed with edits\" or \"full regeneration\").");
+        setProcessingState(false);
+        return;
+    }
+    
+    // Add typing indicator - use special iterate indicator if in iterate mode
+    const typingEl = mode === 'iterate' 
+        ? addNarrativeChatEditingIndicator(highlightedContext)
+        : addNarrativeChatTypingIndicator();
+    
+    // Add visual effect to narrative panel if iterating
+    if (mode === 'iterate') {
+        showNarrativeEditingOverlay();
+    }
     
     try {
         let response;
         
         if (state.isElectron && window.electronAPI?.narrativeChat) {
+            // Send the message with mode information
             response = await window.electronAPI.narrativeChat.sendMessage(
-                message, 
-                narrativeChat.currentNarrativeContent
+                fullMessage, 
+                narrativeChat.currentNarrativeContent,
+                narrativeChat.currentSourcePack,
+                mode,  // Pass the mode
+                highlightedContext  // Pass highlighted text for iterate
             );
         } else {
             // Fallback simulation
@@ -2539,8 +2841,32 @@ async function sendNarrativeChatMessage() {
         // Remove typing indicator
         typingEl?.remove();
         
+        // Hide editing overlay
+        hideNarrativeEditingOverlay();
+        
+        if (response.cancelled) {
+            // Request was cancelled, already handled
+            return;
+        }
+        
         if (response.success) {
-            addNarrativeChatMessage('assistant', response.message);
+            // Check if this was an iterate response with updated narrative
+            if (mode === 'iterate' && response.updatedNarrative) {
+                // Capture learning signal for the iteration
+                captureIterationSignal({
+                    userRequest: message,
+                    highlightedText: highlightedContext,
+                    originalNarrative: narrativeChat.currentNarrativeContent,
+                    updatedNarrative: response.updatedNarrative,
+                    section: detectNarrativeSection(highlightedContext)
+                });
+                
+                // Update the narrative display with success flash
+                applyNarrativeUpdate(response.updatedNarrative, response.message);
+                flashNarrativeSuccess();
+            } else {
+                addNarrativeChatMessage('assistant', response.message);
+            }
         } else {
             addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${response.error || 'Unknown error'}`);
         }
@@ -2548,10 +2874,339 @@ async function sendNarrativeChatMessage() {
     } catch (error) {
         console.error('[NarrativeChat] Error:', error);
         typingEl?.remove();
-        addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${error.message}`);
+        hideNarrativeEditingOverlay();
+        if (error.name !== 'AbortError') {
+            addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${error.message}`);
+        }
     } finally {
-        narrativeChat.isProcessing = false;
+        setProcessingState(false);
+        hideNarrativeEditingOverlay();
     }
+}
+
+// Handle confirmation response for iterate mode
+async function handleIterateConfirmation(response) {
+    const lowerResponse = response.toLowerCase();
+    
+    addNarrativeChatMessage('user', response);
+    
+    if (lowerResponse.includes('full') || lowerResponse.includes('regenerat') || lowerResponse.includes('rewrite')) {
+        // User wants full regeneration
+        narrativeChat.awaitingConfirmation = false;
+        
+        // Proceed with full regeneration using the pending request
+        if (narrativeChat.pendingIterateRequest) {
+            const pendingRequest = narrativeChat.pendingIterateRequest; // Store before nulling
+            setProcessingState(true);
+            const typingEl = addNarrativeChatEditingIndicator(false);
+            showNarrativeEditingOverlay();
+            
+            try {
+                const response = await window.electronAPI.narrativeChat.sendMessage(
+                    pendingRequest.fullMessage,
+                    narrativeChat.currentNarrativeContent,
+                    narrativeChat.currentSourcePack,
+                    'iterate',
+                    null,  // No highlighted text
+                    true   // Full rewrite confirmed
+                );
+                
+                typingEl?.remove();
+                hideNarrativeEditingOverlay();
+                
+                if (response.success && response.updatedNarrative) {
+                    // Capture learning signal for full rewrite
+                    captureIterationSignal({
+                        userRequest: pendingRequest.fullMessage,
+                        highlightedText: null,
+                        originalNarrative: narrativeChat.currentNarrativeContent,
+                        updatedNarrative: response.updatedNarrative,
+                        section: null,
+                        iterationType: 'full_rewrite'
+                    });
+                    
+                    applyNarrativeUpdate(response.updatedNarrative, response.message);
+                    flashNarrativeSuccess();
+                } else if (response.success) {
+                    addNarrativeChatMessage('assistant', response.message);
+                } else {
+                    addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${response.error}`);
+                }
+            } catch (error) {
+                typingEl?.remove();
+                hideNarrativeEditingOverlay();
+                addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${error.message}`);
+            } finally {
+                setProcessingState(false);
+                hideNarrativeEditingOverlay();
+            }
+        }
+        
+        narrativeChat.pendingIterateRequest = null;
+    } else if (lowerResponse.includes('proceed') || lowerResponse.includes('edit') || lowerResponse.includes('targeted') || lowerResponse.includes('yes') || lowerResponse.includes('continue')) {
+        // User wants targeted edits
+        narrativeChat.awaitingConfirmation = false;
+        
+        if (narrativeChat.pendingIterateRequest) {
+            const pendingRequest = narrativeChat.pendingIterateRequest; // Store before nulling
+            setProcessingState(true);
+            const typingEl = addNarrativeChatEditingIndicator(false);
+            showNarrativeEditingOverlay();
+            
+            try {
+                const response = await window.electronAPI.narrativeChat.sendMessage(
+                    pendingRequest.fullMessage,
+                    narrativeChat.currentNarrativeContent,
+                    narrativeChat.currentSourcePack,
+                    'iterate',
+                    null,  // No highlighted text
+                    false  // Targeted edits, not full rewrite
+                );
+                
+                typingEl?.remove();
+                hideNarrativeEditingOverlay();
+                
+                if (response.success && response.updatedNarrative) {
+                    // Capture learning signal for targeted edit
+                    captureIterationSignal({
+                        userRequest: pendingRequest.fullMessage,
+                        highlightedText: null,
+                        originalNarrative: narrativeChat.currentNarrativeContent,
+                        updatedNarrative: response.updatedNarrative,
+                        section: null,
+                        iterationType: 'targeted_edit'
+                    });
+                    
+                    applyNarrativeUpdate(response.updatedNarrative, response.message);
+                    flashNarrativeSuccess();
+                } else if (response.success) {
+                    addNarrativeChatMessage('assistant', response.message);
+                } else {
+                    addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${response.error}`);
+                }
+            } catch (error) {
+                typingEl?.remove();
+                hideNarrativeEditingOverlay();
+                addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${error.message}`);
+            } finally {
+                setProcessingState(false);
+                hideNarrativeEditingOverlay();
+            }
+        }
+        
+        narrativeChat.pendingIterateRequest = null;
+    } else if (lowerResponse.includes('cancel') || lowerResponse.includes('nevermind') || lowerResponse.includes('stop')) {
+        // User wants to cancel
+        narrativeChat.awaitingConfirmation = false;
+        narrativeChat.pendingIterateRequest = null;
+        addNarrativeChatMessage('assistant', "✅ Request cancelled.");
+    } else {
+        // Unclear response, ask again
+        addNarrativeChatMessage('assistant', "I didn't quite understand. Please say:\n• **\"proceed with edits\"** for targeted changes\n• **\"full regeneration\"** for a complete rewrite\n• **\"cancel\"** to cancel this request");
+    }
+}
+
+// Apply an updated narrative from iterate mode
+function applyNarrativeUpdate(updatedNarrative, message) {
+    console.log('[NarrativeChat] Applying narrative update...');
+    
+    // Update the narrative content in the display
+    const contentDiv = document.getElementById('narrativeDisplayContent');
+    if (contentDiv) {
+        const htmlContent = renderMarkdownToHtml(updatedNarrative);
+        contentDiv.innerHTML = htmlContent;
+    }
+    
+    // Update the stored narrative content
+    narrativeChat.currentNarrativeContent = updatedNarrative;
+    
+    // Update state
+    if (state.currentDisplayedNarrative) {
+        state.currentDisplayedNarrative.content = updatedNarrative;
+        state.currentDisplayedNarrative.lastEdited = new Date().toISOString();
+    }
+    
+    // Update the history entry
+    if (narrativeChat.currentHistoryEntryId) {
+        const historyEntry = state.generatedPacks.find(p => p.id === narrativeChat.currentHistoryEntryId);
+        if (historyEntry && historyEntry.narrative) {
+            historyEntry.narrative.content = updatedNarrative;
+            historyEntry.narrative.lastEdited = new Date().toISOString();
+            
+            // Persist to disk
+            if (window.electronAPI?.appData) {
+                window.electronAPI.appData.saveGeneratedPacks(state.generatedPacks);
+            }
+        }
+    }
+    
+    // Show success message
+    addNarrativeChatMessage('assistant', `✅ **Narrative updated!**\n\n${message || 'The changes have been applied to the narrative.'}`);
+}
+
+// ============================================
+// Learning System - Signal Capture
+// ============================================
+
+/**
+ * Capture an iteration signal for the learning system
+ */
+async function captureIterationSignal(data) {
+    if (!state.isElectron || !window.electronAPI?.learnings) {
+        console.log('[Learnings] Not in Electron, skipping signal capture');
+        return;
+    }
+    
+    try {
+        const signal = {
+            type: 'iteration',
+            timestamp: new Date().toISOString(),
+            userRequest: data.userRequest,
+            highlightedText: data.highlightedText?.substring(0, 500), // Truncate for storage
+            section: data.section,
+            iterationType: data.iterationType || 'highlighted',
+            client: state.selectedClient ? {
+                name: state.selectedClient.name,
+                industry: state.selectedClient.industry
+            } : null,
+            industry: state.selectedClient?.industry,
+            outputIntent: state.currentContext?.outputIntent,
+            // Don't store full narratives - just lengths for analysis
+            originalLength: data.originalNarrative?.length || 0,
+            updatedLength: data.updatedNarrative?.length || 0,
+            lengthDelta: (data.updatedNarrative?.length || 0) - (data.originalNarrative?.length || 0)
+        };
+        
+        const result = await window.electronAPI.learnings.captureSignal(signal);
+        console.log('[Learnings] Captured iteration signal:', result.success);
+        
+        // Check if we should run inference (every 5 iterations)
+        const stats = await window.electronAPI.learnings.getStats();
+        if (stats.totalIterations > 0 && stats.totalIterations % 5 === 0) {
+            console.log('[Learnings] Triggering inference run after', stats.totalIterations, 'iterations');
+            window.electronAPI.learnings.runInference().then(result => {
+                if (result.success) {
+                    console.log('[Learnings] Inference complete:', result.result?.overallAssessment);
+                    showToast('🧠 AI learned from your recent edits', 'info');
+                }
+            });
+        }
+    } catch (error) {
+        console.error('[Learnings] Error capturing signal:', error);
+    }
+}
+
+/**
+ * Capture an acceptance signal (user finished without further iteration)
+ */
+function captureAcceptanceSignal() {
+    if (!state.isElectron || !window.electronAPI?.learnings) {
+        return;
+    }
+    
+    // Defer signal capture to prevent UI blocking
+    setTimeout(async () => {
+        try {
+            const signal = {
+                type: 'acceptance',
+                timestamp: new Date().toISOString(),
+                narrativeId: narrativeChat.currentHistoryEntryId,
+                client: state.selectedClient ? {
+                    name: state.selectedClient.name,
+                    industry: state.selectedClient.industry
+                } : null,
+                industry: state.selectedClient?.industry,
+                outputIntent: state.currentContext?.outputIntent,
+                iterationCount: narrativeChat.iterationCount || 0,
+                wasEdited: (narrativeChat.iterationCount || 0) > 0
+            };
+            
+            await window.electronAPI.learnings.captureSignal(signal);
+            console.log('[Learnings] Captured acceptance signal');
+        } catch (error) {
+            console.error('[Learnings] Error capturing acceptance signal:', error);
+        }
+    }, 0);
+}
+
+/**
+ * Capture a generation signal (new narrative was generated)
+ */
+function captureGenerationSignal(narrativeContent) {
+    if (!state.isElectron || !window.electronAPI?.learnings) {
+        return;
+    }
+    
+    // Defer signal capture to prevent UI blocking
+    setTimeout(async () => {
+        try {
+            const signal = {
+                type: 'generation',
+                timestamp: new Date().toISOString(),
+                client: state.selectedClient ? {
+                    name: state.selectedClient.name,
+                    industry: state.selectedClient.industry
+                } : null,
+                industry: state.selectedClient?.industry,
+                outputIntent: state.currentContext?.outputIntent,
+                narrativeLength: narrativeContent?.length || 0,
+                wordCount: narrativeContent?.split(/\s+/).length || 0
+            };
+            
+            await window.electronAPI.learnings.captureSignal(signal);
+            console.log('[Learnings] Captured generation signal');
+            
+            // Reset iteration count for this narrative
+            narrativeChat.iterationCount = 0;
+        } catch (error) {
+            console.error('[Learnings] Error capturing generation signal:', error);
+        }
+    }, 0);
+}
+
+/**
+ * Detect which section of the narrative the highlighted text belongs to
+ */
+function detectNarrativeSection(highlightedText) {
+    if (!highlightedText) return null;
+    
+    const text = highlightedText.toLowerCase();
+    const narrative = narrativeChat.currentNarrativeContent?.toLowerCase() || '';
+    
+    // Define section patterns
+    const sections = [
+        { name: 'opening_belief', patterns: ['opening belief', 'identity', 'current moment', 'stands at'] },
+        { name: 'purpose', patterns: ['purpose', 'why this', 'exists to'] },
+        { name: 'goals', patterns: ['goals', 'strategic goal', 'commercial goal', 'experiential goal', 'objectives'] },
+        { name: 'capabilities', patterns: ['capabilities', 'signature capabilities', 'components', 'pillars'] },
+        { name: 'end_to_end_flow', patterns: ['end-to-end', 'flow', 'execution', 'ambition to'] },
+        { name: 'impact', patterns: ['impact', 'outcomes', 'expected impact', 'strategic impact', 'commercial impact'] },
+        { name: 'executive_summary', patterns: ['executive summary', 'summary', 'overview'] }
+    ];
+    
+    // Find position of highlighted text in narrative
+    const position = narrative.indexOf(text.substring(0, 50));
+    
+    if (position === -1) return null;
+    
+    // Look backwards from position to find section header
+    const textBeforeHighlight = narrative.substring(0, position);
+    
+    // Check which section patterns appear most recently before the highlight
+    let bestMatch = null;
+    let bestPosition = -1;
+    
+    for (const section of sections) {
+        for (const pattern of section.patterns) {
+            const patternPos = textBeforeHighlight.lastIndexOf(pattern);
+            if (patternPos > bestPosition) {
+                bestPosition = patternPos;
+                bestMatch = section.name;
+            }
+        }
+    }
+    
+    return bestMatch;
 }
 
 // Add a message to the narrative chat
@@ -2586,6 +3241,24 @@ function addNarrativeChatMessage(role, content) {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
     
     narrativeChat.messages.push({ role, content });
+    
+    // Save chat history to the current history entry
+    saveChatToHistoryEntry();
+}
+
+// Save current chat messages to the history entry
+function saveChatToHistoryEntry() {
+    if (!narrativeChat.currentHistoryEntryId) return;
+    
+    const historyEntry = state.generatedPacks.find(p => p.id === narrativeChat.currentHistoryEntryId);
+    if (historyEntry) {
+        historyEntry.chatHistory = [...narrativeChat.messages];
+        
+        // Persist to disk
+        if (window.electronAPI?.appData) {
+            window.electronAPI.appData.saveGeneratedPacks(state.generatedPacks);
+        }
+    }
 }
 
 // Add typing indicator to narrative chat
@@ -2615,6 +3288,103 @@ function addNarrativeChatTypingIndicator() {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
     
     return typingEl;
+}
+
+// Special editing indicator for iterate mode
+function addNarrativeChatEditingIndicator(highlightedText) {
+    const messagesContainer = document.getElementById('narrativeChatMessages');
+    if (!messagesContainer) return null;
+    
+    const typingEl = document.createElement('div');
+    typingEl.className = 'chat-message assistant typing editing-indicator';
+    typingEl.id = 'narrativeChatTypingIndicator';
+    
+    const editingText = highlightedText 
+        ? 'Editing selected section...'
+        : 'Editing narrative...';
+    
+    typingEl.innerHTML = `
+        <div class="chat-avatar editing">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/>
+                <path d="M19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/>
+            </svg>
+        </div>
+        <div class="chat-content">
+            <div class="chat-bubble editing-bubble">
+                <div class="editing-status">
+                    <span class="editing-icon-pulse"></span>
+                    <span class="editing-text">${editingText}</span>
+                </div>
+                <div class="editing-progress">
+                    <div class="editing-progress-bar"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    messagesContainer.appendChild(typingEl);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    return typingEl;
+}
+
+// Show editing overlay on narrative panel
+function showNarrativeEditingOverlay() {
+    const contentDiv = document.getElementById('narrativeDisplayContent');
+    const containerDiv = contentDiv?.closest('.narrative-split-left');
+    
+    if (!containerDiv) return;
+    
+    // Add editing class to content for shimmer effect
+    contentDiv.classList.add('is-editing');
+    
+    // Create overlay if not exists - attach to the container, not the scrollable content
+    let overlay = document.getElementById('narrativeEditingOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'narrativeEditingOverlay';
+        overlay.className = 'narrative-editing-overlay';
+        overlay.innerHTML = `
+            <div class="editing-overlay-content">
+                <svg class="editing-overlay-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/>
+                </svg>
+                <span>Editing...</span>
+            </div>
+        `;
+        containerDiv.style.position = 'relative';
+        containerDiv.appendChild(overlay);
+    }
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+        overlay.classList.add('visible');
+    });
+}
+
+// Hide editing overlay
+function hideNarrativeEditingOverlay() {
+    const overlay = document.getElementById('narrativeEditingOverlay');
+    const contentDiv = document.getElementById('narrativeDisplayContent');
+    
+    contentDiv?.classList.remove('is-editing');
+    
+    if (overlay) {
+        overlay.classList.remove('visible');
+        setTimeout(() => overlay.remove(), 300);
+    }
+}
+
+// Flash success effect on narrative after update
+function flashNarrativeSuccess() {
+    const contentDiv = document.getElementById('narrativeDisplayContent');
+    if (!contentDiv) return;
+    
+    contentDiv.classList.add('update-success');
+    setTimeout(() => {
+        contentDiv.classList.remove('update-success');
+    }, 1500);
 }
 
 // Render markdown to HTML (basic conversion)
@@ -2823,6 +3593,8 @@ function copyNarrativeToClipboard() {
     if (content) {
         navigator.clipboard.writeText(content).then(() => {
             showToast('Narrative copied to clipboard', 'success');
+            // Capture acceptance signal - user is exporting the narrative
+            captureAcceptanceSignal();
         }).catch(err => {
             showToast('Failed to copy', 'error');
         });
@@ -3857,6 +4629,7 @@ function setupTemplateManagement() {
     loadAdminTemplates();
     loadDefaultPrompt();
     loadSourcePrompts();
+    initLearningsPanel();
 }
 
 async function loadDefaultPrompt() {
@@ -3976,6 +4749,142 @@ async function saveSourcePrompts() {
             btn.disabled = false;
         }
     }
+}
+
+// ============================================
+// AI Learnings Management
+// ============================================
+
+async function initLearningsPanel() {
+    // Setup refresh button
+    const refreshBtn = document.getElementById('refreshLearningsBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', loadLearningsPanel);
+    }
+    
+    // Setup clear button
+    const clearBtn = document.getElementById('clearLearningsBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', async () => {
+            if (confirm('Are you sure you want to clear all learned preferences? This cannot be undone.')) {
+                try {
+                    if (state.isElectron && window.electronAPI.learnings) {
+                        await window.electronAPI.learnings.clear();
+                        showToast('Learned preferences cleared', 'success');
+                        loadLearningsPanel();
+                    }
+                } catch (error) {
+                    console.error('Error clearing learnings:', error);
+                    showToast('Failed to clear learnings', 'error');
+                }
+            }
+        });
+    }
+    
+    // Load initial data
+    loadLearningsPanel();
+}
+
+async function loadLearningsPanel() {
+    if (!state.isElectron || !window.electronAPI.learnings) return;
+    
+    try {
+        const learnings = await window.electronAPI.learnings.get();
+        const stats = await window.electronAPI.learnings.getStats();
+        
+        // Update stats
+        const iterationsEl = document.getElementById('learnStatIterations');
+        const narrativesEl = document.getElementById('learnStatNarratives');
+        const preferencesEl = document.getElementById('learnStatPreferences');
+        
+        if (iterationsEl) iterationsEl.textContent = stats?.totalIterations || 0;
+        if (narrativesEl) narrativesEl.textContent = stats?.totalNarratives || 0;
+        
+        // Count total preferences
+        let totalPrefs = 0;
+        const categories = ['tone', 'structure', 'content', 'vocabulary'];
+        categories.forEach(cat => {
+            const prefs = learnings?.preferences?.[cat] || [];
+            totalPrefs += prefs.length;
+            updateLearningsCategory(cat, prefs);
+        });
+        
+        if (preferencesEl) preferencesEl.textContent = totalPrefs;
+        
+    } catch (error) {
+        console.error('Error loading learnings panel:', error);
+    }
+}
+
+function updateLearningsCategory(category, preferences) {
+    const countEl = document.getElementById(`learnCount${category.charAt(0).toUpperCase() + category.slice(1)}`);
+    const listEl = document.getElementById(`learnList${category.charAt(0).toUpperCase() + category.slice(1)}`);
+    
+    if (countEl) countEl.textContent = preferences.length;
+    
+    if (!listEl) return;
+    
+    if (preferences.length === 0) {
+        listEl.innerHTML = `<p class="learnings-empty">No ${category} preferences learned yet</p>`;
+        return;
+    }
+    
+    listEl.innerHTML = preferences.map((pref, idx) => {
+        const confidence = pref.confidence || 0.5;
+        const confidencePercent = Math.round(confidence * 100);
+        const confidenceClass = confidence >= 0.8 ? 'high' : confidence >= 0.5 ? 'medium' : 'low';
+        
+        return `
+            <div class="learning-item" data-category="${category}" data-index="${idx}">
+                <div class="learning-content">
+                    <div class="learning-text">${escapeHtml(pref.preference || pref)}</div>
+                    <div class="learning-confidence">
+                        <div class="learning-confidence-bar">
+                            <div class="learning-confidence-fill ${confidenceClass}" style="width: ${confidencePercent}%"></div>
+                        </div>
+                        <span>${confidencePercent}% confidence</span>
+                        ${pref.source ? `<span>• from ${pref.source}</span>` : ''}
+                    </div>
+                </div>
+                <button class="learning-remove" title="Remove this preference">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                        <path d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+    }).join('');
+    
+    // Add remove handlers
+    listEl.querySelectorAll('.learning-remove').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const item = e.target.closest('.learning-item');
+            const cat = item.dataset.category;
+            const idx = parseInt(item.dataset.index);
+            
+            try {
+                if (state.isElectron && window.electronAPI.learnings) {
+                    // Get current learnings and remove the item
+                    const learnings = await window.electronAPI.learnings.get();
+                    if (learnings?.preferences?.[cat]) {
+                        learnings.preferences[cat].splice(idx, 1);
+                        await window.electronAPI.learnings.updatePreference(cat, learnings.preferences[cat]);
+                        loadLearningsPanel();
+                        showToast('Preference removed', 'success');
+                    }
+                }
+            } catch (error) {
+                console.error('Error removing preference:', error);
+                showToast('Failed to remove preference', 'error');
+            }
+        });
+    });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 async function loadAdminTemplates() {
@@ -4789,17 +5698,30 @@ function addActivity(text, type = 'info') {
 
 // Add a narrative to the overall history (so it appears in the sidebar history)
 function addNarrativeToOverallHistory(narrative) {
+    const entryId = narrative.id || 'narr_' + Date.now();
     const historyEntry = {
-        id: narrative.id || 'narr_' + Date.now(),
+        id: entryId,
         type: 'narrative',  // Distinguish from source pack
         client: state.selectedClient,
         narrative: narrative,  // Store the full narrative
         pocFile: state.pocFile,  // Store POC content for Intel Pack
         context: state.currentContext || state.pendingGenerationContext,
-        sourcePack: state.currentSourcePack,
+        sourcePack: state.currentSourcePack,  // Full source pack with documents
+        // Save researched contacts for this narrative
+        contacts: {
+            current: state.researchedContacts?.current || [],
+            exited: state.researchedContacts?.exited || []
+        },
+        // Save the agent prompt/instructions used for this narrative
+        agentPrompt: narrative.agentPrompt || document.getElementById('narrativeAgentPrompt')?.value || '',
+        // Initialize empty chat history (will be populated as user chats)
+        chatHistory: [],
         validation: { status: 'ready', statusLabel: '✅ Narrative' },
         generatedAt: narrative.timestamp || new Date().toISOString()
     };
+    
+    // Store current history entry ID for saving chat messages
+    narrativeChat.currentHistoryEntryId = entryId;
     
     // Add to beginning of array (newest first)
     state.generatedPacks.unshift(historyEntry);
@@ -4819,44 +5741,39 @@ function addNarrativeToOverallHistory(narrative) {
 }
 
 function updateHistoryView() {
-    if (state.generatedPacks.length === 0) {
+    // Filter to only show narratives (not source packs)
+    const narrativePacks = state.generatedPacks.filter(pack => pack.type === 'narrative');
+    
+    if (narrativePacks.length === 0) {
         elements.historyEmpty.classList.remove('hidden');
         elements.historyList.classList.add('hidden');
     } else {
         elements.historyEmpty.classList.add('hidden');
         elements.historyList.classList.remove('hidden');
         
-        elements.historyList.innerHTML = state.generatedPacks.map(pack => {
-            const isNarrative = pack.type === 'narrative';
-            const outputIntent = pack.context?.outputIntent || pack.sourcePack?.context?.outputIntent || (isNarrative ? 'Narrative' : 'Source Pack');
-            const icon = isNarrative 
-                ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        elements.historyList.innerHTML = narrativePacks.map(pack => {
+            const outputIntent = pack.context?.outputIntent || pack.sourcePack?.context?.outputIntent || 'Narrative';
+            const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 19l7-7 3 3-7 7-3-3z"/>
                         <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
                         <path d="M2 2l7.586 7.586"/>
                         <circle cx="11" cy="11" r="2"/>
-                   </svg>`
-                : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 12h6M9 16h6M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                    </svg>`;
-            const statusLabel = isNarrative ? '📝 Narrative' : (pack.validation?.statusLabel || '✅ Ready');
-            const statusClass = isNarrative ? 'narrative' : (pack.validation?.status === 'ready' ? 'ready' : 'caveats');
             
             return `
-            <div class="history-item ${isNarrative ? 'history-narrative' : ''}" data-pack-id="${pack.id}">
-                <div class="history-icon ${isNarrative ? 'narrative-icon' : ''}">
+            <div class="history-item history-narrative" data-pack-id="${pack.id}">
+                <div class="history-icon narrative-icon">
                     ${icon}
                 </div>
                 <div class="history-info">
                     <span class="history-title">${pack.client?.name || 'Unknown Client'}</span>
                     <span class="history-meta">${new Date(pack.generatedAt).toLocaleString()} • ${outputIntent}</span>
                 </div>
-                <span class="history-status ${statusClass}">
-                    ${statusLabel}
+                <span class="history-status narrative">
+                    📝 Narrative
                 </span>
                 <div class="history-actions">
                     <button class="btn btn-ghost btn-sm" onclick="viewHistoryPack('${pack.id}')">View</button>
-                    ${!isNarrative ? `<button class="btn btn-ghost btn-sm" onclick="exportHistoryPack('${pack.id}')">Export</button>` : ''}
                 </div>
             </div>
         `}).join('');
@@ -4880,20 +5797,42 @@ function viewHistoryPack(packId) {
         state.pocFile = pack.pocFile;
     }
     
+    // Restore researched contacts if available
+    if (pack.contacts) {
+        state.researchedContacts = {
+            current: pack.contacts.current || [],
+            exited: pack.contacts.exited || []
+        };
+    }
+    
     // Check if this is a narrative entry
     if (pack.type === 'narrative' && pack.narrative) {
         // Go directly to Step 6 (Narrative)
         goToStep(6);
         
+        // Restore the agent prompt/instructions that were used for this narrative
+        const promptTextarea = document.getElementById('narrativeAgentPrompt');
+        if (promptTextarea && pack.agentPrompt) {
+            promptTextarea.value = pack.agentPrompt;
+        }
+        
+        // Restore contacts to the UI grids
+        restoreContactsToGrids(pack.contacts);
+        
+        // Tell the backend about the source pack for this narrative (for chat)
+        if (state.isElectron && window.electronAPI?.narrativeChat?.setSourcePack && pack.sourcePack) {
+            window.electronAPI.narrativeChat.setSourcePack(pack.sourcePack);
+        }
+        
         // Load client narratives and then display the specific one
         if (pack.client?.id) {
             loadClientNarratives(pack.client.id).then(() => {
-                // Display the narrative from the history entry
-                displayNarrative(pack.narrative);
+                // Display the narrative from the history entry, passing source pack and chat history
+                displayNarrative(pack.narrative, pack.sourcePack, pack.chatHistory, pack.id);
             });
         } else {
             // No client ID, just display the narrative directly
-            displayNarrative(pack.narrative);
+            displayNarrative(pack.narrative, pack.sourcePack, pack.chatHistory, pack.id);
         }
     } else {
         // Source Pack entry - go to Step 5 (Review)
@@ -4904,6 +5843,38 @@ function viewHistoryPack(packId) {
         if (pack.client?.id) {
             loadClientNarratives(pack.client.id);
         }
+    }
+}
+
+// Restore contacts from history to the UI grids
+function restoreContactsToGrids(contacts) {
+    if (!contacts) return;
+    
+    const currentGrid = document.getElementById('currentContactsGrid');
+    const exitedGrid = document.getElementById('exitedContactsGrid');
+    const currentTitle = document.getElementById('currentContactsTitle');
+    const exitedTitle = document.getElementById('exitedContactsTitle');
+    const currentHint = document.getElementById('currentContactsHint');
+    const exitedHint = document.getElementById('exitedContactsHint');
+    
+    // Update titles for restored data
+    if (currentTitle) currentTitle.textContent = 'Key Stakeholders';
+    if (currentHint) currentHint.textContent = 'Contacts from when this narrative was generated';
+    if (exitedTitle) exitedTitle.textContent = 'Recently Exited Senior Leaders';
+    if (exitedHint) exitedHint.textContent = 'Departures found when this narrative was generated';
+    
+    // Populate current contacts
+    if (contacts.current && contacts.current.length > 0) {
+        populateContactGrid(currentGrid, contacts.current, 'current');
+    } else {
+        resetContactGrid(currentGrid, 'No contacts saved');
+    }
+    
+    // Populate exited contacts
+    if (contacts.exited && contacts.exited.length > 0) {
+        populateContactGrid(exitedGrid, contacts.exited, 'exited');
+    } else {
+        resetContactGrid(exitedGrid, 'No departures saved');
     }
 }
 

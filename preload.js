@@ -109,10 +109,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Narrative Chat (Step 6 - Q&A with sources + narrative)
     narrativeChat: {
-        sendMessage: (message, narrativeContent) => 
-            ipcRenderer.invoke('narrativeChat:sendMessage', { message, narrativeContent }),
+        sendMessage: (message, narrativeContent, sourcePack, mode = 'ask', highlightedText = null, fullRewriteConfirmed = false) => 
+            ipcRenderer.invoke('narrativeChat:sendMessage', { 
+                message, 
+                narrativeContent, 
+                sourcePack, 
+                mode, 
+                highlightedText,
+                fullRewriteConfirmed 
+            }),
         reset: () =>
-            ipcRenderer.invoke('narrativeChat:reset')
+            ipcRenderer.invoke('narrativeChat:reset'),
+        cancel: () =>
+            ipcRenderer.invoke('narrativeChat:cancel')
     },
 
     // Persistent App Data
@@ -237,6 +246,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('settings:getSourcePrompts'),
         saveSourcePrompts: (prompts) => 
             ipcRenderer.invoke('settings:saveSourcePrompts', prompts)
+    },
+
+    // Learning System - AI learns from user behavior
+    learnings: {
+        captureSignal: (signal) => 
+            ipcRenderer.invoke('learnings:captureSignal', signal),
+        get: () => 
+            ipcRenderer.invoke('learnings:get'),
+        runInference: () => 
+            ipcRenderer.invoke('learnings:runInference'),
+        getForPrompt: (client, industry) => 
+            ipcRenderer.invoke('learnings:getForPrompt', { client, industry }),
+        clear: () => 
+            ipcRenderer.invoke('learnings:clear'),
+        updatePreference: (category, key, value) => 
+            ipcRenderer.invoke('learnings:updatePreference', { category, key, value }),
+        getStats: () => 
+            ipcRenderer.invoke('learnings:getStats')
     },
 
     // File Operations

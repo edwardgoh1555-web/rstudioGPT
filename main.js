@@ -337,9 +337,148 @@ const appState = {
         docx: null
     },
     placeholders: credentialManager.loadAppData('placeholders') || [],
-    narrativeCancelled: false  // Flag for cancelling narrative generation
+    narrativeCancelled: false,  // Flag for cancelling narrative generation
     // Each placeholder: { id, name, prompt, createdAt }
+    
+    // Learnings system - stores user preferences inferred from behavior
+    learnings: credentialManager.loadAppData('narrativeLearnings') || getDefaultLearnings()
 };
+
+// ============================================
+// Narrative Learning System
+// ============================================
+
+/**
+ * Returns the default learnings structure
+ */
+function getDefaultLearnings() {
+    return {
+        version: 1,
+        lastUpdated: new Date().toISOString(),
+        lastInferenceRun: null,
+        
+        // Aggregate preferences learned from behavior
+        preferences: {
+            tone: {
+                preferred: [],
+                avoid: [],
+                confidence: 0.0,
+                evidenceCount: 0
+            },
+            structure: {
+                preferredLength: null,
+                useBulletPoints: null,
+                preferredSections: [],
+                weakSections: [],
+                confidence: 0.0,
+                evidenceCount: 0
+            },
+            content: {
+                emphasize: [],
+                avoid: [],
+                confidence: 0.0,
+                evidenceCount: 0
+            },
+            vocabulary: {
+                preferred: [],
+                avoid: [],
+                replacements: {},
+                confidence: 0.0,
+                evidenceCount: 0
+            }
+        },
+        
+        // Section-specific learnings
+        sectionPatterns: {},
+        
+        // Client/Industry specific learnings
+        contextual: {
+            byIndustry: {},
+            byClient: {}
+        },
+        
+        // Raw evidence log (for reprocessing/auditing)
+        evidenceLog: [],
+        
+        // Statistics
+        stats: {
+            totalIterations: 0,
+            totalAcceptances: 0,
+            totalNarrativesGenerated: 0,
+            avgIterationsPerNarrative: 0
+        }
+    };
+}
+
+/**
+ * Save learnings to persistent storage (debounced to prevent excessive disk writes)
+ */
+let saveLearningsTimeout = null;
+function saveLearnings() {
+    // Debounce: wait 2 seconds after last call before actually saving
+    if (saveLearningsTimeout) {
+        clearTimeout(saveLearningsTimeout);
+    }
+    saveLearningsTimeout = setTimeout(() => {
+        appState.learnings.lastUpdated = new Date().toISOString();
+        credentialManager.saveAppData('narrativeLearnings', appState.learnings);
+        console.log('[Learnings] Saved to disk');
+        saveLearningsTimeout = null;
+    }, 2000);
+}
+
+/**
+ * Force immediate save (for shutdown or critical operations)
+ */
+function saveLearningsImmediate() {
+    if (saveLearningsTimeout) {
+        clearTimeout(saveLearningsTimeout);
+        saveLearningsTimeout = null;
+    }
+    appState.learnings.lastUpdated = new Date().toISOString();
+    credentialManager.saveAppData('narrativeLearnings', appState.learnings);
+    console.log('[Learnings] Saved to disk (immediate)');
+}
+
+/**
+ * Capture a behavioral signal from user interaction
+ */
+function captureSignal(signal) {
+    // Add timestamp if not present
+    if (!signal.timestamp) {
+        signal.timestamp = new Date().toISOString();
+    }
+    
+    // Add to evidence log
+    appState.learnings.evidenceLog.push(signal);
+    
+    // Keep only last 500 signals to prevent unbounded growth
+    if (appState.learnings.evidenceLog.length > 500) {
+        appState.learnings.evidenceLog = appState.learnings.evidenceLog.slice(-500);
+    }
+    
+    // Update statistics
+    if (signal.type === 'iteration') {
+        appState.learnings.stats.totalIterations++;
+    } else if (signal.type === 'acceptance') {
+        appState.learnings.stats.totalAcceptances++;
+    } else if (signal.type === 'generation') {
+        appState.learnings.stats.totalNarrativesGenerated++;
+    }
+    
+    // Calculate average iterations per narrative
+    if (appState.learnings.stats.totalNarrativesGenerated > 0) {
+        appState.learnings.stats.avgIterationsPerNarrative = 
+            appState.learnings.stats.totalIterations / appState.learnings.stats.totalNarrativesGenerated;
+    }
+    
+    // Save after each signal
+    saveLearnings();
+    
+    console.log(`[Learnings] Captured signal: ${signal.type}`, signal.section || '');
+    
+    return signal;
+}
 
 // Source chat history (for Step 5 Q&A)
 let sourceChatHistory = [];
@@ -1499,17 +1638,22 @@ ipcMain.handle('export:markdown', async (event, { sourcePack }) => {
 });
 
 ipcMain.handle('export:saveFile', async (event, { content, defaultName, filters }) => {
-    const result = await dialog.showSaveDialog(mainWindow, {
-        defaultPath: defaultName,
-        filters: filters
-    });
-    
-    if (!result.canceled && result.filePath) {
-        const fs = require('fs');
-        fs.writeFileSync(result.filePath, content);
-        return { success: true, filePath: result.filePath };
+    try {
+        const result = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: defaultName,
+            filters: filters
+        });
+        
+        if (!result.canceled && result.filePath) {
+            const fsPromises = require('fs').promises;
+            await fsPromises.writeFile(result.filePath, content);
+            return { success: true, filePath: result.filePath };
+        }
+        return { success: false, canceled: true };
+    } catch (error) {
+        console.error('[Export] Save file error:', error);
+        return { success: false, error: error.message };
     }
-    return { success: false, canceled: true };
 });
 
 // Source Pack ZIP Generation with DeepResearch
@@ -2277,6 +2421,380 @@ ipcMain.handle('settings:saveSourcePrompts', async (event, prompts) => {
     
     return { success: true };
 });
+
+// ============================================
+// Learning System IPC Handlers
+// ============================================
+
+// Capture a behavioral signal
+ipcMain.handle('learnings:captureSignal', async (event, signal) => {
+    try {
+        const captured = captureSignal(signal);
+        return { success: true, signal: captured };
+    } catch (error) {
+        console.error('[Learnings] Error capturing signal:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Get current learnings
+ipcMain.handle('learnings:get', async () => {
+    return appState.learnings;
+});
+
+// Run inference on recent signals to extract learnings
+ipcMain.handle('learnings:runInference', async () => {
+    try {
+        const result = await runLearningInference();
+        return { success: true, result };
+    } catch (error) {
+        console.error('[Learnings] Inference error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Get learnings formatted for prompt injection
+ipcMain.handle('learnings:getForPrompt', async (event, { client, industry }) => {
+    try {
+        const instructions = buildLearnedInstructions(appState.learnings, client, industry);
+        return { success: true, instructions };
+    } catch (error) {
+        console.error('[Learnings] Error building instructions:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Clear all learnings (reset)
+ipcMain.handle('learnings:clear', async () => {
+    appState.learnings = getDefaultLearnings();
+    saveLearnings();
+    
+    auditLogger.log('ADMIN', 'LEARNINGS_CLEARED', {});
+    
+    return { success: true };
+});
+
+// Update a specific preference manually
+ipcMain.handle('learnings:updatePreference', async (event, { category, key, value }) => {
+    try {
+        if (appState.learnings.preferences[category]) {
+            appState.learnings.preferences[category][key] = value;
+            saveLearnings();
+            return { success: true };
+        }
+        return { success: false, error: 'Invalid category' };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
+// Get learning statistics
+ipcMain.handle('learnings:getStats', async () => {
+    return {
+        ...appState.learnings.stats,
+        lastUpdated: appState.learnings.lastUpdated,
+        lastInferenceRun: appState.learnings.lastInferenceRun,
+        evidenceCount: appState.learnings.evidenceLog.length,
+        preferences: {
+            toneConfidence: appState.learnings.preferences.tone.confidence,
+            structureConfidence: appState.learnings.preferences.structure.confidence,
+            contentConfidence: appState.learnings.preferences.content.confidence,
+            vocabularyConfidence: appState.learnings.preferences.vocabulary.confidence
+        }
+    };
+});
+
+/**
+ * Run AI-powered inference on recent signals to extract learnings
+ */
+async function runLearningInference() {
+    console.log('[Learnings] Running inference on recent signals...');
+    
+    // Get OpenAI credentials
+    const openaiCreds = await credentialManager.getCredentials('openai');
+    if (!openaiCreds || !openaiCreds.apiKey) {
+        throw new Error('OpenAI API key not configured');
+    }
+    
+    // Get recent signals (last 50)
+    const recentSignals = appState.learnings.evidenceLog.slice(-50);
+    
+    if (recentSignals.length < 3) {
+        console.log('[Learnings] Not enough signals for inference');
+        return { skipped: true, reason: 'Not enough signals (need at least 3)' };
+    }
+    
+    // Prepare signals for analysis (strip large content)
+    const signalsForAnalysis = recentSignals.map(s => ({
+        timestamp: s.timestamp,
+        type: s.type,
+        section: s.section,
+        userRequest: s.userRequest,
+        highlightedTextPreview: s.highlightedText?.substring(0, 200),
+        client: s.client?.name,
+        industry: s.industry,
+        iterationType: s.iterationType,
+        wasAccepted: s.wasAccepted
+    }));
+    
+    const inferencePrompt = `You are a learning system analyzing user behavior to understand their narrative writing preferences.
+
+CURRENT LEARNED PREFERENCES:
+${JSON.stringify(appState.learnings.preferences, null, 2)}
+
+RECENT USER SIGNALS (${signalsForAnalysis.length} signals):
+${JSON.stringify(signalsForAnalysis, null, 2)}
+
+Analyze these behavioral signals and extract learnings about the user's preferences. Consider:
+
+1. ITERATION SIGNALS: When users iterate on text, they're teaching what they DON'T want
+   - Highlighted text + rewrite requests reveal style/content issues
+   - Multiple iterations on same section = that section template needs improvement
+   
+2. ACCEPTANCE SIGNALS: When users accept without iteration, the output was good
+   - Low iteration count = good default generation
+   
+3. PATTERNS: Look for repeated behaviors across signals
+   - Consistent vocabulary corrections → learn preferred terms
+   - Always expanding certain sections → those need more depth by default
+   - Always shortening sections → those are too verbose
+
+Return a JSON object (no markdown code blocks) with this exact structure:
+{
+  "newLearnings": [
+    {
+      "category": "tone|structure|content|vocabulary",
+      "type": "preferred|avoid",
+      "value": "specific learning",
+      "confidence": 0.5,
+      "evidence": "which signals support this"
+    }
+  ],
+  "vocabularyReplacements": {
+    "old_term": "new_term"
+  },
+  "sectionInsights": {
+    "section_name": {
+      "avgIterations": 0,
+      "commonIssues": ["issue1"],
+      "recommendation": "how to improve"
+    }
+  },
+  "industryInsights": {
+    "industry_name": {
+      "emphasize": ["topic1"],
+      "tone": "measured|bold|technical"
+    }
+  },
+  "clientInsights": {
+    "client_name": {
+      "preferredThemes": ["theme1"],
+      "focusAreas": ["area1"]
+    }
+  },
+  "overallAssessment": "Brief summary of what we learned"
+}`;
+
+    const model = openaiCreds.model || 'gpt-4o';
+    const response = await callOpenAI(openaiCreds.apiKey, model, [
+        { role: 'system', content: 'You are an expert at inferring user preferences from behavioral signals. Return only valid JSON, no markdown formatting.' },
+        { role: 'user', content: inferencePrompt }
+    ], 3000);
+    
+    // Parse the response
+    let inferences;
+    try {
+        // Clean potential markdown code blocks
+        const cleanedResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        inferences = JSON.parse(cleanedResponse);
+    } catch (parseError) {
+        console.error('[Learnings] Failed to parse inference response:', parseError);
+        console.log('[Learnings] Raw response:', response);
+        throw new Error('Failed to parse learning inference results');
+    }
+    
+    // Apply the inferences to our learnings
+    applyInferences(inferences);
+    
+    // Update inference timestamp
+    appState.learnings.lastInferenceRun = new Date().toISOString();
+    saveLearnings();
+    
+    console.log('[Learnings] Inference complete:', inferences.overallAssessment);
+    
+    return inferences;
+}
+
+/**
+ * Apply inferred learnings to the preference database
+ */
+function applyInferences(inferences) {
+    // Apply new learnings
+    if (inferences.newLearnings) {
+        for (const learning of inferences.newLearnings) {
+            const category = learning.category;
+            if (!appState.learnings.preferences[category]) continue;
+            
+            const list = learning.type === 'preferred' ? 'preferred' : 'avoid';
+            
+            // Add if not already present
+            if (!appState.learnings.preferences[category][list].includes(learning.value)) {
+                appState.learnings.preferences[category][list].push(learning.value);
+            }
+            
+            // Update confidence (weighted average)
+            const oldConf = appState.learnings.preferences[category].confidence;
+            const oldCount = appState.learnings.preferences[category].evidenceCount;
+            const newConf = (oldConf * oldCount + learning.confidence) / (oldCount + 1);
+            appState.learnings.preferences[category].confidence = Math.min(0.95, newConf);
+            appState.learnings.preferences[category].evidenceCount++;
+        }
+    }
+    
+    // Apply vocabulary replacements
+    if (inferences.vocabularyReplacements) {
+        appState.learnings.preferences.vocabulary.replacements = {
+            ...appState.learnings.preferences.vocabulary.replacements,
+            ...inferences.vocabularyReplacements
+        };
+    }
+    
+    // Apply section insights
+    if (inferences.sectionInsights) {
+        for (const [section, insight] of Object.entries(inferences.sectionInsights)) {
+            appState.learnings.sectionPatterns[section] = {
+                ...appState.learnings.sectionPatterns[section],
+                ...insight,
+                lastUpdated: new Date().toISOString()
+            };
+        }
+    }
+    
+    // Apply industry insights
+    if (inferences.industryInsights) {
+        for (const [industry, insight] of Object.entries(inferences.industryInsights)) {
+            appState.learnings.contextual.byIndustry[industry] = {
+                ...appState.learnings.contextual.byIndustry[industry],
+                ...insight,
+                confidence: 0.7,
+                lastUpdated: new Date().toISOString()
+            };
+        }
+    }
+    
+    // Apply client insights
+    if (inferences.clientInsights) {
+        for (const [client, insight] of Object.entries(inferences.clientInsights)) {
+            appState.learnings.contextual.byClient[client] = {
+                ...appState.learnings.contextual.byClient[client],
+                ...insight,
+                lastUpdated: new Date().toISOString()
+            };
+        }
+    }
+}
+
+/**
+ * Build learned instructions for injection into narrative generation prompts
+ */
+function buildLearnedInstructions(learnings, client, industry) {
+    const instructions = [];
+    const minConfidence = 0.5; // Only include learnings we're somewhat confident about
+    
+    // Tone preferences
+    if (learnings.preferences.tone.confidence >= minConfidence) {
+        if (learnings.preferences.tone.preferred.length > 0) {
+            instructions.push(`TONE: Write in a ${learnings.preferences.tone.preferred.join(', ')} style.`);
+        }
+        if (learnings.preferences.tone.avoid.length > 0) {
+            instructions.push(`TONE - AVOID: Do not use ${learnings.preferences.tone.avoid.join(', ')} language.`);
+        }
+    }
+    
+    // Structure preferences
+    if (learnings.preferences.structure.confidence >= minConfidence) {
+        if (learnings.preferences.structure.preferredLength) {
+            instructions.push(`LENGTH: Target ${learnings.preferences.structure.preferredLength} length narratives.`);
+        }
+        if (learnings.preferences.structure.weakSections.length > 0) {
+            instructions.push(`SECTIONS NEEDING ATTENTION: Pay extra care to these sections which often need revision: ${learnings.preferences.structure.weakSections.join(', ')}`);
+        }
+    }
+    
+    // Content preferences
+    if (learnings.preferences.content.confidence >= minConfidence) {
+        if (learnings.preferences.content.emphasize.length > 0) {
+            instructions.push(`CONTENT EMPHASIS: Make sure to include ${learnings.preferences.content.emphasize.join(', ')}`);
+        }
+        if (learnings.preferences.content.avoid.length > 0) {
+            instructions.push(`CONTENT TO AVOID: Do not include ${learnings.preferences.content.avoid.join(', ')}`);
+        }
+    }
+    
+    // Vocabulary preferences
+    if (learnings.preferences.vocabulary.confidence >= minConfidence) {
+        if (learnings.preferences.vocabulary.preferred.length > 0) {
+            instructions.push(`PREFERRED VOCABULARY: Use words like: ${learnings.preferences.vocabulary.preferred.join(', ')}`);
+        }
+        if (learnings.preferences.vocabulary.avoid.length > 0) {
+            instructions.push(`VOCABULARY TO AVOID: Don't use: ${learnings.preferences.vocabulary.avoid.join(', ')}`);
+        }
+        const replacements = Object.entries(learnings.preferences.vocabulary.replacements);
+        if (replacements.length > 0) {
+            const replaceStr = replacements.map(([from, to]) => `"${from}" → "${to}"`).join(', ');
+            instructions.push(`WORD REPLACEMENTS: Use these substitutions: ${replaceStr}`);
+        }
+    }
+    
+    // Section-specific guidance
+    for (const [section, data] of Object.entries(learnings.sectionPatterns)) {
+        if (data.recommendation) {
+            instructions.push(`${section.toUpperCase()}: ${data.recommendation}`);
+        }
+        if (data.commonIssues && data.commonIssues.length > 0) {
+            instructions.push(`${section.toUpperCase()} - COMMON ISSUES: Avoid these: ${data.commonIssues.join(', ')}`);
+        }
+    }
+    
+    // Industry-specific learnings
+    const industryKey = industry || client?.industry;
+    if (industryKey) {
+        const industryLearnings = learnings.contextual.byIndustry[industryKey];
+        if (industryLearnings && industryLearnings.confidence >= minConfidence) {
+            if (industryLearnings.emphasize && industryLearnings.emphasize.length > 0) {
+                instructions.push(`INDUSTRY (${industryKey}): Emphasize ${industryLearnings.emphasize.join(', ')}`);
+            }
+            if (industryLearnings.tone) {
+                instructions.push(`INDUSTRY TONE (${industryKey}): Use a ${industryLearnings.tone} tone`);
+            }
+        }
+    }
+    
+    // Client-specific learnings
+    const clientName = typeof client === 'string' ? client : client?.name;
+    if (clientName) {
+        const clientLearnings = learnings.contextual.byClient[clientName];
+        if (clientLearnings) {
+            if (clientLearnings.preferredThemes && clientLearnings.preferredThemes.length > 0) {
+                instructions.push(`CLIENT (${clientName}): Focus on these themes: ${clientLearnings.preferredThemes.join(', ')}`);
+            }
+            if (clientLearnings.focusAreas && clientLearnings.focusAreas.length > 0) {
+                instructions.push(`CLIENT FOCUS AREAS: ${clientLearnings.focusAreas.join(', ')}`);
+            }
+        }
+    }
+    
+    if (instructions.length === 0) {
+        return ''; // No learnings yet
+    }
+    
+    return `=== LEARNED USER PREFERENCES ===
+The following preferences have been learned from past user behavior. Apply these to improve the narrative:
+
+${instructions.join('\n')}
+
+=== END LEARNED PREFERENCES ===`;
+}
 
 // ============================================
 // File Operations
@@ -5591,6 +6109,12 @@ async function runNarratorAgent(analysisOutput, strategyOutput, agentPrompt, cli
     // Log what we received
     console.log(`[Narrator] Analysis length: ${safeAnalysis?.length || 0}, Strategy length: ${safeStrategy?.length || 0}`);
     
+    // Get learned preferences from user's iteration history
+    const learnedPreferences = buildLearnedInstructions(appState.learnings, client, client?.industry);
+    if (learnedPreferences) {
+        console.log('[Narrator] Applying learned preferences to narrative generation');
+    }
+    
     const narrativePrompt = `You are a world-class executive narrative writer, crafting strategy documents for C-suite leaders.
 
 CLIENT: ${client?.name || 'Unknown'}
@@ -5608,7 +6132,13 @@ ${safeAnalysis}
 === STRATEGIST'S NARRATIVE ARCHITECTURE ===
 ${safeStrategy}
 === END OF ARCHITECTURE ===
+${learnedPreferences ? `
+=== LEARNED USER PREFERENCES ===
+The following preferences have been learned from the user's previous iterations and edits. Apply these to make the narrative better match their expectations:
 
+${learnedPreferences}
+=== END OF LEARNED PREFERENCES ===
+` : ''}
 NOW WRITE THE NARRATIVE.
 
 IMPORTANT: You MUST write a complete narrative using whatever information is available. If some source insights are limited, work with what you have and make reasonable inferences for a ${client?.industry || 'Unknown'} sector client. Do NOT refuse to write or ask for more information.
@@ -5918,9 +6448,22 @@ CRITICAL FORMATTING:
 // ============================================
 
 let narrativeChatHistory = [];
+let narrativeChatCancelled = false;
 
-ipcMain.handle('narrativeChat:sendMessage', async (event, { message, narrativeContent }) => {
+// Cancel handler
+ipcMain.handle('narrativeChat:cancel', async (event) => {
+    narrativeChatCancelled = true;
+    console.log('[NarrativeChat] Cancellation requested');
+    return { success: true };
+});
+
+ipcMain.handle('narrativeChat:sendMessage', async (event, { message, narrativeContent, sourcePack, mode = 'ask', highlightedText = null, fullRewriteConfirmed = false }) => {
     console.log('[NarrativeChat] Received message:', message.substring(0, 50) + '...');
+    console.log('[NarrativeChat] Mode:', mode);
+    console.log('[NarrativeChat] Highlighted text:', highlightedText ? highlightedText.substring(0, 50) + '...' : 'none');
+    
+    // Reset cancellation flag
+    narrativeChatCancelled = false;
     
     try {
         // Get OpenAI credentials
@@ -5929,14 +6472,17 @@ ipcMain.handle('narrativeChat:sendMessage', async (event, { message, narrativeCo
             return { success: false, error: 'OpenAI API key not configured' };
         }
         
+        // Use source pack from parameter (for history) or fall back to appState
+        const sourcePackToUse = sourcePack || appState.pendingSourcePack;
+        
         // Get the current source pack content
-        if (!appState.pendingSourcePack || !appState.pendingSourcePack.documents) {
-            return { success: false, error: 'No source pack loaded' };
+        if (!sourcePackToUse || !sourcePackToUse.documents) {
+            return { success: false, error: 'No source pack loaded. This narrative may have been generated before source packs were saved to history.' };
         }
         
         // Build context from source pack documents
         let sourceContext = '';
-        const documents = appState.pendingSourcePack.documents;
+        const documents = sourcePackToUse.documents;
         
         console.log('[NarrativeChat] Documents in source pack:', Object.keys(documents).length);
         
@@ -5980,10 +6526,30 @@ ipcMain.handle('narrativeChat:sendMessage', async (event, { message, narrativeCo
         console.log(`[NarrativeChat] Source context size: ${totalChars} chars`);
         
         // Get client info
-        const clientName = appState.pendingSourcePack.metadata?.client || 'the client';
+        const clientName = sourcePackToUse.metadata?.client || 'the client';
         
-        // Build system prompt with both sources and narrative
-        const systemPrompt = `You are an expert research analyst assistant helping users understand their source documents and generated narrative.
+        // Check for cancellation
+        if (narrativeChatCancelled) {
+            return { success: false, cancelled: true };
+        }
+        
+        // Handle different modes
+        if (mode === 'iterate') {
+            return await handleIterateMode(openaiCreds, clientName, sourceContext, narrativeContent, message, highlightedText, fullRewriteConfirmed);
+        } else {
+            return await handleAskMode(openaiCreds, clientName, sourceContext, narrativeContent, message);
+        }
+        
+    } catch (error) {
+        console.error('[NarrativeChat] Error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Handle Ask mode - Q&A about sources and narrative
+async function handleAskMode(openaiCreds, clientName, sourceContext, narrativeContent, message) {
+    // Build system prompt for Q&A
+    const systemPrompt = `You are an expert research analyst assistant helping users understand their source documents and generated narrative.
 
 CLIENT: ${clientName}
 
@@ -6009,40 +6575,147 @@ When answering:
 - Be honest if something isn't covered in the sources or narrative
 - Provide actionable insights`;
 
-        // Add user message to history
-        narrativeChatHistory.push({ role: 'user', content: message });
+    // Add user message to history
+    narrativeChatHistory.push({ role: 'user', content: message });
+    
+    // Keep only last 10 messages for context
+    if (narrativeChatHistory.length > 10) {
+        narrativeChatHistory = narrativeChatHistory.slice(-10);
+    }
+    
+    // Build messages array
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        ...narrativeChatHistory
+    ];
+    
+    // Check for cancellation
+    if (narrativeChatCancelled) {
+        return { success: false, cancelled: true };
+    }
+    
+    // Call OpenAI
+    const model = openaiCreds.model || 'gpt-4o';
+    const response = await callOpenAI(openaiCreds.apiKey, model, messages, 2000);
+    
+    // Add assistant response to history
+    narrativeChatHistory.push({ role: 'assistant', content: response });
+    
+    console.log('[NarrativeChat] Ask response generated successfully');
+    
+    return { success: true, message: response };
+}
+
+// Handle Iterate mode - Edit the narrative
+async function handleIterateMode(openaiCreds, clientName, sourceContext, narrativeContent, message, highlightedText, fullRewriteConfirmed) {
+    console.log('[NarrativeChat] Iterate mode - generating edits...');
+    
+    let editScope = 'targeted';
+    if (fullRewriteConfirmed) {
+        editScope = 'full';
+    } else if (highlightedText) {
+        editScope = 'highlighted';
+    }
+    
+    // Build system prompt for editing
+    const systemPrompt = `You are an expert narrative editor. Your task is to edit the narrative based on the user's instructions.
+
+CLIENT: ${clientName}
+
+SOURCE DOCUMENTS (for reference):
+${sourceContext}
+
+CURRENT NARRATIVE:
+${narrativeContent || '[No narrative]'}
+
+---
+
+EDITING INSTRUCTIONS:
+${highlightedText ? `
+The user has highlighted this specific section for editing:
+---
+${highlightedText}
+---
+
+Focus your edits primarily on this highlighted section, but you may adjust surrounding text if needed for coherence.
+` : `
+No specific section was highlighted. ${fullRewriteConfirmed ? 'The user has confirmed they want a full rewrite.' : 'Make targeted edits to address the user\'s request without rewriting the entire document.'}
+`}
+
+USER REQUEST: ${message}
+
+---
+
+IMPORTANT INSTRUCTIONS:
+1. You MUST output the complete updated narrative in your response
+2. Maintain the same overall structure and formatting (markdown headers, bullet points, etc.)
+3. Keep the same professional tone and style
+4. Ensure all changes are grounded in the source documents
+5. If the edit request doesn't make sense or contradicts the sources, explain why and suggest alternatives
+6. After the narrative, add a brief summary of what you changed
+
+FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
+---NARRATIVE_START---
+[The complete updated narrative goes here]
+---NARRATIVE_END---
+
+---CHANGES_SUMMARY---
+[Brief summary of what was changed]
+---CHANGES_END---`;
+
+    // Check for cancellation
+    if (narrativeChatCancelled) {
+        return { success: false, cancelled: true };
+    }
+    
+    // Call OpenAI with higher token limit for narrative output
+    const model = openaiCreds.model || 'gpt-4o';
+    const response = await callOpenAI(openaiCreds.apiKey, model, [
+        { role: 'system', content: systemPrompt }
+    ], 8000);
+    
+    // Check for cancellation
+    if (narrativeChatCancelled) {
+        return { success: false, cancelled: true };
+    }
+    
+    // Parse the response to extract updated narrative
+    const narrativeMatch = response.match(/---NARRATIVE_START---\s*([\s\S]*?)\s*---NARRATIVE_END---/);
+    const changesMatch = response.match(/---CHANGES_SUMMARY---\s*([\s\S]*?)\s*---CHANGES_END---/);
+    
+    if (narrativeMatch && narrativeMatch[1]) {
+        const updatedNarrative = narrativeMatch[1].trim();
+        const changesSummary = changesMatch ? changesMatch[1].trim() : 'Changes applied successfully.';
         
-        // Keep only last 10 messages for context
-        if (narrativeChatHistory.length > 10) {
-            narrativeChatHistory = narrativeChatHistory.slice(-10);
-        }
+        console.log('[NarrativeChat] Iterate - narrative updated successfully');
         
-        // Build messages array
-        const messages = [
-            { role: 'system', content: systemPrompt },
-            ...narrativeChatHistory
-        ];
+        // Add to chat history
+        narrativeChatHistory.push({ role: 'user', content: `[ITERATE] ${message}` });
+        narrativeChatHistory.push({ role: 'assistant', content: `Changes applied: ${changesSummary}` });
         
-        // Call OpenAI
-        const model = openaiCreds.model || 'gpt-4o';
-        const response = await callOpenAI(openaiCreds.apiKey, model, messages, 2000);
+        return { 
+            success: true, 
+            message: changesSummary,
+            updatedNarrative: updatedNarrative
+        };
+    } else {
+        // If parsing failed, the AI might have just responded with text
+        console.log('[NarrativeChat] Iterate - could not parse structured response, returning as message');
         
-        // Add assistant response to history
+        narrativeChatHistory.push({ role: 'user', content: `[ITERATE] ${message}` });
         narrativeChatHistory.push({ role: 'assistant', content: response });
         
-        console.log('[NarrativeChat] Response generated successfully');
-        
-        return { success: true, message: response };
-        
-    } catch (error) {
-        console.error('[NarrativeChat] Error:', error);
-        return { success: false, error: error.message };
+        return { 
+            success: true, 
+            message: response
+        };
     }
-});
+}
 
 // Reset narrative chat history
 ipcMain.handle('narrativeChat:reset', async (event) => {
     narrativeChatHistory = [];
+    narrativeChatCancelled = false;
     console.log('[NarrativeChat] History reset');
     return { success: true };
 });
@@ -6321,7 +6994,8 @@ ipcMain.handle('narrative:generate', async (event, { templateId, agentPrompt, so
             filePath: saveResult.filePath,
             requestId,
             content: narrativeContent,
-            outputIntent: context?.outputIntent || 'Executive Narrative'
+            outputIntent: context?.outputIntent || 'Executive Narrative',
+            sourcePack: sourcePack  // Return source pack for frontend chat
         };
         
     } catch (error) {
@@ -7154,6 +7828,9 @@ ${sourcePack.sources.map(s => `- [${s.name}] - ${s.source} (${s.type})`).join('\
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
+    // Save any pending learnings before quitting
+    saveLearningsImmediate();
+    
     if (process.platform !== 'darwin') {
         app.quit();
     }

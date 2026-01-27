@@ -1018,7 +1018,7 @@
                                                         </svg>
                                                     </div>
                                                     <div class="narrative-chat-title">
-                                                        <h4>Ask Questions</h4>
+                                                        <h4>Ask questions & iterate</h4>
                                                         <p>Interrogate your sources and narrative</p>
                                                     </div>
                                                 </div>
@@ -1039,13 +1039,42 @@
                                                 </div>
                                                 
                                                 <div class="narrative-chat-input-area">
-                                                    <div class="narrative-chat-input-wrapper">
-                                                        <textarea id="narrativeChatInput" placeholder="Ask about the narrative or sources..." rows="1"></textarea>
-                                                        <button class="btn btn-primary narrative-chat-send" id="narrativeChatSendBtn" title="Send message">
-                                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-                                                            </svg>
-                                                        </button>
+                                                    <!-- Highlighted Text Context Box -->
+                                                    <div class="highlighted-context-box" id="highlightedContextBox" style="display: none;">
+                                                        <div class="highlighted-context-header">
+                                                            <div class="highlighted-context-label">
+                                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
+                                                                    <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                                                </svg>
+                                                                <span>Selected Text Context</span>
+                                                            </div>
+                                                            <button class="highlighted-context-clear" id="clearHighlightedContext" title="Clear selection">
+                                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
+                                                                    <path d="M6 18L18 6M6 6l12 12"/>
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                        <div class="highlighted-context-content" id="highlightedContextContent"></div>
+                                                    </div>
+                                                    <!-- Mode Selection and Input -->
+                                                    <div class="narrative-chat-controls">
+                                                        <div class="chat-mode-selector">
+                                                            <select id="narrativeChatMode" class="chat-mode-dropdown">
+                                                                <option value="ask">💬 Ask</option>
+                                                                <option value="iterate">✏️ Iterate</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="narrative-chat-input-wrapper">
+                                                            <textarea id="narrativeChatInput" placeholder="Ask about the narrative or sources..." rows="1"></textarea>
+                                                            <button class="btn btn-primary narrative-chat-send" id="narrativeChatSendBtn" title="Send message">
+                                                                <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                                                                </svg>
+                                                                <svg class="stop-icon hidden" viewBox="0 0 24 24" fill="currentColor">
+                                                                    <rect x="6" y="6" width="12" height="12" rx="2"/>
+                                                                </svg>
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1744,6 +1773,96 @@
                         </div>
                         <p class="section-description">Set the default instructions that will be pre-populated for the narrative generation agent. Users can modify these instructions for individual generations.</p>
                         <textarea id="adminDefaultPrompt" class="admin-prompt-textarea" placeholder="Enter default instructions for the narrative agent...&#10;&#10;Examples:&#10;• Maintain a professional executive tone&#10;• Focus on actionable insights and recommendations&#10;• Include relevant data points and metrics&#10;• Structure content with clear headings and sections"></textarea>
+                    </div>
+
+                    <!-- AI Learned Preferences -->
+                    <div class="admin-section glass-card">
+                        <div class="section-header">
+                            <h3>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px; margin-right: 8px;">
+                                    <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                                </svg>
+                                AI Learned Preferences
+                            </h3>
+                            <div class="learnings-header-actions">
+                                <button class="btn btn-ghost btn-sm" id="refreshLearningsBtn" title="Refresh">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                    </svg>
+                                </button>
+                                <button class="btn btn-ghost btn-sm" id="clearLearningsBtn" title="Clear All Learnings">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                        <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <p class="section-description">The AI learns from your narrative iterations to better match your writing preferences. These preferences are automatically applied to future narrative generations.</p>
+                        
+                        <div class="learnings-stats" id="learningsStats">
+                            <div class="learnings-stat">
+                                <span class="learnings-stat-value" id="learnStatIterations">0</span>
+                                <span class="learnings-stat-label">Total Iterations</span>
+                            </div>
+                            <div class="learnings-stat">
+                                <span class="learnings-stat-value" id="learnStatNarratives">0</span>
+                                <span class="learnings-stat-label">Narratives</span>
+                            </div>
+                            <div class="learnings-stat">
+                                <span class="learnings-stat-value" id="learnStatPreferences">0</span>
+                                <span class="learnings-stat-label">Preferences Learned</span>
+                            </div>
+                        </div>
+
+                        <div class="learnings-categories">
+                            <!-- Tone Preferences -->
+                            <div class="learnings-category" data-category="tone">
+                                <div class="learnings-category-header">
+                                    <span class="learnings-category-icon">🎯</span>
+                                    <span class="learnings-category-title">Tone</span>
+                                    <span class="learnings-category-count" id="learnCountTone">0</span>
+                                </div>
+                                <div class="learnings-list" id="learnListTone">
+                                    <p class="learnings-empty">No tone preferences learned yet</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Structure Preferences -->
+                            <div class="learnings-category" data-category="structure">
+                                <div class="learnings-category-header">
+                                    <span class="learnings-category-icon">📐</span>
+                                    <span class="learnings-category-title">Structure</span>
+                                    <span class="learnings-category-count" id="learnCountStructure">0</span>
+                                </div>
+                                <div class="learnings-list" id="learnListStructure">
+                                    <p class="learnings-empty">No structure preferences learned yet</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Content Preferences -->
+                            <div class="learnings-category" data-category="content">
+                                <div class="learnings-category-header">
+                                    <span class="learnings-category-icon">📝</span>
+                                    <span class="learnings-category-title">Content</span>
+                                    <span class="learnings-category-count" id="learnCountContent">0</span>
+                                </div>
+                                <div class="learnings-list" id="learnListContent">
+                                    <p class="learnings-empty">No content preferences learned yet</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Vocabulary Preferences -->
+                            <div class="learnings-category" data-category="vocabulary">
+                                <div class="learnings-category-header">
+                                    <span class="learnings-category-icon">💬</span>
+                                    <span class="learnings-category-title">Vocabulary</span>
+                                    <span class="learnings-category-count" id="learnCountVocabulary">0</span>
+                                </div>
+                                <div class="learnings-list" id="learnListVocabulary">
+                                    <p class="learnings-empty">No vocabulary preferences learned yet</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Source Generation Prompts -->
