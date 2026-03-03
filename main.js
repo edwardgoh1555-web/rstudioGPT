@@ -3,15 +3,40 @@
  * Electron Main Process - Standalone Desktop Application
  */
 
+// CRITICAL: Only load Electron essentials first for fast splash screen
 const { app, BrowserWindow, ipcMain, Menu, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
-const axios = require('axios');
-const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
-const PptxGenJS = require('pptxgenjs');
-const PizZip = require('pizzip');
-const Docxtemplater = require('docxtemplater');
+
+// Lazy-loaded modules (loaded after splash is shown)
+let uuidv4, axios, Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle;
+let PptxGenJS, PizZip, Docxtemplater;
+
+// Deferred module loading - called after splash is visible
+function loadHeavyModules() {
+    if (!uuidv4) {
+        const uuid = require('uuid');
+        uuidv4 = uuid.v4;
+    }
+    if (!axios) axios = require('axios');
+    if (!Document) {
+        const docx = require('docx');
+        Document = docx.Document;
+        Packer = docx.Packer;
+        Paragraph = docx.Paragraph;
+        TextRun = docx.TextRun;
+        HeadingLevel = docx.HeadingLevel;
+        Table = docx.Table;
+        TableRow = docx.TableRow;
+        TableCell = docx.TableCell;
+        WidthType = docx.WidthType;
+        BorderStyle = docx.BorderStyle;
+    }
+    if (!PptxGenJS) PptxGenJS = require('pptxgenjs');
+    if (!PizZip) PizZip = require('pizzip');
+    if (!Docxtemplater) Docxtemplater = require('docxtemplater');
+}
+
 // Note: pdf-parse, mammoth, xlsx are loaded lazily in extractDocumentText() 
 // to avoid DOMMatrix errors in Electron main process
 
@@ -316,23 +341,46 @@ function emitAiConsoleLog(agent, message, type = 'info') {
 
 // Default clients (used if no saved data) - Real Accenture blue chip clients
 const defaultClients = [
-    { id: 'cl-001', name: 'Vodafone Group PLC', industry: 'Telecommunications', geography: 'Europe', sector: 'Mobile & Fixed Communications' },
-    { id: 'cl-002', name: 'Unilever PLC', industry: 'Consumer Goods', geography: 'Europe', sector: 'FMCG & Personal Care' },
-    { id: 'cl-003', name: 'BP PLC', industry: 'Energy', geography: 'Europe', sector: 'Oil & Gas, Low Carbon Energy' },
-    { id: 'cl-004', name: 'Lloyds Banking Group PLC', industry: 'Financial Services', geography: 'Europe', sector: 'Retail & Commercial Banking' },
-    { id: 'cl-005', name: 'GlaxoSmithKline PLC', industry: 'Healthcare', geography: 'Europe', sector: 'Pharmaceuticals & Consumer Health' },
-    { id: 'cl-006', name: 'Rio Tinto Group', industry: 'Mining & Metals', geography: 'Global', sector: 'Mining & Natural Resources' },
-    { id: 'cl-007', name: 'Schneider Electric SE', industry: 'Industrial', geography: 'Europe', sector: 'Energy Management & Automation' },
-    { id: 'cl-008', name: 'Marriott International', industry: 'Hospitality', geography: 'North America', sector: 'Hotels & Lodging' },
-    { id: 'cl-009', name: 'Philips N.V.', industry: 'Healthcare Technology', geography: 'Europe', sector: 'Health Technology & Consumer Electronics' },
-    { id: 'cl-010', name: 'Deutsche Telekom AG', industry: 'Telecommunications', geography: 'Europe', sector: 'Integrated Telecommunications' }
+    { id: 'cl-001', name: 'Vodafone Group PLC', commonName: 'Vodafone', industry: 'Telecommunications', geography: 'Europe', sector: 'Mobile & Fixed Communications' },
+    { id: 'cl-002', name: 'Unilever PLC', commonName: 'Unilever', industry: 'Consumer Goods', geography: 'Europe', sector: 'FMCG & Personal Care' },
+    { id: 'cl-003', name: 'BP PLC', commonName: 'BP', industry: 'Energy', geography: 'Europe', sector: 'Oil & Gas, Low Carbon Energy' },
+    { id: 'cl-004', name: 'Lloyds Banking Group PLC', commonName: 'Lloyds', industry: 'Financial Services', geography: 'Europe', sector: 'Retail & Commercial Banking' },
+    { id: 'cl-005', name: 'GlaxoSmithKline PLC', commonName: 'GSK', industry: 'Healthcare', geography: 'Europe', sector: 'Pharmaceuticals & Consumer Health' },
+    { id: 'cl-006', name: 'Rio Tinto Group', commonName: 'Rio Tinto', industry: 'Mining & Metals', geography: 'Global', sector: 'Mining & Natural Resources' },
+    { id: 'cl-007', name: 'Schneider Electric SE', commonName: 'Schneider Electric', industry: 'Industrial', geography: 'Europe', sector: 'Energy Management & Automation' },
+    { id: 'cl-008', name: 'Marriott International', commonName: 'Marriott', industry: 'Hospitality', geography: 'North America', sector: 'Hotels & Lodging' },
+    { id: 'cl-009', name: 'Philips N.V.', commonName: 'Philips', industry: 'Healthcare Technology', geography: 'Europe', sector: 'Health Technology & Consumer Electronics' },
+    { id: 'cl-010', name: 'Deutsche Telekom AG', commonName: 'Deutsche Telekom', industry: 'Telecommunications', geography: 'Europe', sector: 'Integrated Telecommunications' }
 ];
 
 // Application state - load persisted data
+console.log('[Startup] ========== LOADING WORKSHOP TEMPLATES ==========');
+console.log('[Startup] Timestamp:', new Date().toISOString());
+
+// First check what's ACTUALLY on disk
+const diskTemplates = credentialManager.loadAppDataFromDisk('workshopTemplates');
+console.log('[Startup] DISK CHECK - PPTX exists:', !!diskTemplates?.pptx?.content);
+console.log('[Startup] DISK CHECK - DOCX exists:', !!diskTemplates?.docx?.content);
+if (diskTemplates?.pptx) {
+    console.log('[Startup] DISK CHECK - PPTX filename:', diskTemplates.pptx.filename);
+    console.log('[Startup] DISK CHECK - PPTX uploadedAt:', diskTemplates.pptx.uploadedAt);
+    console.log('[Startup] DISK CHECK - PPTX content length:', diskTemplates.pptx.content?.length || 0);
+}
+
+// Now load via cache (which should match)
+const loadedWorkshopTemplates = credentialManager.loadAppData('workshopTemplates');
+console.log('[Startup] CACHE CHECK - PPTX template found:', !!loadedWorkshopTemplates?.pptx?.content);
+console.log('[Startup] CACHE CHECK - DOCX template found:', !!loadedWorkshopTemplates?.docx?.content);
+if (loadedWorkshopTemplates?.pptx) {
+    console.log('[Startup] CACHE CHECK - PPTX filename:', loadedWorkshopTemplates.pptx.filename);
+    console.log('[Startup] CACHE CHECK - PPTX content length:', loadedWorkshopTemplates.pptx.content?.length || 0);
+}
+console.log('[Startup] ================================================');
+
 const appState = {
     user: credentialManager.loadAppData('userSession') || null, // Persist login session
     clients: credentialManager.loadAppData('clients') || [...defaultClients],
-    workshopTemplates: credentialManager.loadAppData('workshopTemplates') || {
+    workshopTemplates: loadedWorkshopTemplates || {
         pptx: null,  // { filename, content (base64), uploadedAt }
         docx: null
     },
@@ -343,6 +391,25 @@ const appState = {
     // Learnings system - stores user preferences inferred from behavior
     learnings: credentialManager.loadAppData('narrativeLearnings') || getDefaultLearnings()
 };
+
+// Backfill commonName for existing clients that don't have one
+(function backfillCommonNames() {
+    let updated = false;
+    for (const client of appState.clients) {
+        if (!client.commonName) {
+            // Derive a short common name by stripping common suffixes
+            client.commonName = (client.name || 'Client')
+                .replace(/\s+(PLC|plc|Inc\.?|Corporation|Corp\.?|Ltd\.?|LLC|S\.?A\.?|AG|SE|N\.?V\.?|Group|Holdings|International|Incorporated)$/gi, '')
+                .replace(/\s+(PLC|plc|Inc\.?|Corporation|Corp\.?|Ltd\.?|LLC|S\.?A\.?|AG|SE|N\.?V\.?|Group|Holdings|International|Incorporated)$/gi, '') // second pass for "Group PLC" etc.
+                .trim();
+            updated = true;
+        }
+    }
+    if (updated) {
+        credentialManager.saveAppData('clients', appState.clients);
+        console.log('[Startup] Backfilled commonName for existing clients');
+    }
+})();
 
 // ============================================
 // Narrative Learning System
@@ -491,6 +558,54 @@ const validUsers = {
     'admin': { password: 'admin123', role: 'admin', name: 'System Admin' }
 };
 
+// Splash window reference
+let splashWindow = null;
+
+// Check if launched with native splash (from VBS launcher)
+const hasNativeSplash = process.argv.includes('--close-splash');
+
+// Close the native HTA splash screen
+function closeNativeSplash() {
+    if (hasNativeSplash) {
+        // Kill the HTA splash
+        const { exec } = require('child_process');
+        exec('taskkill /F /IM mshta.exe 2>nul', (err) => {
+            // Ignore errors - splash may already be closed
+        });
+    }
+}
+
+function createSplashWindow() {
+    // Skip Electron splash if native HTA splash is already showing
+    if (hasNativeSplash) {
+        return;
+    }
+    
+    const basePath = getBasePath();
+    
+    splashWindow = new BrowserWindow({
+        width: 400,
+        height: 450,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        resizable: false,
+        skipTaskbar: true,
+        center: true,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true
+        }
+    });
+    
+    splashWindow.loadFile(path.join(basePath, 'public', 'splash.html'));
+    
+    // Handle splash closed unexpectedly
+    splashWindow.on('closed', () => {
+        splashWindow = null;
+    });
+}
+
 function createWindow() {
     const basePath = getBasePath();
     
@@ -516,15 +631,31 @@ function createWindow() {
     // Load the app
     mainWindow.loadFile(path.join(basePath, 'public', 'index.html'));
 
-    // Show window when ready
+    // Show window when ready and close splash
     mainWindow.once('ready-to-show', () => {
-        mainWindow.show();
+        // Close native HTA splash if it's running
+        closeNativeSplash();
+        
+        // Close Electron splash window with a small delay for smooth transition
+        if (splashWindow && !splashWindow.isDestroyed()) {
+            setTimeout(() => {
+                if (splashWindow && !splashWindow.isDestroyed()) {
+                    splashWindow.close();
+                    splashWindow = null;
+                }
+                mainWindow.show();
+                mainWindow.focus();
+            }, 300);
+        } else {
+            mainWindow.show();
+            mainWindow.focus();
+        }
         
         // Show splash message in console
         console.log(`
 ╔═══════════════════════════════════════════════════════════════╗
 ║                                                               ║
-║   � R/StudioGPT                                               ║
+║   🚀 R/StudioGPT                                              ║
 ║   ─────────────────────────────────────────────────────────   ║
 ║   Desktop Application v1.0.0                                  ║
 ║                                                               ║
@@ -737,6 +868,34 @@ ipcMain.handle('clients:delete', async (event, { id }) => {
     return { success: true, clientName: deletedClient.name };
 });
 
+// Update a client's editable fields (e.g., commonName)
+ipcMain.handle('clients:update', async (event, { id, updates }) => {
+    const client = appState.clients.find(c => c.id === id);
+    if (!client) {
+        return { success: false, error: 'Client not found' };
+    }
+    
+    // Allow updating specific fields
+    const allowedFields = ['commonName', 'industry', 'geography', 'sector'];
+    for (const field of allowedFields) {
+        if (updates[field] !== undefined) {
+            client[field] = updates[field];
+        }
+    }
+    
+    // Persist
+    credentialManager.saveAppData('clients', appState.clients);
+    
+    auditLogger.log('CLIENT', 'UPDATED', { 
+        clientId: id,
+        clientName: client.name,
+        updatedFields: Object.keys(updates).filter(k => allowedFields.includes(k)),
+        user: appState.user?.username 
+    });
+    
+    return { success: true, client };
+});
+
 // AI-powered client creation
 ipcMain.handle('clients:aiCreate', async (event, { companyName }) => {
     const requestId = uuidv4();
@@ -766,6 +925,7 @@ ipcMain.handle('clients:aiCreate', async (event, { companyName }) => {
         const newClient = {
             id: `cl-${Date.now()}`,
             name: aiResult.officialName || companyName,
+            commonName: aiResult.commonName || aiResult.officialName || companyName,
             industry: aiResult.industry,
             geography: aiResult.geography,
             headquartersCountry: aiResult.headquartersCountry,
@@ -1262,6 +1422,162 @@ async function callOpenAIWithWebSearch(apiKey, query) {
     });
 }
 
+// Call OpenAI Responses API with web search for placeholder research
+async function callOpenAIWebSearchForResearch(apiKey, query, client) {
+    const https = require('https');
+    
+    const maxRetries = 3;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const result = await new Promise((resolve, reject) => {
+                const requestBody = JSON.stringify({
+                    model: 'gpt-4o',  // Use gpt-4o for web search
+                    input: query,
+                    tools: [{ type: 'web_search_preview' }],
+                    tool_choice: 'auto',
+                    max_output_tokens: 4000
+                });
+                
+                console.log(`[WebSearchResearch] Making request to Responses API (attempt ${attempt}/${maxRetries})...`);
+                
+                const options = {
+                    hostname: 'api.openai.com',
+                    port: 443,
+                    path: '/v1/responses',
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Length': Buffer.byteLength(requestBody)
+                    },
+                    timeout: 180000  // 3 minute timeout for research
+                };
+                
+                const req = https.request(options, (res) => {
+                    let data = '';
+                    
+                    res.on('data', (chunk) => {
+                        data += chunk;
+                    });
+                    
+                    res.on('end', () => {
+                        try {
+                            const response = JSON.parse(data);
+                            
+                            if (response.error) {
+                                console.error('[WebSearchResearch] API Error:', response.error);
+                                // Check if it's a retryable error (rate limit or server error)
+                                if (response.error.type === 'rate_limit_error' || 
+                                    response.error.code === 'rate_limit_exceeded' ||
+                                    (res.statusCode >= 500 && res.statusCode < 600)) {
+                                    reject({ retryable: true, message: response.error.message || 'Rate limited' });
+                                    return;
+                                }
+                                resolve('');
+                                return;
+                            }
+                            
+                            // Extract text content from Responses API format
+                            let textContent = '';
+                            
+                            if (response.output_text) {
+                                textContent = response.output_text;
+                            } else if (response.output && Array.isArray(response.output)) {
+                                for (const item of response.output) {
+                                    if (item.type === 'message' && item.content) {
+                                        for (const part of item.content) {
+                                            if ((part.type === 'output_text' || part.type === 'text') && part.text) {
+                                                textContent += part.text;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if (!textContent) {
+                                console.log('[WebSearchResearch] No text content found in response');
+                                resolve('');
+                                return;
+                            }
+                            
+                            console.log('[WebSearchResearch] Research content length:', textContent.length);
+                            
+                            // Return the research content (truncate if too long)
+                            const maxResearchLength = 8000;
+                            if (textContent.length > maxResearchLength) {
+                                textContent = textContent.substring(0, maxResearchLength) + '\n...[Research truncated for length]';
+                            }
+                            
+                            resolve(textContent);
+                            
+                        } catch (parseError) {
+                            console.error('[WebSearchResearch] Response parse error:', parseError);
+                            resolve('');
+                        }
+                    });
+                });
+                
+                req.on('error', (error) => {
+                    console.error('[WebSearchResearch] Request error:', error.message);
+                    // Network errors are retryable
+                    const isNetworkError = 
+                        error.code === 'ENOTFOUND' ||
+                        error.code === 'ETIMEDOUT' ||
+                        error.code === 'ECONNRESET' ||
+                        error.code === 'ECONNREFUSED' ||
+                        error.code === 'EAI_AGAIN' ||
+                        error.message.includes('getaddrinfo') ||
+                        error.message.includes('socket hang up');
+                    
+                    if (isNetworkError) {
+                        reject({ retryable: true, message: error.message, code: error.code });
+                    } else {
+                        resolve('');
+                    }
+                });
+                
+                req.setTimeout(180000, () => {
+                    console.error('[WebSearchResearch] Request timed out');
+                    req.destroy();
+                    reject({ retryable: true, message: 'Request timed out', code: 'ETIMEDOUT' });
+                });
+                
+                req.write(requestBody);
+                req.end();
+            });
+            
+            // If we got here, the request succeeded
+            return result;
+            
+        } catch (error) {
+            // Check if error is retryable and we have retries left
+            if (error.retryable && attempt < maxRetries) {
+                const delay = Math.pow(2, attempt) * 1000; // Exponential backoff: 2s, 4s, 8s
+                console.log(`[WebSearchResearch] Retryable error on attempt ${attempt}/${maxRetries}: ${error.message}. Retrying in ${delay/1000}s...`);
+                
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('ai-console-log', {
+                        agent: 'workshop',
+                        message: `⚠ Research network issue, retrying (${attempt}/${maxRetries})...`,
+                        type: 'warning'
+                    });
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+            
+            // Non-retryable error or max retries reached
+            console.error('[WebSearchResearch] Failed after retries:', error.message);
+            return '';
+        }
+    }
+    
+    // Should not reach here, but return empty string just in case
+    return '';
+}
+
 // Real OpenAI API integration for company analysis (uses rate limiter)
 async function analyzeCompanyWithOpenAI(companyName, apiKey, model = 'gpt-5.2') {
     const isO1Model = model.startsWith('o1');
@@ -1311,6 +1627,7 @@ CRITICAL DISAMBIGUATION RULES:
 Respond ONLY with a valid JSON object (no markdown, no explanation) in this exact format:
 {
     "officialName": "Full official name of the organization",
+    "commonName": "The short name this company is commonly known as in everyday business conversation (e.g., 'Reckitt' not 'Reckitt Benckiser Group plc', 'GSK' not 'GlaxoSmithKline PLC', 'BP' not 'BP PLC', 'Vodafone' not 'Vodafone Group PLC')",
     "industry": "Primary industry (Government, Technology, Healthcare, Financial Services, etc.)",
     "geography": "Region based on HEADQUARTERS (North America, Europe, APAC, LATAM, MEA)",
     "headquartersCountry": "SPECIFIC country (e.g., United Kingdom, United States, France, Germany)",
@@ -1357,8 +1674,63 @@ IMPORTANT: headquartersCountry must ALWAYS be filled in with a specific country 
         const result = JSON.parse(jsonStr);
         emitAiConsoleLog('system', `✓ Successfully analyzed "${result.officialName || companyName}" (${result.headquartersCountry || result.geography})`, 'success');
         
+        // Web search verification: confirm the current official and common names
+        // Companies rebrand (e.g., Reckitt Benckiser → Reckitt, Facebook → Meta)
+        // The AI model's training data may be stale, so we verify with a live web search
+        let verifiedOfficialName = result.officialName || companyName;
+        let verifiedCommonName = result.commonName || result.officialName || companyName;
+        
+        try {
+            emitAiConsoleLog('system', `🔍 Verifying current company name via web search...`, 'info');
+            
+            const nameVerificationQuery = `What is the current official legal name and commonly known brand name of "${companyName}" as of ${new Date().getFullYear()}? Has this company rebranded, changed its name, or simplified its trading name recently? Respond with ONLY a JSON object: {"officialName": "current full legal name", "commonName": "the short name commonly used in business and media"}`;
+            
+            const webResult = await callOpenAIWebSearchForResearch(apiKey, nameVerificationQuery, null);
+            
+            if (webResult && webResult.length > 0) {
+                // Try to extract JSON from the web search response
+                const jsonMatch = webResult.match(/\{[^{}]*"officialName"[^{}]*"commonName"[^{}]*\}/);
+                if (jsonMatch) {
+                    try {
+                        const nameData = JSON.parse(jsonMatch[0]);
+                        if (nameData.officialName && nameData.officialName.length > 1) {
+                            verifiedOfficialName = nameData.officialName;
+                            console.log(`[ClientAnalysis] Web verified official name: ${verifiedOfficialName}`);
+                        }
+                        if (nameData.commonName && nameData.commonName.length > 1) {
+                            verifiedCommonName = nameData.commonName;
+                            console.log(`[ClientAnalysis] Web verified common name: ${verifiedCommonName}`);
+                        }
+                        emitAiConsoleLog('system', `✓ Name verified: "${verifiedCommonName}" (official: ${verifiedOfficialName})`, 'success');
+                    } catch (parseErr) {
+                        console.log('[ClientAnalysis] Could not parse name verification JSON, using AI result');
+                    }
+                } else {
+                    // Fallback: try to extract names from free-text response
+                    // Look for patterns like "officially known as X" or "commonly called X"
+                    const officialMatch = webResult.match(/official(?:ly| name| legal name)[^"]*?["""]([^"""]+)["""]/i) ||
+                                          webResult.match(/legal name[^"]*?["""]([^"""]+)["""]/i);
+                    const commonMatch = webResult.match(/common(?:ly| name| known)[^"]*?["""]([^"""]+)["""]/i) ||
+                                        webResult.match(/(?:trades?|trading|branded?|known) (?:as|under)[^"]*?["""]([^"""]+)["""]/i);
+                    
+                    if (officialMatch?.[1]) {
+                        verifiedOfficialName = officialMatch[1].trim();
+                        emitAiConsoleLog('system', `✓ Official name verified: "${verifiedOfficialName}"`, 'success');
+                    }
+                    if (commonMatch?.[1]) {
+                        verifiedCommonName = commonMatch[1].trim();
+                        emitAiConsoleLog('system', `✓ Common name verified: "${verifiedCommonName}"`, 'success');
+                    }
+                }
+            }
+        } catch (verifyError) {
+            console.log('[ClientAnalysis] Name web verification failed (non-critical):', verifyError.message);
+            emitAiConsoleLog('system', `⚠ Name verification skipped (using AI result)`, 'warning');
+        }
+        
         return {
-            officialName: result.officialName || companyName,
+            officialName: verifiedOfficialName,
+            commonName: verifiedCommonName,
             industry: result.industry || 'Technology',
             geography: result.geography || 'Global',
             headquartersCountry: result.headquartersCountry || '',
@@ -1516,7 +1888,9 @@ async function simulateAIClientAnalysis(companyName) {
     if (knownCompany) {
         // Simulate processing time
         await new Promise(resolve => setTimeout(resolve, 2500));
-        return { ...knownCompany, confidence: 0.95 };
+        // Derive commonName from the lookup key (the short name the user typed)
+        const derivedCommonName = knownCompany.commonName || companyName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+        return { ...knownCompany, commonName: derivedCommonName, confidence: 0.95 };
     }
     
     // For unknown companies, generate intelligent defaults based on keywords
@@ -1559,6 +1933,7 @@ async function simulateAIClientAnalysis(companyName) {
     
     return {
         officialName: capitalizedName,
+        commonName: capitalizedName,
         industry: detectedIndustry,
         geography: 'Global',
         sector: detectedSector,
@@ -1679,7 +2054,8 @@ ipcMain.handle('sourcePack:generateZip', async (event, { clientId, context }) =>
     const sourcePrompts = credentialManager.loadAppData('sourcePrompts') || {
         chatgpt: 'Generate a comprehensive research report on {clientName} including company overview, recent news, market position, competitors, and strategic initiatives.',
         arc: 'Research Accenture assets and solutions relevant to {clientName} in the {industry} industry, focusing on transformation capabilities and case studies.',
-        alphasense: 'Provide market intelligence and analyst insights on {clientName}, including financial performance, industry trends, and competitive landscape.'
+        alphasense: 'Provide market intelligence and analyst insights on {clientName}, including financial performance, industry trends, and competitive landscape.',
+        alphasenseStrategy: 'Provide a detailed analysis of {clientName}\'s corporate strategy, including strategic priorities, transformation initiatives, growth plans, capital allocation, and executive statements on future direction.'
     };
 
     console.log(`[Source Pack] OpenAI configured: ${hasOpenAI}`);
@@ -1709,7 +2085,8 @@ ipcMain.handle('sourcePack:generateZip', async (event, { clientId, context }) =>
         const sourceResults = {
             chatgpt: { success: false, error: null, fileName: '1.0_ChatGPT_Research_Report.md' },
             arc: { success: false, error: null, fileName: '2.0_ARC_Assets_Report.md' },
-            alphasense: { success: false, error: null, fileName: '3.0_AlphaSense_Market_Report.md' }
+            alphasense: { success: false, error: null, fileName: '3.0_AlphaSense_Market_Report.md' },
+            alphasenseStrategy: { success: false, error: null, fileName: '4.0_AlphaSense_Strategy_Report.md' }
         };
         const timestamp = new Date().toISOString().split('T')[0];
 
@@ -1797,17 +2174,52 @@ ipcMain.handle('sourcePack:generateZip', async (event, { clientId, context }) =>
                 documents[sourceResults.alphasense.fileName] = alphasenseConnector.formatComprehensiveReport(client, context, alphaResults);
                 sourceResults.alphasense.success = true;
                 emitAiConsoleLog('researcher', `✓ AlphaSense: ${alphaResults?.documents?.length || 0} documents analysed`, 'success');
-                sendProgress('alphasense', 'AlphaSense market report complete', 80, 100);
+                sendProgress('alphasense', 'AlphaSense market report complete', 70, 100);
             } catch (e) {
                 console.error('[AlphaSense Error]', e);
                 sourceResults.alphasense.error = e.message;
                 emitAiConsoleLog('researcher', `⚠ AlphaSense error: ${e.message}`, 'error');
-                documents[sourceResults.alphasense.fileName] = generateSourcePlaceholder('AlphaSense', client, e.message);
+                documents[sourceResults.alphasense.fileName] = generateSourcePlaceholder('AlphaSense Market', client, e.message);
             }
         } else {
             sourceResults.alphasense.error = 'AlphaSense API not configured';
-            documents[sourceResults.alphasense.fileName] = generateSourcePlaceholder('AlphaSense', client, 'AlphaSense API not configured');
-            sendProgress('alphasense', 'AlphaSense report [PLACEHOLDER - API not configured]', 80);
+            documents[sourceResults.alphasense.fileName] = generateSourcePlaceholder('AlphaSense Market', client, 'AlphaSense API not configured');
+            sendProgress('alphasense', 'AlphaSense report [PLACEHOLDER - API not configured]', 70);
+        }
+
+        // =====================================
+        // Source 4: AlphaSense Strategy Report
+        // =====================================
+        sendProgress('alphasenseStrategy', 'Generating AlphaSense strategy report...', 75, 10);
+        
+        if (hasAlphaSense) {
+            emitAiConsoleLog('researcher', 'AlphaSense: Searching for client strategy information...', 'thinking');
+            try {
+                // Use a strategy-focused search (reusing the connector but with different focus)
+                const strategyContext = { ...context, searchFocus: 'strategy' };
+                const strategyResults = await alphasenseConnector.runComprehensiveSearch(client, strategyContext, (msg) => {
+                    emitAiConsoleLog('researcher', `AlphaSense Strategy: ${msg}`, 'thinking');
+                });
+                
+                // Format as strategy report
+                const strategyReport = alphasenseConnector.formatStrategyReport 
+                    ? alphasenseConnector.formatStrategyReport(client, context, strategyResults)
+                    : formatAlphasenseStrategyReport(client, context, strategyResults);
+                    
+                documents[sourceResults.alphasenseStrategy.fileName] = strategyReport;
+                sourceResults.alphasenseStrategy.success = true;
+                emitAiConsoleLog('researcher', `✓ AlphaSense Strategy: Client strategy analysis complete`, 'success');
+                sendProgress('alphasenseStrategy', 'AlphaSense strategy report complete', 85, 100);
+            } catch (e) {
+                console.error('[AlphaSense Strategy Error]', e);
+                sourceResults.alphasenseStrategy.error = e.message;
+                emitAiConsoleLog('researcher', `⚠ AlphaSense Strategy error: ${e.message}`, 'error');
+                documents[sourceResults.alphasenseStrategy.fileName] = generateSourcePlaceholder('AlphaSense Strategy', client, e.message);
+            }
+        } else {
+            sourceResults.alphasenseStrategy.error = 'AlphaSense API not configured';
+            documents[sourceResults.alphasenseStrategy.fileName] = generateSourcePlaceholder('AlphaSense Strategy', client, 'AlphaSense API not configured');
+            sendProgress('alphasenseStrategy', 'AlphaSense strategy report [PLACEHOLDER - API not configured]', 85);
         }
 
         sendProgress('normalize', 'Validating generated sources...', 90, 50);
@@ -1816,11 +2228,15 @@ ipcMain.handle('sourcePack:generateZip', async (event, { clientId, context }) =>
         const failedSources = [];
         for (const [source, result] of Object.entries(sourceResults)) {
             if (!result.success) {
+                const sourceName = source === 'chatgpt' ? 'ChatGPT Research Report' : 
+                      source === 'arc' ? 'ARC Assets Report' : 
+                      source === 'alphasense' ? 'AlphaSense Market Report' :
+                      source === 'alphasenseStrategy' ? 'AlphaSense Strategy Report' :
+                      source.charAt(0).toUpperCase() + source.slice(1);
+                      
                 failedSources.push({
                     id: source,
-                    name: source === 'chatgpt' ? 'ChatGPT Research Report' : 
-                          source === 'arc' ? 'ARC Assets Report' : 
-                          'AlphaSense Market Report',
+                    name: sourceName,
                     fileName: result.fileName,
                     source: source.charAt(0).toUpperCase() + source.slice(1),
                     error: result.error
@@ -1866,6 +2282,44 @@ ipcMain.handle('sourcePack:generateZip', async (event, { clientId, context }) =>
         return { success: false, error: error.message };
     }
 });
+
+// Helper function to format AlphaSense strategy report (fallback if connector doesn't have this method)
+function formatAlphasenseStrategyReport(client, context, results) {
+    const timestamp = new Date().toISOString().split('T')[0];
+    return `# AlphaSense Strategy Report
+
+**Client:** ${client.name}  
+**Industry:** ${client.industry || 'Not specified'}  
+**Generated:** ${timestamp}
+
+---
+
+## Client Strategy Analysis
+
+This report contains strategic intelligence gathered from AlphaSense regarding ${client.name}'s corporate strategy, priorities, and future direction.
+
+${results?.documents?.length ? `### Sources Analyzed: ${results.documents.length} documents` : ''}
+
+## Strategic Priorities
+
+*Analysis of ${client.name}'s stated strategic priorities and focus areas.*
+
+## Transformation Initiatives
+
+*Overview of major transformation programs and change initiatives.*
+
+## Growth Plans
+
+*Identified growth strategies, market expansion plans, and investment priorities.*
+
+## Executive Statements
+
+*Key quotes and statements from leadership regarding future direction.*
+
+---
+*Generated by AlphaSense via R/StudioGPT*
+`;
+}
 
 // Helper function to generate placeholder for failed sources
 function generateSourcePlaceholder(sourceName, client, reason) {
@@ -2226,12 +2680,14 @@ They may include:
         // Keep pendingSourcePack available for narrative generation
         // appState.pendingSourcePack = null;
         
+        // Return the source pack so it can be saved to history for later retrieval
         return {
             success: true,
             requestId,
             filePath: result.filePath,
             documentCount: Object.keys(documents).length,
-            additionalFilesCount
+            additionalFilesCount,
+            sourcePack: appState.lastSourcePack  // Include full source pack for history persistence
         };
         
     } catch (error) {
@@ -3235,10 +3691,21 @@ Remember: This is a CHEAT SHEET for busy consultants. Make it scannable, punchy,
 });
 
 // Generate Workshop Materials (use uploaded templates or generate blank files)
-ipcMain.handle('workshop:generate', async (event, { client }) => {
+ipcMain.handle('workshop:generate', async (event, { client, strategicQuestion }) => {
     const requestId = 'workshop_' + Date.now();
     
     console.log('[Workshop] Starting workshop materials generation...');
+    
+    // Store strategic question for placeholder generation (narrative is NOT used for workshops)
+    appState.currentStrategicQuestion = strategicQuestion || '';
+    
+    if (strategicQuestion) {
+        mainWindow.webContents.send('ai-console-log', {
+            agent: 'workshop',
+            message: `Strategic question provided: "${strategicQuestion.substring(0, 100)}..."`,
+            type: 'info'
+        });
+    }
     
     // Check for uploaded templates
     const hasPptxTemplate = appState.workshopTemplates?.pptx?.content;
@@ -3529,17 +3996,35 @@ ipcMain.handle('workshop:uploadTemplate', async (event, type) => {
     try {
         // Read file content
         const content = fs.readFileSync(filePath);
+        console.log(`[Workshop] Read ${type} template file: ${filename}, size: ${content.length} bytes`);
+        
+        const base64Content = content.toString('base64');
+        console.log(`[Workshop] Base64 encoded size: ${base64Content.length} chars`);
         
         const template = {
             filename: filename,
-            content: content.toString('base64'),
+            content: base64Content,
             uploadedAt: new Date().toISOString()
         };
         
         appState.workshopTemplates[type] = template;
+        console.log(`[Workshop] Template stored in appState for ${type}`);
+        console.log(`[Workshop] Template filename: ${template.filename}, content length: ${template.content.length}`);
         
-        // Persist to disk
+        // Persist to disk IMMEDIATELY (templates are critical, don't debounce)
         credentialManager.saveAppData('workshopTemplates', appState.workshopTemplates);
+        credentialManager.flushAppDataImmediate();
+        console.log(`[Workshop] Template persisted to disk immediately`);
+        
+        // Verify it was saved BY READING DIRECTLY FROM DISK (not cache)
+        const reloadedFromDisk = credentialManager.loadAppDataFromDisk('workshopTemplates');
+        console.log(`[Workshop] DISK VERIFICATION - ${type} template exists:`, !!reloadedFromDisk?.[type]?.content);
+        if (reloadedFromDisk?.[type]) {
+            console.log(`[Workshop] DISK VERIFICATION - ${type} filename: ${reloadedFromDisk[type].filename}`);
+            console.log(`[Workshop] DISK VERIFICATION - ${type} content length: ${reloadedFromDisk[type].content?.length || 0}`);
+        } else {
+            console.error(`[Workshop] CRITICAL ERROR - Template NOT saved to disk!`);
+        }
         
         auditLogger.log('ADMIN', 'WORKSHOP_TEMPLATE_UPLOADED', { 
             type: type,
@@ -3565,8 +4050,9 @@ ipcMain.handle('workshop:clearTemplate', async (event, type) => {
     
     appState.workshopTemplates[type] = null;
     
-    // Persist to disk
+    // Persist to disk immediately
     credentialManager.saveAppData('workshopTemplates', appState.workshopTemplates);
+    credentialManager.flushAppDataImmediate();
     
     auditLogger.log('ADMIN', 'WORKSHOP_TEMPLATE_CLEARED', { 
         type: type,
@@ -3584,6 +4070,15 @@ ipcMain.handle('workshop:clearTemplate', async (event, type) => {
 
 // Get workshop templates status
 ipcMain.handle('workshop:getTemplates', async () => {
+    console.log('[Workshop] Getting templates status...');
+    console.log('[Workshop] PPTX template exists:', !!appState.workshopTemplates?.pptx?.content);
+    console.log('[Workshop] DOCX template exists:', !!appState.workshopTemplates?.docx?.content);
+    
+    if (appState.workshopTemplates?.pptx) {
+        console.log('[Workshop] PPTX filename:', appState.workshopTemplates.pptx.filename);
+        console.log('[Workshop] PPTX content length:', appState.workshopTemplates.pptx.content?.length || 0);
+    }
+    
     return {
         pptx: appState.workshopTemplates?.pptx ? {
             filename: appState.workshopTemplates.pptx.filename,
@@ -4365,6 +4860,9 @@ ipcMain.handle('placeholders:add', async (event, placeholder) => {
         maxChars: placeholder.maxChars || null,
         maxCharsTitle: placeholder.maxCharsTitle || null,
         maxCharsBody: placeholder.maxCharsBody || null,
+        considerStrategicQuestion: placeholder.considerStrategicQuestion || false,
+        considerStrategy: placeholder.considerStrategy || false,
+        research: placeholder.research || false,
         createdAt: new Date().toISOString()
     };
     
@@ -4402,6 +4900,9 @@ ipcMain.handle('placeholders:update', async (event, { id, placeholder }) => {
         maxChars: placeholder.maxChars || null,
         maxCharsTitle: placeholder.maxCharsTitle || null,
         maxCharsBody: placeholder.maxCharsBody || null,
+        considerStrategicQuestion: placeholder.considerStrategicQuestion || false,
+        considerStrategy: placeholder.considerStrategy || false,
+        research: placeholder.research || false,
         updatedAt: new Date().toISOString()
     };
     
@@ -4451,7 +4952,10 @@ ipcMain.handle('placeholders:export', async () => {
         'title_body_placeholder': p.hasTitleBody ? 'TRUE' : 'FALSE',
         'max_characters_per_box': p.maxChars || '',
         'max_chars_title': p.maxCharsTitle || '',
-        'max_chars_body': p.maxCharsBody || ''
+        'max_chars_body': p.maxCharsBody || '',
+        'consider_strategic_question': p.considerStrategicQuestion ? 'TRUE' : 'FALSE',
+        'consider_client_strategy': p.considerStrategy ? 'TRUE' : 'FALSE',
+        'research': p.research ? 'TRUE' : 'FALSE'
     }));
     
     // Create workbook
@@ -4468,7 +4972,10 @@ ipcMain.handle('placeholders:export', async () => {
         { wch: 20 },  // title_body_placeholder
         { wch: 20 },  // max_characters_per_box
         { wch: 15 },  // max_chars_title
-        { wch: 15 }   // max_chars_body
+        { wch: 15 },  // max_chars_body
+        { wch: 25 },  // consider_strategic_question
+        { wch: 22 },  // consider_client_strategy
+        { wch: 12 }   // research
     ];
     
     // Show save dialog
@@ -4539,6 +5046,9 @@ ipcMain.handle('placeholders:import', async () => {
             const maxCharsVal = row['max_characters_per_box'] || row['Max_Characters_Per_Box'] || row['MAX_CHARACTERS_PER_BOX'] || row['max characters per box'] || row['Max Characters Per Box'];
             const maxCharsTitleVal = row['max_chars_title'] || row['Max_Chars_Title'] || row['MAX_CHARS_TITLE'] || row['max chars title'] || row['Max Chars Title'];
             const maxCharsBodyVal = row['max_chars_body'] || row['Max_Chars_Body'] || row['MAX_CHARS_BODY'] || row['max chars body'] || row['Max Chars Body'];
+            const considerStrategicQuestionVal = row['consider_strategic_question'] || row['Consider_Strategic_Question'] || row['CONSIDER_STRATEGIC_QUESTION'] || row['consider strategic question'] || row['Consider Strategic Question'];
+            const considerStrategyVal = row['consider_client_strategy'] || row['Consider_Client_Strategy'] || row['CONSIDER_CLIENT_STRATEGY'] || row['consider client strategy'] || row['Consider Client Strategy'];
+            const researchVal = row['research'] || row['Research'] || row['RESEARCH'];
             
             // Validate required fields
             if (!name) {
@@ -4553,6 +5063,9 @@ ipcMain.handle('placeholders:import', async () => {
             // Parse boolean values
             const isList = listVal === true || listVal === 'TRUE' || listVal === 'true' || listVal === '1' || listVal === 1;
             const hasTitleBody = titleBodyVal === true || titleBodyVal === 'TRUE' || titleBodyVal === 'true' || titleBodyVal === '1' || titleBodyVal === 1;
+            const considerStrategicQuestion = considerStrategicQuestionVal === true || considerStrategicQuestionVal === 'TRUE' || considerStrategicQuestionVal === 'true' || considerStrategicQuestionVal === '1' || considerStrategicQuestionVal === 1;
+            const considerStrategy = considerStrategyVal === true || considerStrategyVal === 'TRUE' || considerStrategyVal === 'true' || considerStrategyVal === '1' || considerStrategyVal === 1;
+            const research = researchVal === true || researchVal === 'TRUE' || researchVal === 'true' || researchVal === '1' || researchVal === 1;
             
             // Parse list items count
             let listCount = 5; // Default
@@ -4601,6 +5114,9 @@ ipcMain.handle('placeholders:import', async () => {
                 maxChars: maxChars,
                 maxCharsTitle: maxCharsTitle,
                 maxCharsBody: maxCharsBody,
+                considerStrategicQuestion: considerStrategicQuestion,
+                considerStrategy: considerStrategy,
+                research: research,
                 createdAt: new Date().toISOString()
             };
             
@@ -4644,8 +5160,11 @@ async function processTemplateWithPlaceholders(templateBuffer, client, fileType)
         const zip = new PizZip(templateBuffer);
         
         // Built-in placeholders
+        // Note: client_name uses commonName (short/known-as name) for deck output
+        // The full official name is kept in client.name for internal tool use
         const builtInData = {
-            client_name: client?.name || 'Client',
+            client_name: client?.commonName || client?.name || 'Client',
+            client_full_name: client?.name || 'Client',
             industry: client?.industry || 'Industry',
             geography: client?.geography || 'Geography',
             sector: client?.sector || 'Sector',
@@ -4719,18 +5238,30 @@ async function processTemplateWithPlaceholders(templateBuffer, client, fileType)
         // Get source pack content for AI
         const sourcePack = appState.pendingSourcePack || appState.lastSourcePack;
         let sourcePackContent = '';
+        let strategyDocumentContent = '';
+        
         if (sourcePack?.documents) {
             for (const [filename, content] of Object.entries(sourcePack.documents)) {
                 if (typeof content === 'string' && content.length > 0) {
                     sourcePackContent += `\n\n=== ${filename} ===\n${content.substring(0, 5000)}`;
+                    
+                    // Extract strategy document specifically for considerStrategy flag
+                    if (filename.includes('Strategy_Report') || filename.includes('strategy')) {
+                        strategyDocumentContent += content;
+                    }
                 }
             }
+            
+            // Store strategy content in appState for use by generatePlaceholderContent
+            appState.currentStrategyContent = strategyDocumentContent;
+            
             mainWindow.webContents.send('ai-console-log', {
                 agent: 'workshop',
-                message: `Source pack has ${Object.keys(sourcePack.documents).length} documents for AI context`,
+                message: `Source pack has ${Object.keys(sourcePack.documents).length} documents for AI context${strategyDocumentContent ? ' (strategy document found)' : ''}`,
                 type: 'info'
             });
         } else {
+            appState.currentStrategyContent = '';
             mainWindow.webContents.send('ai-console-log', {
                 agent: 'workshop',
                 message: `Warning: No source pack content available for AI generation`,
@@ -4910,7 +5441,10 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the formatted ite
                     const aiContent = await generatePlaceholderContent(
                         listTitleBodyPrompt,
                         client,
-                        sourcePackContent
+                        sourcePackContent,
+                        placeholder.considerStrategicQuestion || false,
+                        placeholder.considerStrategy || false,
+                        placeholder.research || false
                     );
                     
                     if (aiContent && !aiContent.startsWith('[Error:')) {
@@ -4967,7 +5501,10 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
                     const aiContent = await generatePlaceholderContent(
                         listPrompt,
                         client,
-                        sourcePackContent
+                        sourcePackContent,
+                        placeholder.considerStrategicQuestion || false,
+                        placeholder.considerStrategy || false,
+                        placeholder.research || false
                     );
                     
                     if (aiContent && !aiContent.startsWith('[Error:')) {
@@ -5027,7 +5564,10 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                     const aiContent = await generatePlaceholderContent(
                         titleBodyPrompt,
                         client,
-                        sourcePackContent
+                        sourcePackContent,
+                        placeholder.considerStrategicQuestion || false,
+                        placeholder.considerStrategy || false,
+                        placeholder.research || false
                     );
                     
                     if (aiContent && !aiContent.startsWith('[Error:')) {
@@ -5075,7 +5615,10 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                     const aiContent = await generatePlaceholderContent(
                         promptWithLimit,
                         client,
-                        sourcePackContent
+                        sourcePackContent,
+                        placeholder.considerStrategicQuestion || false,
+                        placeholder.considerStrategy || false,
+                        placeholder.research || false
                     );
                     
                     if (aiContent && aiContent.startsWith('[Error:')) {
@@ -5774,8 +6317,11 @@ function parseListTitleBodyContent(content, expectedCount) {
 }
 
 // Helper: Generate placeholder content with AI
-async function generatePlaceholderContent(prompt, client, sourcePackContent) {
+async function generatePlaceholderContent(prompt, client, sourcePackContent, considerStrategicQuestion = false, considerStrategy = false, research = false) {
     console.log('[Workshop] generatePlaceholderContent called with prompt:', prompt);
+    console.log('[Workshop] considerStrategicQuestion:', considerStrategicQuestion);
+    console.log('[Workshop] considerStrategy:', considerStrategy);
+    console.log('[Workshop] research:', research);
     
     const openaiCreds = credentialManager.getCredentials('openai');
     if (!openaiCreds?.apiKey) {
@@ -5786,21 +6332,179 @@ async function generatePlaceholderContent(prompt, client, sourcePackContent) {
     console.log('[Workshop] Using model:', openaiCreds.model || 'gpt-5.2');
     console.log('[Workshop] Source pack content length:', sourcePackContent?.length || 0);
     
+    // Get strategic question - only used if placeholder has considerStrategicQuestion flag
+    const strategicQuestion = appState.currentStrategicQuestion || '';
+    
+    // Get strategy document content - only used if placeholder has considerStrategy flag
+    const strategyContent = appState.currentStrategyContent || '';
+    
+    if (considerStrategicQuestion && strategicQuestion) {
+        console.log('[Workshop] Strategic question will be considered as a factor for this placeholder');
+    }
+    
+    if (considerStrategy && strategyContent) {
+        console.log('[Workshop] Client strategy document will be used as context for this placeholder');
+    }
+    
     try {
         const systemPrompt = `You are an expert business analyst helping prepare workshop materials. 
 Generate content based on the user's prompt, using information from the provided source pack.
 Be concise and professional. Format for presentation/document use.
+
 Client: ${client?.name || 'Unknown'}
 Industry: ${client?.industry || 'Unknown'}
-Geography: ${client?.geography || 'Unknown'}`;
+Geography: ${client?.geography || 'Unknown'}
+
+CRITICAL - DIVERSITY FOR PERSONAS/SCENARIOS:
+When generating personas, scenarios, or any content with personal details:
+
+NAMES:
+- Use DIVERSE names from different cultural backgrounds (Western, Asian, African, Latin, Middle Eastern, etc.)
+- NEVER use similar-sounding names like Mia/Mira/Mara or John/Jon/Johan in the same output
+- Vary name lengths and styles (e.g., Priya, Marcus, Yuki, Oluwaseun, Elena, Jin-Ho, Ahmed, Chidera)
+
+AGES:
+- Use a WIDE range of ages appropriate to the persona role (22-65 for professionals)
+- NEVER repeat the same age - vary by at least 5-10 years between personas
+- Include young professionals (22-30), mid-career (31-45), and senior (46-65)
+- Avoid defaulting to 34 - use specific varied ages like 27, 38, 52, 41, 29, 56, 33, 48
+
+LOCATIONS:
+- Use DIVERSE global cities, not just Berlin or major capitals
+- Match locations to the client's actual geographic footprint and markets
+- Include tier-2 cities, not just London/NYC/Berlin (e.g., Lyon, Osaka, Austin, Mumbai, Cape Town, São Paulo, Melbourne, Rotterdam)
+- Vary across regions: Europe, Americas, Asia-Pacific, Middle East, Africa
+- NEVER repeat the same city within a set of personas
+
+Match diversity to the client's geography - if global, reflect global diversity.
+
+CRITICAL - USE SPECIFIC DATA FROM SOURCE PACK:
+- Extract and USE specific brand names, product names, and service names mentioned in the source pack
+- Include specific data points: percentages, market sizes, growth rates, financial figures
+- Reference the client's actual strategy, priorities, and initiatives mentioned in the documents
+- Mention specific competitors, partners, or customers if referenced in the source pack
+- Use real numbers and facts - never make up generic statistics
+- If the source pack mentions specific capabilities, technologies, or solutions, name them explicitly`;
 
         // Limit source pack content to avoid token limits
         const truncatedSourcePack = sourcePackContent ? sourcePackContent.substring(0, 30000) : '';
 
-        const userPrompt = `${prompt}
+        // Build strategic context injection - ONLY if placeholder flag is set
+        // This is a FACTOR in the output, not the main topic
+        let strategicContextInjection = '';
+        if (considerStrategicQuestion && strategicQuestion) {
+            strategicContextInjection = `
+STRATEGIC CONTEXT (consider as a factor, not the main topic):
+The workshop is informed by this strategic question: "${strategicQuestion}"
+
+When relevant, incorporate themes from this question into your response. However:
+- Your response should primarily focus on what the prompt asks for
+- The strategic question is CONTEXT, not the main subject
+- Only reference strategic themes where they naturally fit
+- Do NOT make the entire response about the strategic question
+
+`;
+        }
+        
+        // Build client strategy context injection - ONLY if placeholder flag is set
+        let strategyContextInjection = '';
+        if (considerStrategy && strategyContent) {
+            // Truncate strategy content if too long
+            const truncatedStrategy = strategyContent.substring(0, 8000);
+            strategyContextInjection = `
+CLIENT STRATEGY CONTEXT (use as grounding, not the main topic):
+The following is the client's strategy document. Use it to ground your response in the client's actual priorities and direction:
+
+${truncatedStrategy}
+
+When generating content:
+- Reference the client's stated strategic priorities where relevant
+- Align your response with their transformation initiatives and goals
+- Use their terminology and stated focus areas
+- Do NOT summarize the strategy - use it to inform your response to the prompt
+
+`;
+        }
+
+        // Perform web research if enabled
+        let webResearchContent = '';
+        if (research) {
+            console.log('[Workshop] Performing web research for placeholder...');
+            
+            // Emit progress to UI
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('ai-console-log', {
+                    agent: 'workshop',
+                    message: `🔍 Researching online: "${prompt.substring(0, 80)}..."`,
+                    type: 'info'
+                });
+            }
+            
+            try {
+                // Build a research query from the prompt and client context
+                const researchQuery = `Research the following for ${client?.name || 'the company'} (${client?.industry || 'business'}):
+                
+${prompt}
+
+Provide current, factual information including:
+- Recent developments and news
+- Market data and statistics
+- Industry trends relevant to this topic
+- Specific facts, figures, and dates
+
+Focus on actionable insights. Include sources where possible.`;
+                
+                // Use the existing web search function
+                const webResults = await callOpenAIWebSearchForResearch(openaiCreds.apiKey, researchQuery, client);
+                
+                if (webResults && webResults.length > 0) {
+                    webResearchContent = `
+WEB RESEARCH FINDINGS (from online sources):
+${webResults}
+
+`;
+                    console.log('[Workshop] Web research completed, found content');
+                    
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('ai-console-log', {
+                            agent: 'workshop',
+                            message: `✓ Web research completed - found current information`,
+                            type: 'success'
+                        });
+                    }
+                } else {
+                    console.log('[Workshop] No web research results found');
+                }
+            } catch (researchError) {
+                console.error('[Workshop] Web research error:', researchError.message);
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('ai-console-log', {
+                        agent: 'workshop',
+                        message: `⚠ Web research unavailable, using source pack only`,
+                        type: 'warning'
+                    });
+                }
+            }
+        }
+
+        const userPrompt = `${strategicContextInjection}${strategyContextInjection}${webResearchContent}${prompt}
 
 SOURCE PACK CONTENT:
 ${truncatedSourcePack || 'No source pack content available.'}
+
+═══════════════════════════════════════════════════════════════════════════════
+IMPORTANT: MINE THE SOURCE PACK FOR SPECIFICS
+═══════════════════════════════════════════════════════════════════════════════
+Before generating content, scan the source pack above and extract:
+1. Specific brand/product names (use them by name, not generically)
+2. Actual data points (market share %, revenue figures, growth rates)
+3. Named strategies or initiatives the client has mentioned
+4. Specific competitor names if relevant
+5. Real numbers and benchmarks
+
+Your response MUST include these specific details - not generic placeholders.
+If the source pack mentions "Product X achieved 23% growth", say that - don't say "strong growth".
+═══════════════════════════════════════════════════════════════════════════════
 
 Generate the content now. Be direct and concise - this will be inserted into a template.`;
 
@@ -5826,17 +6530,73 @@ Generate the content now. Be direct and concise - this will be inserted into a t
             requestBody.max_tokens = 1000;
         }
         
-        const response = await axios.post('https://api.openai.com/v1/chat/completions', requestBody, {
-            headers: {
-                'Authorization': `Bearer ${openaiCreds.apiKey}`,
-                'Content-Type': 'application/json'
-            },
-            timeout: 60000
-        });
+        // Retry logic for transient network errors
+        const maxRetries = 3;
+        let lastError = null;
         
-        const result = response.data.choices?.[0]?.message?.content?.trim() || '';
-        console.log('[Workshop] AI generated content length:', result.length);
-        return result;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const response = await axios.post('https://api.openai.com/v1/chat/completions', requestBody, {
+                    headers: {
+                        'Authorization': `Bearer ${openaiCreds.apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 60000
+                });
+                
+                const result = response.data.choices?.[0]?.message?.content?.trim() || '';
+                console.log('[Workshop] AI generated content length:', result.length);
+                return result;
+            } catch (apiError) {
+                lastError = apiError;
+                const errorCode = apiError.code || '';
+                const errorMessage = apiError.message || '';
+                
+                // Check if this is a retryable network error
+                const isNetworkError = 
+                    errorCode === 'ENOTFOUND' ||
+                    errorCode === 'ETIMEDOUT' ||
+                    errorCode === 'ECONNRESET' ||
+                    errorCode === 'ECONNREFUSED' ||
+                    errorCode === 'EAI_AGAIN' ||
+                    errorMessage.includes('getaddrinfo') ||
+                    errorMessage.includes('socket hang up') ||
+                    errorMessage.includes('network') ||
+                    (apiError.response?.status >= 500 && apiError.response?.status < 600);
+                
+                // Check for rate limiting (429) - also retryable
+                const isRateLimited = apiError.response?.status === 429;
+                
+                if ((isNetworkError || isRateLimited) && attempt < maxRetries) {
+                    const delay = Math.pow(2, attempt) * 1000; // Exponential backoff: 2s, 4s, 8s
+                    console.log(`[Workshop] Retryable error on attempt ${attempt}/${maxRetries}: ${errorMessage}. Retrying in ${delay/1000}s...`);
+                    
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('ai-console-log', {
+                            agent: 'workshop',
+                            message: `⚠ Network issue, retrying (${attempt}/${maxRetries})...`,
+                            type: 'warning'
+                        });
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
+                
+                // Non-retryable error or max retries reached - break out
+                break;
+            }
+        }
+        
+        // If we got here, all retries failed
+        console.error('[Workshop] AI generation error after retries:', lastError.message);
+        if (lastError.response) {
+            console.error('[Workshop] API response status:', lastError.response.status);
+            console.error('[Workshop] API response data:', JSON.stringify(lastError.response.data));
+        }
+        // Return error with more detail
+        const errorDetail = lastError.response?.data?.error?.message || lastError.message;
+        return `[Error: ${errorDetail}]`;
     } catch (error) {
         console.error('[Workshop] AI generation error:', error.message);
         if (error.response) {
@@ -5943,39 +6703,54 @@ Perform a comprehensive extraction across ALL documents. For EACH category below
 - Who are the target audience members?
 - What are their roles, priorities, and preferences?
 
-## 2. KEY FACTS & STATISTICS
-- Numbers, percentages, financial figures, market sizes
+## 2. SPECIFIC BRANDS, PRODUCTS & SERVICES
+- Extract ALL brand names, product names, and service names mentioned
+- Note product categories and portfolio structure
+- Identify flagship products or priority brands
+- Include any specific product metrics (market share, revenue, growth)
+
+## 3. KEY FACTS & STATISTICS (USE EXACT NUMBERS)
+- Numbers, percentages, financial figures, market sizes - EXACT VALUES ONLY
 - Growth rates, benchmarks, quantitative data points
+- Revenue figures, market share percentages, customer counts
 - Include the source document for each
+- NEVER paraphrase "strong growth" - extract the actual number like "23% growth"
 
-## 3. CLIENT-SPECIFIC INSIGHTS
-- Information about ${client?.name || 'the client'}'s situation
-- Challenges, opportunities, competitive position
-- Strategic priorities mentioned
+## 4. CLIENT-SPECIFIC STRATEGY & PRIORITIES
+- Information about ${client?.name || 'the client'}'s stated strategy
+- Named initiatives, programs, or transformation efforts
+- Specific priorities mentioned by leadership
+- Competitive positioning and stated differentiators
 
-## 4. INDUSTRY & MARKET DYNAMICS
+## 5. INDUSTRY & MARKET DYNAMICS
 - Trends, disruptions, competitive landscape
 - Regulatory factors, technology shifts
+- Named competitors and their positioning
 
-## 5. PROBLEMS & PAIN POINTS
+## 6. PROBLEMS & PAIN POINTS
 - Challenges, risks, inefficiencies
 - Capability gaps, threats, barriers
 
-## 6. OPPORTUNITIES & VALUE DRIVERS
+## 7. OPPORTUNITIES & VALUE DRIVERS
 - Growth opportunities, efficiency gains
 - Transformation potential, competitive advantages
 
-## 7. SOLUTIONS & CAPABILITIES
+## 8. SOLUTIONS & CAPABILITIES
 - Specific solutions, technologies, methodologies
 - Assets or capabilities that could address challenges
 
-## 8. POWERFUL QUOTES & STATEMENTS
+## 9. POWERFUL QUOTES & STATEMENTS
 - Impactful phrases, executive statements
 - Quotable insights with source attribution
 
-## 9. CROSS-CUTTING THEMES
+## 10. CROSS-CUTTING THEMES
 - Themes appearing across multiple documents
 - These are often the most important strategic threads
+
+CRITICAL: When you extract data, use EXACT VALUES from the documents:
+- DON'T say "significant market share" - say "23% market share"
+- DON'T say "leading brand" - say "Brand X, the #2 player in category Y"
+- DON'T paraphrase - quote the specific numbers and names
 
 Be exhaustive. Extract EVERYTHING of value. Note which document each insight came from.`;
 
@@ -5986,7 +6761,7 @@ Be exhaustive. Extract EVERYTHING of value. Note which document each insight cam
     
     try {
         const analysis = await callOpenAI(openaiCreds.apiKey, model, [
-            { role: 'system', content: 'You are a meticulous research analyst who extracts every valuable insight from documents. You never miss important details and always cite your sources.' },
+            { role: 'system', content: 'You are a meticulous research analyst who extracts every valuable insight from documents. You extract EXACT data points, brand names, product names, and statistics - never paraphrasing numbers into vague descriptions. You always cite your sources.' },
             { role: 'user', content: analysisPrompt }
         ], 6000);
         
@@ -6115,13 +6890,38 @@ async function runNarratorAgent(analysisOutput, strategyOutput, agentPrompt, cli
         console.log('[Narrator] Applying learned preferences to narrative generation');
     }
     
-    const narrativePrompt = `You are a world-class executive narrative writer, crafting strategy documents for C-suite leaders.
+    // Extract length constraints from the user's prompt and calculate word limit
+    const lengthConstraint = extractLengthConstraint(agentPrompt);
+    const wordLimit = lengthConstraint.wordLimit;
+    
+    console.log(`[Narrator] Detected length constraint: ${wordLimit} words max (${lengthConstraint.fontSize}pt font)`);
+    
+    // Calculate approximate section budget to help AI plan
+    const sectionBudget = Math.floor(wordLimit / 4);
+    
+    const narrativePrompt = `
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ⚠️  MANDATORY LENGTH CONSTRAINT - READ FIRST  ⚠️                            ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  MAXIMUM: ${wordLimit} WORDS (${Math.ceil(wordLimit / 500)} pages A4 at ${lengthConstraint.fontSize}pt)                                    ║
+║                                                                              ║
+║  This is a HARD LIMIT from the user's brief. You MUST:                       ║
+║  • Write COMPLETE sentences and sections (never cut off mid-thought)         ║
+║  • Stay UNDER ${wordLimit} words total                                              ║
+║  • Budget roughly ${sectionBudget} words per major section                            ║
+║  • Use TABLES to compress data (tables are more concise than prose)          ║
+║  • Be ruthlessly concise - every word must earn its place                    ║
+║                                                                              ║
+║  Exceeding ${wordLimit} words makes the output UNACCEPTABLE to the user.            ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
 CLIENT: ${client?.name || 'Unknown'}
 INDUSTRY: ${client?.industry || 'Unknown'}
 CONTEXT: ${context?.outputIntent || 'Executive Narrative'}
 
-=== YOUR WRITING BRIEF ===
+=== YOUR WRITING BRIEF (from user) ===
 ${agentPrompt}
 === END OF BRIEF ===
 
@@ -6134,40 +6934,142 @@ ${safeStrategy}
 === END OF ARCHITECTURE ===
 ${learnedPreferences ? `
 === LEARNED USER PREFERENCES ===
-The following preferences have been learned from the user's previous iterations and edits. Apply these to make the narrative better match their expectations:
-
 ${learnedPreferences}
 === END OF LEARNED PREFERENCES ===
 ` : ''}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 NOW WRITE THE NARRATIVE.
 
-IMPORTANT: You MUST write a complete narrative using whatever information is available. If some source insights are limited, work with what you have and make reasonable inferences for a ${client?.industry || 'Unknown'} sector client. Do NOT refuse to write or ask for more information.
+Remember:
+• MAXIMUM ${wordLimit} words - this is from the user's brief, not negotiable
+• Complete every section fully - never stop mid-sentence
+• Use markdown tables for data (they're more concise than prose)
+• If running long, cut CONTENT not STRUCTURE
 
-STRUCTURE TO FOLLOW:
-1. Opening Belief / Identity - A powerful statement about the client's current moment
-2. Purpose - Why this approach exists
-3. Goals - 3-5 clear strategic, commercial, and experiential goals
-4. Signature Capabilities - 4-6 named components with descriptions
-5. End-to-End Flow - How the approach moves from ambition to execution
-6. Expected Impact - Strategic, commercial, and relationship outcomes
-
-WRITING GUIDELINES:
-- Use the ANALYST'S INSIGHTS as your factual foundation where available
-- Follow the STRATEGIST'S ARCHITECTURE for structure and angles
-- Write in an executive, confident, declarative tone
-- Replace {{client_name}} with "${client?.name || 'the client'}"
-- Make it feel like a polished strategy document from a top-tier consulting firm
-
-Write the complete narrative now:`;
+Begin writing:`;
 
     const model = openaiCreds.model || 'gpt-5.2';
+    
+    // Use generous max_tokens to ensure narrative completes - length is enforced via prompt instructions
+    const maxTokens = 8000;
+    console.log(`[Narrator] Target word limit: ${wordLimit} words (enforced via prompt, not token limit)`);
+    
     const narrative = await callOpenAI(openaiCreds.apiKey, model, [
-        { role: 'system', content: 'You are an elite executive writer who crafts narratives that win C-suite trust and commitment. Your writing is confident, grounded, and commercially compelling. You ALWAYS produce a complete narrative - never refuse or ask for more information. Work with what you have.' },
+        { role: 'system', content: `You are an elite executive writer crafting board-ready narratives.
+
+CRITICAL RULES:
+1. WORD LIMIT: Stay under ${wordLimit} words. Be concise.
+2. COMPLETE ALL SECTIONS: Never create a heading without substantial content beneath it.
+3. USE TABLES: When presenting structured data, comparisons, or stakeholder analysis, use markdown tables.
+4. NEVER REFERENCE SOURCES: Don't mention "source pack", "sources", or "documents". Write as a consultant, not an AI.
+5. CLEAN HEADINGS: Never include parenthetical instructions in headings.
+6. FOLLOW THE BRIEF EXACTLY: Every section they request must have substantial content.
+
+SPECIFICITY RULE (CRITICALLY IMPORTANT):
+- USE SPECIFIC BRAND NAMES: If the source mentions "Brand X" or "Product Y", use those exact names
+- USE EXACT DATA: If the analyst found "23% market share", write "23% market share" - not "significant share"
+- REFERENCE REAL INITIATIVES: If the client has named strategies (e.g., "Project Phoenix", "Vision 2030"), use those names
+- NAME COMPETITORS: If competitive data is provided, name the actual competitors
+- CITE SPECIFIC METRICS: Revenue figures, growth percentages, customer counts - use the real numbers
+- NEVER BE VAGUE: Replace every "significant", "substantial", "leading" with the actual data point
+
+Your narrative should read like someone who has DEEP knowledge of the client's business, brands, and market position.
+
+STRATEGIC QUESTION FRAMING (THIS IS THE MOST IMPORTANT RULE):
+
+If the prompt includes a "strategic question" or "exam question", you MUST:
+
+1. EXTRACT THE KEY THEMES from the question. For example, if the question is:
+   "How might we build upon customer data, route to market, and product innovation to win with the shopper and retailer in an AI-led market?"
+   
+   Key themes are: "customer data", "route to market", "product innovation", "win with shopper", "win with retailer", "AI-led market"
+
+2. THESE THEMES BECOME YOUR VOCABULARY. Use these exact phrases repeatedly throughout the narrative:
+   - The Opening Belief should directly address the core challenge (e.g., "winning with the shopper and retailer")
+   - The Strategy section should name the foundations as pillars (e.g., "four foundations: customer data, route to market, product innovation, consumer research")
+   - The Shifts should be framed as transformations OF these foundations
+   - The Conclusion should return to the question's language
+
+3. STRUCTURE THE NARRATIVE AS AN ANSWER:
+   - If the question asks "how might we win with shoppers and retailers", then EVERY section should be about shopper/retailer outcomes
+   - Don't write a generic "AI transformation" narrative with occasional references
+   - Write a "winning with shoppers and retailers through AI" narrative from start to finish
+
+4. TEST YOURSELF: After writing, a reader should be able to reverse-engineer the strategic question from your narrative. If they can't tell what question you were answering, you've failed.
+
+Do NOT mention "strategic question" or "exam question" in output. The themes should be woven naturally.
+
+You always complete the full narrative. Never stop mid-section.` },
         { role: 'user', content: narrativePrompt }
-    ], 8000);
+    ], maxTokens);
+    
+    // Log actual word count
+    const actualWordCount = narrative?.split(/\s+/).length || 0;
+    console.log(`[Narrator] Generated narrative: ${actualWordCount} words (target: ${wordLimit})`);
+    
+    if (actualWordCount > wordLimit * 1.2) {
+        emitLog('narrator', `📝 Narrative is ${actualWordCount} words (target: ${wordLimit}) - consider iterating to condense`, 'info');
+    }
     
     emitLog('narrator', '✓ Executive narrative complete', 'success');
     return narrative;
+}
+
+/**
+ * Extract length constraints from user prompt and calculate appropriate word limit
+ */
+function extractLengthConstraint(prompt) {
+    const lowerPrompt = prompt.toLowerCase();
+    
+    // Pattern 1: "no more than X pages" or "maximum X pages"
+    const pageMatch = lowerPrompt.match(/(?:no more than|maximum|max|under|within)\s*(\d+)\s*pages?(?:\s*(?:of\s*)?a4)?/i) ||
+                      lowerPrompt.match(/(\d+)\s*pages?\s*(?:of\s*)?a4/i) ||
+                      lowerPrompt.match(/(\d+)\s*a4\s*pages?/i);
+    
+    // Pattern 2: Explicit word limits
+    const wordMatch = lowerPrompt.match(/(?:maximum|max|no more than|under|within)\s*(\d+)\s*words?/i) ||
+                      lowerPrompt.match(/(\d+)\s*words?\s*(?:max|maximum|limit)/i);
+    
+    // Pattern 3: Font size detection for more accurate page calculation
+    const fontMatch = lowerPrompt.match(/(?:size\s*)?(\d+(?:\.\d+)?)\s*(?:pt|font)/i);
+    const fontSize = fontMatch ? parseFloat(fontMatch[1]) : 11; // Default 11pt
+    
+    // Words per page calculation based on font size (A4 with normal margins)
+    // Conservative estimates accounting for headers, spacing, tables, bullet points
+    let wordsPerPage = 450; // Default for 11pt
+    if (fontSize <= 10) {
+        wordsPerPage = 550;
+    } else if (fontSize <= 10.5) {
+        wordsPerPage = 500;
+    } else if (fontSize <= 11) {
+        wordsPerPage = 450;
+    } else if (fontSize <= 12) {
+        wordsPerPage = 400;
+    } else {
+        wordsPerPage = 350;
+    }
+    
+    let wordLimit = 1000; // Default: ~2 pages
+    let instruction = 'Maximum 1000 words (approximately 2 pages A4).';
+    
+    if (wordMatch) {
+        wordLimit = parseInt(wordMatch[1]);
+        instruction = `Maximum ${wordLimit} words as specified in your brief.`;
+    } else if (pageMatch) {
+        const pages = parseInt(pageMatch[1]);
+        wordLimit = pages * wordsPerPage;
+        instruction = `Maximum ${wordLimit} words (${pages} pages A4 at ${fontSize}pt font).`;
+    }
+    
+    console.log(`[LengthConstraint] Detected: ${wordLimit} words (font: ${fontSize}pt, ${wordsPerPage} words/page)`);
+    
+    return {
+        wordLimit,
+        instruction,
+        wordsPerPage,
+        fontSize
+    };
 }
 
 // ============================================
@@ -6718,6 +7620,19 @@ ipcMain.handle('narrativeChat:reset', async (event) => {
     narrativeChatCancelled = false;
     console.log('[NarrativeChat] History reset');
     return { success: true };
+});
+
+// Set source pack from history (when user views a history entry)
+ipcMain.handle('narrativeChat:setSourcePack', async (event, sourcePack) => {
+    if (sourcePack && sourcePack.documents) {
+        appState.pendingSourcePack = sourcePack;
+        appState.lastSourcePack = sourcePack;
+        console.log('[NarrativeChat] Source pack restored from history with', Object.keys(sourcePack.documents).length, 'documents');
+        return { success: true, documentCount: Object.keys(sourcePack.documents).length };
+    } else {
+        console.log('[NarrativeChat] No valid source pack provided');
+        return { success: false, error: 'Invalid source pack' };
+    }
 });
 
 // Generate Narrative - Multi-Agent Flow
@@ -7825,11 +8740,24 @@ ${sourcePack.sources.map(s => `- [${s.name}] - ${s.source} (${s.type})`).join('\
 // App Lifecycle
 // ============================================
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+    // Show splash screen IMMEDIATELY (before any heavy loading)
+    createSplashWindow();
+    
+    // Use setImmediate to let splash render before heavy imports
+    setImmediate(() => {
+        // Load heavy modules in background while splash is visible
+        loadHeavyModules();
+        
+        // Create main window (will show when ready)
+        createWindow();
+    });
+});
 
 app.on('window-all-closed', () => {
-    // Save any pending learnings before quitting
+    // Save any pending data before quitting
     saveLearningsImmediate();
+    credentialManager.flushAppDataImmediate();
     
     if (process.platform !== 'darwin') {
         app.quit();

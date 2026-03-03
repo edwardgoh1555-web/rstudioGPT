@@ -1438,11 +1438,27 @@ input[type="file"] {
     gap: var(--spacing-xs);
 }
 
+.client-name-group {
+    flex: 1;
+    min-width: 0;
+}
+
 .client-name {
     font-weight: 600;
     color: var(--text-primary);
     font-size: 0.9rem;
-    flex: 1;
+    display: block;
+}
+
+.client-official-name {
+    font-size: 0.72rem;
+    color: var(--text-tertiary);
+    font-weight: 400;
+    display: block;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .client-delete-btn {
@@ -2741,6 +2757,36 @@ input[type="file"] {
     margin-left: var(--spacing-sm);
 }
 
+.added-file-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    flex-shrink: 0;
+}
+
+.replace-file-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: var(--spacing-xs);
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.replace-file-btn:hover {
+    color: var(--primary);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.replace-file-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
 .remove-file-btn {
     background: none;
     border: none;
@@ -3702,6 +3748,25 @@ input[type="file"] {
 
 .agent-prompt-input::placeholder {
     color: var(--text-muted);
+}
+
+/* Strategic Question Input - special styling */
+.strategic-question-input {
+    min-height: 80px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.strategic-question-input:focus {
+    border-color: var(--primary);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
+}
+
+.label-hint {
+    font-weight: 400;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-left: var(--spacing-xs);
 }
 
 .field-hint {
@@ -6435,6 +6500,63 @@ input[type="file"] {
     margin: var(--spacing-md) 0;
     color: var(--text-secondary);
     font-style: italic;
+}
+
+/* Narrative Tables */
+.narrative-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: var(--spacing-lg) 0;
+    font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.narrative-table thead {
+    background: rgba(99, 102, 241, 0.15);
+}
+
+.narrative-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-primary);
+    border-bottom: 2px solid rgba(99, 102, 241, 0.3);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.narrative-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+    vertical-align: top;
+}
+
+.narrative-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.narrative-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.narrative-table td strong {
+    color: var(--text-primary);
+}
+
+.narrative-table td em {
+    color: var(--text-muted);
+}
+
+/* Compact table variant for dense data */
+.narrative-table.compact th,
+.narrative-table.compact td {
+    padding: 8px 12px;
+    font-size: 0.85rem;
 }
 
 /* Narrative History Section */

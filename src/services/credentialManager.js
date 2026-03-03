@@ -29,6 +29,11 @@ const getAppDataFilePath = () => path.join(getDataPath(), 'appdata.enc');
 // In-memory credential store
 let credentialStore = new Map();
 
+// In-memory cache for app data (avoids reading/decrypting file on every save)
+let appDataCache = null;
+let appDataDirty = false;
+let saveDebounceTimer = null;
+
 // Token cache for short-lived access tokens
 const tokenCache = new Map();
 
@@ -88,49 +93,156 @@ class CredentialManager {
 
     /**
      * Save arbitrary app data to disk (for clients, generated packs, etc.)
+     * Uses in-memory cache for speed, with debounced disk writes
      */
     saveAppData(key, data) {
         try {
-            const filePath = getAppDataFilePath();
-            let allData = {};
-            
-            if (fs.existsSync(filePath)) {
-                const encryptedData = fs.readFileSync(filePath, 'utf8');
-                const decryptedData = CryptoJS.AES.decrypt(encryptedData, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8);
-                allData = JSON.parse(decryptedData);
+            // Initialize cache from disk if needed
+            if (appDataCache === null) {
+                this._loadAppDataCache();
             }
             
-            allData[key] = data;
+            // Update cache immediately (fast)
+            appDataCache[key] = data;
             
-            const jsonData = JSON.stringify(allData);
-            const encryptedData = CryptoJS.AES.encrypt(jsonData, ENCRYPTION_KEY).toString();
-            fs.writeFileSync(filePath, encryptedData, 'utf8');
-            console.log(`[CredentialManager] Saved app data: ${key}`);
+            // Debounce disk write - wait 500ms before writing to avoid rapid consecutive writes
+            if (saveDebounceTimer) {
+                clearTimeout(saveDebounceTimer);
+            }
+            
+            saveDebounceTimer = setTimeout(() => {
+                this._flushAppDataToDisk();
+            }, 500);
+            
+            console.log(`[CredentialManager] Saved app data: ${key} (cached, pending flush)`);
             return true;
         } catch (error) {
             console.error('[CredentialManager] Error saving app data:', error.message);
             return false;
         }
     }
+    
+    /**
+     * Load app data cache from disk
+     */
+    _loadAppDataCache() {
+        try {
+            const filePath = getAppDataFilePath();
+            if (fs.existsSync(filePath)) {
+                const encryptedData = fs.readFileSync(filePath, 'utf8');
+                const decryptedData = CryptoJS.AES.decrypt(encryptedData, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8);
+                appDataCache = JSON.parse(decryptedData);
+            } else {
+                appDataCache = {};
+            }
+        } catch (error) {
+            console.error('[CredentialManager] Error loading app data cache:', error.message);
+            appDataCache = {};
+        }
+    }
+    
+    /**
+     * Flush app data cache to disk
+     */
+    _flushAppDataToDisk() {
+        try {
+            if (appDataCache === null) return;
+            
+            const filePath = getAppDataFilePath();
+            const jsonData = JSON.stringify(appDataCache);
+            const encryptedData = CryptoJS.AES.encrypt(jsonData, ENCRYPTION_KEY).toString();
+            
+            // Log what we're about to write for templates
+            if (appDataCache.workshopTemplates) {
+                const wt = appDataCache.workshopTemplates;
+                console.log(`[CredentialManager] _flushAppDataToDisk - workshopTemplates PPTX: ${!!wt?.pptx?.content}, DOCX: ${!!wt?.docx?.content}`);
+                if (wt?.pptx) console.log(`[CredentialManager] _flushAppDataToDisk - PPTX filename: ${wt.pptx.filename}`);
+            }
+            
+            fs.writeFileSync(filePath, encryptedData, 'utf8');
+            console.log('[CredentialManager] Flushed app data to disk, file size:', encryptedData.length);
+        } catch (error) {
+            console.error('[CredentialManager] Error flushing app data:', error.message);
+        }
+    }
+    
+    /**
+     * Immediately flush app data to disk (skips debounce)
+     * Use this for critical saves like templates, or before app close
+     */
+    flushAppDataImmediate() {
+        // Clear any pending debounce timer
+        if (saveDebounceTimer) {
+            clearTimeout(saveDebounceTimer);
+            saveDebounceTimer = null;
+        }
+        // Flush immediately
+        this._flushAppDataToDisk();
+    }
 
     /**
-     * Load arbitrary app data from disk
+     * Load arbitrary app data from disk (uses cache for speed)
      */
     loadAppData(key) {
         try {
+            // Use cache if available
+            if (appDataCache !== null) {
+                const value = appDataCache[key] || null;
+                console.log(`[CredentialManager] loadAppData('${key}') from cache, exists: ${value !== null}`);
+                return value;
+            }
+            
+            // Otherwise load from disk and cache
+            console.log(`[CredentialManager] loadAppData('${key}') - cache miss, loading from disk`);
+            this._loadAppDataCache();
+            const value = appDataCache[key] || null;
+            console.log(`[CredentialManager] loadAppData('${key}') after disk load, exists: ${value !== null}`);
+            return value;
+        } catch (error) {
+            console.error('[CredentialManager] Error loading app data:', error.message);
+            return null;
+        }
+    }
+    
+    /**
+     * Read data directly from disk, bypassing cache (for verification)
+     */
+    loadAppDataFromDisk(key) {
+        try {
             const filePath = getAppDataFilePath();
+            console.log(`[CredentialManager] loadAppDataFromDisk('${key}') - reading from: ${filePath}`);
+            
             if (!fs.existsSync(filePath)) {
+                console.log(`[CredentialManager] loadAppDataFromDisk('${key}') - file does not exist`);
                 return null;
             }
             
             const encryptedData = fs.readFileSync(filePath, 'utf8');
             const decryptedData = CryptoJS.AES.decrypt(encryptedData, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8);
-            const allData = JSON.parse(decryptedData);
-            return allData[key] || null;
+            const data = JSON.parse(decryptedData);
+            const value = data[key] || null;
+            
+            console.log(`[CredentialManager] loadAppDataFromDisk('${key}') - exists: ${value !== null}`);
+            if (key === 'workshopTemplates' && value) {
+                console.log(`[CredentialManager] loadAppDataFromDisk('workshopTemplates') - PPTX: ${!!value?.pptx?.content}, DOCX: ${!!value?.docx?.content}`);
+                if (value?.pptx) console.log(`[CredentialManager] PPTX filename: ${value.pptx.filename}, uploadedAt: ${value.pptx.uploadedAt}`);
+            }
+            
+            return value;
         } catch (error) {
-            console.error('[CredentialManager] Error loading app data:', error.message);
+            console.error('[CredentialManager] Error loading app data from disk:', error.message);
             return null;
         }
+    }
+    
+    /**
+     * Refresh cache from disk (use after external modifications)
+     */
+    refreshCacheFromDisk() {
+        console.log('[CredentialManager] Forcing cache refresh from disk...');
+        appDataCache = null;  // Clear cache
+        this._loadAppDataCache();  // Reload from disk
+        console.log('[CredentialManager] Cache refreshed, workshopTemplates exists:', !!appDataCache?.workshopTemplates);
     }
 
     initializeDemoCredentials() {

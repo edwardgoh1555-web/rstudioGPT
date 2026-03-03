@@ -140,8 +140,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const savedPacks = await window.electronAPI.appData.loadGeneratedPacks();
             if (savedPacks && Array.isArray(savedPacks)) {
-                state.generatedPacks = savedPacks;
-                console.log(`Loaded ${savedPacks.length} saved Source Packs from history`);
+                // Migrate old entries to new client-session model
+                const migrated = migrateHistoryEntries(savedPacks);
+                state.generatedPacks = migrated;
+                console.log(`[History] Loaded ${migrated.length} history entries`);
+                // Persist migrated data
+                window.electronAPI.appData.saveGeneratedPacks(migrated);
             }
         } catch (e) {
             console.warn('Could not load saved packs:', e);
@@ -316,8 +320,8 @@ async function showMainApp() {
         try {
             const savedPacks = await window.electronAPI.appData.loadGeneratedPacks();
             if (savedPacks && Array.isArray(savedPacks)) {
-                state.generatedPacks = savedPacks;
-                console.log(`Loaded ${savedPacks.length} saved Source Packs from history`);
+                state.generatedPacks = migrateHistoryEntries(savedPacks);
+                console.log(`[History] Loaded ${state.generatedPacks.length} entries on re-login`);
             }
         } catch (e) {
             console.warn('Could not load saved packs:', e);
@@ -429,6 +433,7 @@ function renderClientGrid(filter = '') {
     const filteredClients = state.clients.filter(client => {
         const searchTerm = filter.toLowerCase();
         return client.name.toLowerCase().includes(searchTerm) ||
+               (client.commonName || '').toLowerCase().includes(searchTerm) ||
                client.industry.toLowerCase().includes(searchTerm) ||
                client.geography.toLowerCase().includes(searchTerm);
     });
@@ -472,7 +477,10 @@ function renderClientGrid(filter = '') {
         <div class="client-card ${state.selectedClient?.id === client.id ? 'selected' : ''} ${client.aiGenerated ? 'new-client' : ''}" 
              data-client-id="${client.id}">
             <div class="client-card-header">
-                <span class="client-name">${client.name}</span>
+                <div class="client-name-group">
+                    <span class="client-name">${client.commonName || client.name}</span>
+                    ${client.commonName && client.commonName !== client.name ? `<span class="client-official-name">${client.name}</span>` : ''}
+                </div>
                 <button class="client-delete-btn" data-client-id="${client.id}" data-client-name="${client.name}" title="Delete client">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14"/>
@@ -512,6 +520,7 @@ function renderClientGrid(filter = '') {
             deleteClient(clientId, clientName);
         });
     });
+    
 }
 
 // Delete a client
@@ -557,6 +566,9 @@ function selectClient(clientId) {
         // Reset POC file when selecting a new client
         state.pocFile = null;
         resetPocUploadUI();
+        
+        // Save to history immediately on client selection
+        saveClientHistory('client-created');
         
         // Move to step 2
         goToStep(2);
@@ -710,7 +722,7 @@ function goToStep(stepNumber) {
     if (stepNumber === 2 && state.selectedClient) {
         elements.selectedClientName.textContent = state.selectedClient.name;
         elements.selectedClientMeta.textContent = 
-            `${state.selectedClient.industry} • ${state.selectedClient.geography}`;
+            `${state.selectedClient.commonName ? 'Known as: ' + state.selectedClient.commonName + ' • ' : ''}${state.selectedClient.industry} • ${state.selectedClient.geography}`;
     }
     
     // Trigger C-suite web research when entering step 3 (generation starts)
@@ -1116,6 +1128,9 @@ async function startGeneration() {
             goToStep(4);
             resetAddDocumentsStep();
             
+            // Save source pack progress to history
+            saveClientHistory('source-pack');
+            
             showToast('Research complete! Add any additional documents or continue.', 'success');
         } else if (result.canceled) {
             showToast('Generation cancelled', 'info');
@@ -1357,11 +1372,18 @@ function updateAddedFilesList() {
                 <span class="added-file-name">${file.name}</span>
                 <span class="added-file-size">${formatFileSize(file.size)}</span>
             </div>
-            <button type="button" class="remove-file-btn" data-index="${index}" title="Remove file">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-            </button>
+            <div class="added-file-actions">
+                <button type="button" class="replace-file-btn" data-index="${index}" title="Replace file">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                </button>
+                <button type="button" class="remove-file-btn" data-index="${index}" title="Remove file">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
         </div>
     `).join('');
     
@@ -1372,6 +1394,38 @@ function updateAddedFilesList() {
             state.additionalFiles.splice(index, 1);
             updateAddedFilesList();
             updateProceedButtonText();
+            showToast('File removed', 'info');
+        });
+    });
+    
+    // Add replace handlers
+    elements.addedFilesList.querySelectorAll('.replace-file-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const index = parseInt(e.currentTarget.dataset.index);
+            const oldFileName = state.additionalFiles[index]?.name;
+            
+            try {
+                const result = await window.electronAPI.sourcePack.addFiles();
+                
+                if (result.success && result.addedFiles && result.addedFiles.length > 0) {
+                    // Replace the file at this index with the first selected file
+                    state.additionalFiles[index] = result.addedFiles[0];
+                    
+                    // If user selected multiple files, add the rest
+                    if (result.addedFiles.length > 1) {
+                        for (let i = 1; i < result.addedFiles.length; i++) {
+                            state.additionalFiles.push(result.addedFiles[i]);
+                        }
+                    }
+                    
+                    updateAddedFilesList();
+                    updateProceedButtonText();
+                    showToast(`Replaced "${oldFileName}" with "${result.addedFiles[0].name}"`, 'success');
+                }
+            } catch (error) {
+                console.error('Error replacing file:', error);
+                showToast('Error replacing file', 'error');
+            }
         });
     });
 }
@@ -1437,23 +1491,11 @@ async function finalizeSourcePack() {
             // Store result info for narrative generation
             state.sourcePackResult = result;
             
-            // Store in history
-            state.generatedPacks.unshift({
-                id: result.requestId,
-                client: state.selectedClient,
-                filePath: result.filePath,
-                documentCount: result.documentCount,
-                additionalFilesCount: result.additionalFilesCount || 0,
-                context: state.pendingGenerationContext,
-                sourcePack: { context: state.pendingGenerationContext },
-                validation: { status: 'ready', statusLabel: '✅ Ready' },
-                generatedAt: new Date().toISOString()
-            });
+            // Also store the source pack content for later use
+            state.currentSourcePack = result.sourcePack;
             
-            // Persist generated packs to disk
-            if (window.electronAPI.appData) {
-                window.electronAPI.appData.saveGeneratedPacks(state.generatedPacks);
-            }
+            // Update the client's history entry with the exported source pack
+            saveClientHistory('source-pack');
             
             // Add to activity
             const docText = result.additionalFilesCount > 0 
@@ -1624,54 +1666,21 @@ function setupAddDocumentsListeners() {
     }
 }
 
-// Move from step 4 to step 5 (Source Chat)
+// Move from step 4 to step 5 (Narrative)
 function proceedToSourceChat() {
-    // Move to Step 5 (Source Chat)
+    // Move to Step 5 (Narrative) - skipping the old builder step
     goToStep(5);
     
-    // Initialize the source chat
-    initializeSourceChat();
-    
-    // Save to history (so it appears even if user doesn't export)
-    saveToHistory();
+    // Populate the narrative step
+    populateNarrativeStep();
 }
 
-// Save current source pack to history
+// Save current source pack to history (placeholder for source-pack-level checkpoint)
+// NOTE: History is managed by saveClientHistory() and addNarrativeToHistory().
 function saveToHistory() {
-    if (!state.pendingGenerationResult || !state.selectedClient) return;
-    
-    // Check if this pack is already in history
-    const existingIndex = state.generatedPacks.findIndex(p => 
-        p.id === state.pendingGenerationResult.requestId
-    );
-    
-    if (existingIndex >= 0) {
-        // Already in history, skip
-        return;
-    }
-    
-    // Add to history
-    const historyEntry = {
-        id: state.pendingGenerationResult.requestId || 'pack_' + Date.now(),
-        client: state.selectedClient,
-        context: state.pendingGenerationContext,
-        sourcePack: { context: state.pendingGenerationContext },
-        validation: { status: 'ready', statusLabel: '✅ Ready' },
-        generatedAt: new Date().toISOString()
-    };
-    
-    state.generatedPacks.unshift(historyEntry);
-    
-    // Persist to disk
-    if (state.isElectron && window.electronAPI?.appData) {
-        window.electronAPI.appData.saveGeneratedPacks(state.generatedPacks);
-    }
-    
-    // Update UI
-    updateDashboardStats();
-    updateHistoryView();
-    
-    console.log('[History] Saved pack to history:', historyEntry.id);
+    // No-op — history is saved after narrative generation completes.
+    // Keeping function stub so any callers don't break.
+    console.log('[History] saveToHistory() called — history will be saved after narrative generation.');
 }
 
 // ============================================
@@ -1765,7 +1774,7 @@ function setupSourceChatListeners() {
     
     if (skipBtn) {
         skipBtn.addEventListener('click', () => {
-            goToStep(6);
+            goToStep(5);
             populateNarrativeStep();
         });
     }
@@ -1773,9 +1782,9 @@ function setupSourceChatListeners() {
     if (usePromptBtn) {
         usePromptBtn.addEventListener('click', () => {
             if (sourceChat.generatedPrompt) {
-                // Store the generated prompt to inject into Step 6
+                // Store the generated prompt to inject into Step 5
                 state.narrativeBuilderPrompt = sourceChat.generatedPrompt;
-                goToStep(6);
+                goToStep(5);
                 populateNarrativeStep();
             }
         });
@@ -1785,7 +1794,7 @@ function setupSourceChatListeners() {
         editPromptBtn.addEventListener('click', () => {
             if (sourceChat.generatedPrompt) {
                 state.narrativeBuilderPrompt = sourceChat.generatedPrompt;
-                goToStep(6);
+                goToStep(5);
                 populateNarrativeStep();
             }
         });
@@ -2049,10 +2058,10 @@ function setupNarrativeListeners() {
     narrativeListenersSetup = true;
     console.log('[Narrative] Setting up listeners...');
     
-    // Back button
+    // Back button - go back to step 4 (Add Additional Docs)
     const backBtn = document.getElementById('backToReviewBtn');
     if (backBtn) {
-        backBtn.addEventListener('click', () => goToStep(5));
+        backBtn.addEventListener('click', () => goToStep(4));
     }
     
     // Generate narrative button
@@ -2123,10 +2132,29 @@ function setupNarrativeListeners() {
 
 // Populate narrative step with current source pack info
 async function populateNarrativeStep() {
+    // Compute source pack summary from actual state
+    let sourceCount = 0;
+    
+    // Use the document count from the generation result if available
+    if (state.pendingGenerationResult?.documentCount) {
+        sourceCount = state.pendingGenerationResult.documentCount;
+    } else {
+        // Fall back to counting individual sources
+        if (state.sourceResults?.chatgpt?.success) sourceCount++;
+        if (state.sourceResults?.arc?.success) sourceCount++;
+        if (state.sourceResults?.alphasense?.success) sourceCount++;
+    }
+    
+    // Add user-provided documents
+    if (state.pocFile) sourceCount++;
+    sourceCount += state.additionalFiles?.length || 0;
+    
+    const docCountText = sourceCount > 0 ? `${sourceCount} document${sourceCount !== 1 ? 's' : ''}` : '--';
+    
     // Update source pack summary
-    document.getElementById('narrativeClientName').textContent = state.selectedClient?.name || '--';
-    document.getElementById('narrativeDocCount').textContent = state.sourcePackDocCount || '--';
-    document.getElementById('narrativeGenDate').textContent = state.sourcePackGenDate || '--';
+    document.getElementById('narrativeClientName').textContent = state.selectedClient?.commonName || state.selectedClient?.name || '--';
+    document.getElementById('narrativeDocCount').textContent = docCountText;
+    document.getElementById('narrativeGenDate').textContent = state.pendingGenerationResult ? new Date().toLocaleString() : '--';
     
     const promptTextarea = document.getElementById('narrativeAgentPrompt');
     
@@ -2198,11 +2226,27 @@ async function generateNarrative() {
     narrativeGenerationCancelled = false;
     narrativeAbortController = new AbortController();
     
-    const agentPrompt = document.getElementById('narrativeAgentPrompt')?.value || '';
+    const strategicQuestion = document.getElementById('strategicQuestion')?.value?.trim() || '';
+    const narrativeInstructions = document.getElementById('narrativeAgentPrompt')?.value || '';
+    
+    // Combine strategic question with narrative instructions if present
+    let agentPrompt = narrativeInstructions;
+    if (strategicQuestion) {
+        agentPrompt = `────────────────────────────────
+STRATEGIC QUESTION (this frames everything below)
+────────────────────────────────
+
+${strategicQuestion}
+
+────────────────────────────────
+
+${narrativeInstructions}`;
+    }
     
     console.log('[Narrative] Agent prompt length:', agentPrompt?.length || 0);
+    console.log('[Narrative] Strategic question provided:', !!strategicQuestion);
     
-    if (!agentPrompt || agentPrompt.trim().length < 10) {
+    if (!narrativeInstructions || narrativeInstructions.trim().length < 10) {
         showToast('Please enter narrative instructions', 'warning');
         return;
     }
@@ -2247,7 +2291,7 @@ async function generateNarrative() {
                 const usedAgentPrompt = document.getElementById('narrativeAgentPrompt')?.value || '';
                 
                 // Save the narrative for this client
-                if (result.content && state.selectedClient?.id) {
+                if (result.content) {
                     const newNarrative = {
                         id: 'narr_' + Date.now(),
                         content: result.content,
@@ -2257,22 +2301,33 @@ async function generateNarrative() {
                         agentPrompt: usedAgentPrompt  // Save the instructions used
                     };
                     
-                    await saveNarrative(state.selectedClient.id, {
-                        content: result.content,
-                        outputIntent: result.outputIntent
-                    });
+                    // Save to overall history FIRST (most important — always runs)
+                    addNarrativeToHistory(newNarrative);
                     
-                    // Also add to the overall history for quick access
-                    addNarrativeToOverallHistory(newNarrative);
+                    // Then save per-client narrative (secondary)
+                    if (state.selectedClient?.id) {
+                        try {
+                            await saveNarrative(state.selectedClient.id, {
+                                content: result.content,
+                                outputIntent: result.outputIntent
+                            });
+                        } catch (saveErr) {
+                            console.error('[Narrative] Per-client save failed (history still saved):', saveErr);
+                        }
+                    }
                     
                     // Capture generation signal for learning
                     captureGenerationSignal(result.content);
                     
                     // Reload narrative history (but don't auto-display)
-                    await loadClientNarratives(state.selectedClient.id);
+                    if (state.selectedClient?.id) {
+                        await loadClientNarratives(state.selectedClient.id);
+                    }
                     
-                    // Now display the newly generated narrative (source pack is already in state)
-                    displayNarrative(newNarrative);
+                    // Now display the newly generated narrative
+                    // Pass the history entry ID so chat messages get saved correctly
+                    const histEntry = state.generatedPacks.find(p => p.clientId === state.selectedClient?.id);
+                    displayNarrative(newNarrative, null, null, histEntry?.id || null);
                 }
             } else if (result.canceled) {
                 showToast('Narrative generation canceled', 'info');
@@ -2454,6 +2509,7 @@ const narrativeChat = {
     currentNarrativeContent: null,
     currentSourcePack: null,  // Store the source pack for this chat session
     currentHistoryEntryId: null,  // Track which history entry this chat belongs to
+    currentNarrativeId: null,     // Track which narrative version within the entry
     highlightedText: null,  // Store user-highlighted text from narrative
     currentMode: 'ask',  // 'ask' or 'iterate'
     abortController: null,  // For cancelling requests
@@ -3026,17 +3082,19 @@ function applyNarrativeUpdate(updatedNarrative, message) {
         state.currentDisplayedNarrative.lastEdited = new Date().toISOString();
     }
     
-    // Update the history entry
+    // Update the history entry (find active narrative within the client session)
     if (narrativeChat.currentHistoryEntryId) {
         const historyEntry = state.generatedPacks.find(p => p.id === narrativeChat.currentHistoryEntryId);
-        if (historyEntry && historyEntry.narrative) {
-            historyEntry.narrative.content = updatedNarrative;
-            historyEntry.narrative.lastEdited = new Date().toISOString();
+        if (historyEntry && historyEntry.narratives) {
+            const narrativeId = narrativeChat.currentNarrativeId || historyEntry.activeNarrativeId;
+            const narrative = historyEntry.narratives.find(n => n.id === narrativeId);
+            if (narrative) {
+                narrative.content = updatedNarrative;
+                narrative.lastEdited = new Date().toISOString();
+            }
             
             // Persist to disk
-            if (window.electronAPI?.appData) {
-                window.electronAPI.appData.saveGeneratedPacks(state.generatedPacks);
-            }
+            persistHistory();
         }
     }
     
@@ -3252,12 +3310,17 @@ function saveChatToHistoryEntry() {
     
     const historyEntry = state.generatedPacks.find(p => p.id === narrativeChat.currentHistoryEntryId);
     if (historyEntry) {
-        historyEntry.chatHistory = [...narrativeChat.messages];
+        // Find the active narrative within the entry
+        const narrativeId = narrativeChat.currentNarrativeId || historyEntry.activeNarrativeId;
+        if (narrativeId && historyEntry.narratives) {
+            const narrative = historyEntry.narratives.find(n => n.id === narrativeId);
+            if (narrative) {
+                narrative.chatHistory = [...narrativeChat.messages];
+            }
+        }
         
         // Persist to disk
-        if (window.electronAPI?.appData) {
-            window.electronAPI.appData.saveGeneratedPacks(state.generatedPacks);
-        }
+        persistHistory();
     }
 }
 
@@ -3391,24 +3454,32 @@ function flashNarrativeSuccess() {
 function renderMarkdownToHtml(markdown) {
     if (!markdown) return '<p class="text-muted">No content</p>';
     
+    // FIRST: Process bold BEFORE any other transformations (this is critical!)
+    // Use multiple passes to catch all patterns
     let html = markdown
-        // Escape HTML
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
+        .replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')  // Non-greedy match
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');    // Greedy fallback
+    
+    // Now process tables
+    html = processMarkdownTables(html);
+    
+    html = html
+        // Escape HTML entities (but preserve our already-created tags)
+        .replace(/&(?!amp;|lt;|gt;|nbsp;)/g, '&amp;')
         // Headers
         .replace(/^### (.+)$/gm, '<h3>$1</h3>')
         .replace(/^## (.+)$/gm, '<h2>$1</h2>')
         .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-        // Bold
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        // Italic
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        // Italic (single asterisks, not touching our strong tags)
+        .replace(/(?<![*<])\*([^*<>]+)\*(?![*>])/g, '<em>$1</em>')
         // Bullet points
         .replace(/^- (.+)$/gm, '<li>$1</li>')
         .replace(/^• (.+)$/gm, '<li>$1</li>')
+        // Numbered lists
+        .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
         // Horizontal rules
         .replace(/^---$/gm, '<hr>')
+        .replace(/^───+$/gm, '<hr>')
         // Blockquotes
         .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
         // Paragraphs (double newline)
@@ -3428,6 +3499,117 @@ function renderMarkdownToHtml(markdown) {
     html = html.replace(/<p><\/p>/g, '');
     html = html.replace(/<p><br><\/p>/g, '');
     
+    // Clean up paragraphs around tables
+    html = html.replace(/<p><table/g, '<table');
+    html = html.replace(/<\/table><\/p>/g, '</table>');
+    html = html.replace(/<br><table/g, '<table');
+    html = html.replace(/<\/table><br>/g, '</table>');
+    
+    // Final cleanup: catch ANY remaining ** patterns (multiple passes)
+    // This catches edge cases the earlier regex missed
+    while (html.includes('**')) {
+        html = html.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    }
+    
+    return html;
+}
+
+/**
+ * Process markdown tables into HTML tables
+ */
+function processMarkdownTables(markdown) {
+    const lines = markdown.split('\n');
+    let result = [];
+    let inTable = false;
+    let tableRows = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Check if this line is a table row (starts and ends with |, or contains | with content)
+        const isTableRow = /^\|(.+)\|$/.test(line) || /^[^|]+\|[^|]+/.test(line);
+        const isSeparator = /^\|?[\s\-:|]+\|?$/.test(line) && line.includes('-');
+        
+        if (isTableRow || isSeparator) {
+            if (!inTable) {
+                inTable = true;
+                tableRows = [];
+            }
+            tableRows.push(line);
+        } else {
+            if (inTable) {
+                // End of table, convert collected rows
+                result.push(convertTableToHtml(tableRows));
+                tableRows = [];
+                inTable = false;
+            }
+            result.push(lines[i]); // Keep original line (not trimmed)
+        }
+    }
+    
+    // Handle table at end of content
+    if (inTable && tableRows.length > 0) {
+        result.push(convertTableToHtml(tableRows));
+    }
+    
+    return result.join('\n');
+}
+
+/**
+ * Convert markdown table rows to HTML table
+ */
+function convertTableToHtml(rows) {
+    if (rows.length < 2) return rows.join('\n'); // Not a valid table
+    
+    // Find the separator row (contains ---)
+    let separatorIndex = -1;
+    for (let i = 0; i < rows.length; i++) {
+        if (/^\|?[\s\-:|]+\|?$/.test(rows[i]) && rows[i].includes('-')) {
+            separatorIndex = i;
+            break;
+        }
+    }
+    
+    // Parse cells from a row
+    const parseCells = (row) => {
+        // Remove leading/trailing pipes and split
+        let cleaned = row.replace(/^\||\|$/g, '');
+        return cleaned.split('|').map(cell => cell.trim());
+    };
+    
+    let html = '<table class="narrative-table">';
+    
+    // Process header (rows before separator)
+    if (separatorIndex > 0) {
+        html += '<thead><tr>';
+        const headerCells = parseCells(rows[0]);
+        headerCells.forEach(cell => {
+            html += `<th>${cell}</th>`;
+        });
+        html += '</tr></thead>';
+    }
+    
+    // Process body (rows after separator, or all rows if no separator)
+    const bodyStart = separatorIndex >= 0 ? separatorIndex + 1 : 0;
+    if (bodyStart < rows.length) {
+        html += '<tbody>';
+        for (let i = bodyStart; i < rows.length; i++) {
+            const cells = parseCells(rows[i]);
+            html += '<tr>';
+            cells.forEach(cell => {
+                // Apply bold/italic formatting within cells
+                let formattedCell = cell
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+                html += `<td>${formattedCell}</td>`;
+            });
+            html += '</tr>';
+        }
+        html += '</tbody>';
+    }
+    
+    html += '</table>';
     return html;
 }
 
@@ -3624,8 +3806,12 @@ async function downloadWorkshopMaterials() {
     
     try {
         if (state.isElectron && window.electronAPI?.workshop) {
+            // Get the strategic question (if provided) - narrative is NOT passed to workshops
+            const strategicQuestion = document.getElementById('strategicQuestion')?.value?.trim() || '';
+            
             const result = await window.electronAPI.workshop.generate({
-                client: state.selectedClient
+                client: state.selectedClient,
+                strategicQuestion: strategicQuestion
             });
             
             console.log('[Workshop] Result:', result);
@@ -5095,9 +5281,9 @@ function renderReviewPreview() {
         }
     });
     
-    // Continue button - goes to narrative step
+    // Continue button - goes to narrative step (now step 5)
     document.getElementById('continueToNarrativeBtn')?.addEventListener('click', () => {
-        goToStep(6);
+        goToStep(5);
         populateNarrativeStep();
     });
 }
@@ -5601,11 +5787,12 @@ function downloadBlob(blob, filename) {
 // Dashboard Functions
 // ============================================
 function updateDashboardStats() {
-    document.getElementById('statPacks').textContent = state.generatedPacks.length;
-    document.getElementById('statReady').textContent = 
-        state.generatedPacks.filter(p => p.validation?.status === 'ready').length;
+    const sessions = state.generatedPacks.filter(p => p.type === 'client-session');
+    const totalNarratives = sessions.reduce((sum, s) => sum + (s.narratives?.length || 0), 0);
+    document.getElementById('statPacks').textContent = sessions.length;
+    document.getElementById('statReady').textContent = totalNarratives;
     document.getElementById('statCaveats').textContent = 
-        state.generatedPacks.filter(p => p.validation?.status === 'ready_with_caveats').length;
+        sessions.filter(p => p.stage === 'source-pack').length;
     document.getElementById('statClients').textContent = state.clients.length || 8;
 }
 
@@ -5693,90 +5880,349 @@ function addActivity(text, type = 'info') {
 }
 
 // ============================================
-// History Functions
+// History Functions — Client-Session Model
 // ============================================
+// Each client has ONE history entry. Progress & narratives are nested.
+// Stages: 'client-created' → 'source-pack' → 'narrative'
 
-// Add a narrative to the overall history (so it appears in the sidebar history)
-function addNarrativeToOverallHistory(narrative) {
-    const entryId = narrative.id || 'narr_' + Date.now();
-    const historyEntry = {
-        id: entryId,
-        type: 'narrative',  // Distinguish from source pack
-        client: state.selectedClient,
-        narrative: narrative,  // Store the full narrative
-        pocFile: state.pocFile,  // Store POC content for Intel Pack
-        context: state.currentContext || state.pendingGenerationContext,
-        sourcePack: state.currentSourcePack,  // Full source pack with documents
-        // Save researched contacts for this narrative
-        contacts: {
-            current: state.researchedContacts?.current || [],
-            exited: state.researchedContacts?.exited || []
-        },
-        // Save the agent prompt/instructions used for this narrative
-        agentPrompt: narrative.agentPrompt || document.getElementById('narrativeAgentPrompt')?.value || '',
-        // Initialize empty chat history (will be populated as user chats)
-        chatHistory: [],
-        validation: { status: 'ready', statusLabel: '✅ Narrative' },
-        generatedAt: narrative.timestamp || new Date().toISOString()
-    };
+/**
+ * Migrate old history entries to the new client-session model.
+ * Old entries had type: 'narrative' with a single narrative object.
+ * New entries have type: 'client-session' with narratives[] array.
+ */
+function migrateHistoryEntries(entries) {
+    const clientMap = new Map(); // clientId → merged entry
+    const result = [];
     
-    // Store current history entry ID for saving chat messages
-    narrativeChat.currentHistoryEntryId = entryId;
+    for (const entry of entries) {
+        // Already new format
+        if (entry.type === 'client-session') {
+            const key = entry.clientId || entry.client?.id;
+            if (key && clientMap.has(key)) {
+                // Merge narratives into existing
+                const existing = clientMap.get(key);
+                if (entry.narratives) {
+                    for (const n of entry.narratives) {
+                        if (!existing.narratives.find(en => en.id === n.id)) {
+                            existing.narratives.push(n);
+                        }
+                    }
+                }
+                // Keep the more advanced stage
+                const stageOrder = ['client-created', 'source-pack', 'narrative'];
+                if (stageOrder.indexOf(entry.stage) > stageOrder.indexOf(existing.stage)) {
+                    existing.stage = entry.stage;
+                    existing.sourcePack = entry.sourcePack || existing.sourcePack;
+                    existing.context = entry.context || existing.context;
+                }
+            } else if (key) {
+                clientMap.set(key, entry);
+                result.push(entry);
+            } else {
+                result.push(entry); // Keep entries we can't merge
+            }
+            continue;
+        }
+        
+        // Old format: type === 'narrative' (or no type)
+        if (entry.type === 'narrative' || !entry.type) {
+            const clientId = entry.client?.id;
+            if (!clientId) continue; // Skip entries with no client
+            
+            if (clientMap.has(clientId)) {
+                // Merge old narrative into existing client-session
+                const existing = clientMap.get(clientId);
+                if (entry.narrative) {
+                    const narrativeEntry = {
+                        id: entry.narrative.id || entry.id || 'narr_' + Date.now(),
+                        content: entry.narrative.content,
+                        timestamp: entry.narrative.timestamp || entry.generatedAt,
+                        outputIntent: entry.narrative.outputIntent || entry.context?.outputIntent,
+                        wordCount: entry.narrative.wordCount || 0,
+                        agentPrompt: entry.narrative.agentPrompt || entry.agentPrompt || '',
+                        strategicQuestion: entry.strategicQuestion || '',
+                        chatHistory: entry.chatHistory || [],
+                        lastEdited: entry.narrative.lastEdited || null
+                    };
+                    if (!existing.narratives.find(n => n.id === narrativeEntry.id)) {
+                        existing.narratives.push(narrativeEntry);
+                    }
+                    existing.stage = 'narrative';
+                }
+                // Keep richer data
+                existing.sourcePack = existing.sourcePack || entry.sourcePack;
+                existing.context = existing.context || entry.context;
+                existing.pocFile = existing.pocFile || entry.pocFile;
+            } else {
+                // Convert old entry to new format
+                const narratives = [];
+                if (entry.narrative) {
+                    narratives.push({
+                        id: entry.narrative.id || entry.id || 'narr_' + Date.now(),
+                        content: entry.narrative.content,
+                        timestamp: entry.narrative.timestamp || entry.generatedAt,
+                        outputIntent: entry.narrative.outputIntent || entry.context?.outputIntent,
+                        wordCount: entry.narrative.wordCount || 0,
+                        agentPrompt: entry.narrative.agentPrompt || entry.agentPrompt || '',
+                        strategicQuestion: entry.strategicQuestion || '',
+                        chatHistory: entry.chatHistory || [],
+                        lastEdited: entry.narrative.lastEdited || null
+                    });
+                }
+                
+                const newEntry = {
+                    id: 'hist_' + clientId + '_' + Date.now(),
+                    clientId: clientId,
+                    type: 'client-session',
+                    client: entry.client,
+                    stage: narratives.length > 0 ? 'narrative' : (entry.sourcePack ? 'source-pack' : 'client-created'),
+                    pocFile: entry.pocFile || null,
+                    context: entry.context || null,
+                    sourcePack: entry.sourcePack || null,
+                    contacts: entry.contacts || { current: [], exited: [] },
+                    agentPrompt: entry.agentPrompt || '',
+                    strategicQuestion: entry.strategicQuestion || '',
+                    narratives: narratives,
+                    activeNarrativeId: narratives[0]?.id || null,
+                    validation: entry.validation || { status: 'ready', statusLabel: '✅ Ready' },
+                    createdAt: entry.generatedAt || new Date().toISOString(),
+                    lastUpdatedAt: entry.generatedAt || new Date().toISOString()
+                };
+                clientMap.set(clientId, newEntry);
+                result.push(newEntry);
+            }
+        }
+    }
     
-    // Add to beginning of array (newest first)
-    state.generatedPacks.unshift(historyEntry);
+    console.log(`[History] Migration: ${entries.length} entries → ${result.length} client sessions`);
+    return result;
+}
+
+/**
+ * Find or create a history entry for the current client.
+ * Always returns the entry. Creates one if it doesn't exist.
+ */
+function getOrCreateClientHistoryEntry(client) {
+    if (!client?.id) return null;
     
-    // Keep only last 50 entries
+    let entry = state.generatedPacks.find(p => p.clientId === client.id);
+    if (!entry) {
+        entry = {
+            id: 'hist_' + client.id + '_' + Date.now(),
+            clientId: client.id,       // Stable lookup key
+            type: 'client-session',
+            client: { ...client },     // Snapshot
+            stage: 'client-created',
+            pocFile: null,
+            context: null,
+            sourcePack: null,
+            contacts: { current: [], exited: [] },
+            agentPrompt: '',
+            strategicQuestion: '',
+            narratives: [],            // Array of narrative versions
+            activeNarrativeId: null,
+            validation: { status: 'ready', statusLabel: '✅ Ready' },
+            createdAt: new Date().toISOString(),
+            lastUpdatedAt: new Date().toISOString()
+        };
+        state.generatedPacks.unshift(entry);
+        console.log('[History] Created new entry for client:', client.commonName || client.name);
+    }
+    return entry;
+}
+
+/**
+ * Save/update the history entry for the current client at a given stage.
+ * Call this at each major progress point.
+ */
+function saveClientHistory(stage) {
+    const client = state.selectedClient;
+    if (!client?.id) {
+        console.warn('[History] Cannot save — no selected client');
+        return;
+    }
+    
+    const entry = getOrCreateClientHistoryEntry(client);
+    if (!entry) return;
+    
+    // Always update client snapshot & timestamp
+    entry.client = { ...client };
+    entry.lastUpdatedAt = new Date().toISOString();
+    
+    // Update stage (only advance, never go backwards)
+    const stageOrder = ['client-created', 'source-pack', 'narrative'];
+    if (stageOrder.indexOf(stage) >= stageOrder.indexOf(entry.stage)) {
+        entry.stage = stage;
+    }
+    
+    // Capture current state based on stage
+    if (stage === 'source-pack' || stage === 'narrative') {
+        entry.context = state.currentContext || state.pendingGenerationContext || entry.context;
+        entry.sourcePack = state.currentSourcePack || entry.sourcePack;
+        entry.pocFile = state.pocFile || entry.pocFile;
+        entry.contacts = {
+            current: state.researchedContacts?.current || entry.contacts?.current || [],
+            exited: state.researchedContacts?.exited || entry.contacts?.exited || []
+        };
+    }
+    
+    // Move to front (most recently updated first)
+    const idx = state.generatedPacks.indexOf(entry);
+    if (idx > 0) {
+        state.generatedPacks.splice(idx, 1);
+        state.generatedPacks.unshift(entry);
+    }
+    
+    // Keep max 50
     if (state.generatedPacks.length > 50) {
         state.generatedPacks = state.generatedPacks.slice(0, 50);
     }
     
-    // Persist to disk
+    // Persist
+    persistHistory();
+    updateHistoryView();
+    
+    console.log('[History] Saved client progress:', client.commonName || client.name, '→', stage);
+}
+
+/**
+ * Add a narrative version to the client's history entry.
+ */
+function addNarrativeToHistory(narrative) {
+    const client = state.selectedClient;
+    const entry = getOrCreateClientHistoryEntry(client || { id: 'unknown', name: 'Unknown', commonName: 'Unknown' });
+    if (!entry) return;
+    
+    // Capture agent prompt & strategic question at generation time
+    const agentPrompt = narrative.agentPrompt || document.getElementById('narrativeAgentPrompt')?.value || '';
+    const strategicQuestion = document.getElementById('strategicQuestion')?.value || '';
+    
+    const narrativeEntry = {
+        id: narrative.id || 'narr_' + Date.now(),
+        content: narrative.content,
+        timestamp: narrative.timestamp || new Date().toISOString(),
+        outputIntent: narrative.outputIntent,
+        wordCount: narrative.content?.split(/\s+/).length || 0,
+        agentPrompt: agentPrompt,
+        strategicQuestion: strategicQuestion,
+        chatHistory: [],
+        lastEdited: null
+    };
+    
+    entry.narratives.unshift(narrativeEntry);
+    entry.activeNarrativeId = narrativeEntry.id;
+    entry.stage = 'narrative';
+    entry.lastUpdatedAt = new Date().toISOString();
+    
+    // Also store latest context/sourcePack/contacts
+    entry.context = state.currentContext || state.pendingGenerationContext || entry.context;
+    entry.sourcePack = state.currentSourcePack || entry.sourcePack;
+    entry.pocFile = state.pocFile || entry.pocFile;
+    entry.contacts = {
+        current: state.researchedContacts?.current || entry.contacts?.current || [],
+        exited: state.researchedContacts?.exited || entry.contacts?.exited || []
+    };
+    entry.agentPrompt = agentPrompt;
+    entry.strategicQuestion = strategicQuestion;
+    
+    // Track for chat saving
+    narrativeChat.currentHistoryEntryId = entry.id;
+    narrativeChat.currentNarrativeId = narrativeEntry.id;
+    
+    // Move to front
+    const idx = state.generatedPacks.indexOf(entry);
+    if (idx > 0) {
+        state.generatedPacks.splice(idx, 1);
+        state.generatedPacks.unshift(entry);
+    }
+    
+    // Persist
+    persistHistory();
+    updateHistoryView();
+    
+    console.log('[History] Added narrative version to', entry.client?.commonName || entry.client?.name, '- total:', entry.narratives.length);
+    
+    return narrativeEntry;
+}
+
+/**
+ * Persist history to disk.
+ */
+function persistHistory() {
     if (window.electronAPI?.appData) {
         window.electronAPI.appData.saveGeneratedPacks(state.generatedPacks);
     }
-    
-    // Update the history view
-    updateHistoryView();
 }
 
 function updateHistoryView() {
-    // Filter to only show narratives (not source packs)
-    const narrativePacks = state.generatedPacks.filter(pack => pack.type === 'narrative');
+    // Show all client-session entries (one per client)
+    const sessions = state.generatedPacks.filter(pack => pack.type === 'client-session');
     
-    if (narrativePacks.length === 0) {
+    if (sessions.length === 0) {
         elements.historyEmpty.classList.remove('hidden');
         elements.historyList.classList.add('hidden');
     } else {
         elements.historyEmpty.classList.add('hidden');
         elements.historyList.classList.remove('hidden');
         
-        elements.historyList.innerHTML = narrativePacks.map(pack => {
-            const outputIntent = pack.context?.outputIntent || pack.sourcePack?.context?.outputIntent || 'Narrative';
-            const icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 19l7-7 3 3-7 7-3-3z"/>
-                        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
-                        <path d="M2 2l7.586 7.586"/>
-                        <circle cx="11" cy="11" r="2"/>
-                   </svg>`;
+        elements.historyList.innerHTML = sessions.map(pack => {
+            const clientName = pack.client?.commonName || pack.client?.name || 'Unknown Client';
+            const narrativeCount = pack.narratives?.length || 0;
+            const lastUpdated = pack.lastUpdatedAt || pack.createdAt || new Date().toISOString();
+            
+            // Stage display
+            const stageLabels = {
+                'client-created': '🆕 Client Created',
+                'source-pack': '📦 Source Pack Ready',
+                'narrative': `📝 ${narrativeCount} Narrative${narrativeCount !== 1 ? 's' : ''}`
+            };
+            const stageLabel = stageLabels[pack.stage] || '🆕 Started';
+            
+            // Stage-based icon
+            const stageIcons = {
+                'client-created': '<circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>',
+                'source-pack': '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',
+                'narrative': '<path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/>'
+            };
+            const iconPaths = stageIcons[pack.stage] || stageIcons['client-created'];
+            
+            // Output intent if available
+            const outputIntent = pack.context?.outputIntent || '';
+            const metaParts = [new Date(lastUpdated).toLocaleString()];
+            if (outputIntent) metaParts.push(outputIntent);
             
             return `
-            <div class="history-item history-narrative" data-pack-id="${pack.id}">
-                <div class="history-icon narrative-icon">
-                    ${icon}
+            <div class="history-item history-${pack.stage}" data-pack-id="${pack.id}">
+                <div class="history-icon ${pack.stage === 'narrative' ? 'narrative-icon' : ''}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        ${iconPaths}
+                    </svg>
                 </div>
                 <div class="history-info">
-                    <span class="history-title">${pack.client?.name || 'Unknown Client'}</span>
-                    <span class="history-meta">${new Date(pack.generatedAt).toLocaleString()} • ${outputIntent}</span>
+                    <span class="history-title">${clientName}</span>
+                    <span class="history-meta">${metaParts.join(' • ')}</span>
                 </div>
-                <span class="history-status narrative">
-                    📝 Narrative
+                <span class="history-status ${pack.stage}">
+                    ${stageLabel}
                 </span>
                 <div class="history-actions">
-                    <button class="btn btn-ghost btn-sm" onclick="viewHistoryPack('${pack.id}')">View</button>
+                    <button class="btn btn-ghost btn-sm" onclick="viewHistoryPack('${pack.id}')">Resume</button>
+                    <button class="btn btn-ghost btn-sm" onclick="deleteHistoryEntry('${pack.id}')" title="Remove from history" style="color: var(--danger); padding: 4px;">✕</button>
                 </div>
             </div>
         `}).join('');
+    }
+}
+
+function deleteHistoryEntry(packId) {
+    const idx = state.generatedPacks.findIndex(p => p.id === packId);
+    if (idx >= 0) {
+        const entry = state.generatedPacks[idx];
+        state.generatedPacks.splice(idx, 1);
+        persistHistory();
+        updateHistoryView();
+        updateDashboardStats();
+        showToast(`Removed ${entry.client?.commonName || entry.client?.name || 'entry'} from history`, 'info');
     }
 }
 
@@ -5784,20 +6230,22 @@ function viewHistoryPack(packId) {
     const pack = state.generatedPacks.find(p => p.id === packId);
     if (!pack) return;
     
-    // Set up client context
+    // Restore full client context
     state.selectedClient = pack.client;
     state.currentContext = pack.context;
     state.currentSourcePack = pack.sourcePack;
     
-    // Switch to the generate view
-    switchView('generate');
-    
-    // Restore POC file if available in history entry
-    if (pack.pocFile) {
-        state.pocFile = pack.pocFile;
+    // Push source pack to backend (critical for workshop generation)
+    if (state.isElectron && window.electronAPI?.narrativeChat?.setSourcePack && pack.sourcePack) {
+        window.electronAPI.narrativeChat.setSourcePack(pack.sourcePack);
+        console.log('[History] Restored source pack to backend with', Object.keys(pack.sourcePack?.documents || {}).length, 'documents');
     }
     
-    // Restore researched contacts if available
+    // Switch to generate view
+    switchView('generate');
+    
+    // Restore POC file & contacts
+    if (pack.pocFile) state.pocFile = pack.pocFile;
     if (pack.contacts) {
         state.researchedContacts = {
             current: pack.contacts.current || [],
@@ -5805,44 +6253,57 @@ function viewHistoryPack(packId) {
         };
     }
     
-    // Check if this is a narrative entry
-    if (pack.type === 'narrative' && pack.narrative) {
-        // Go directly to Step 6 (Narrative)
-        goToStep(6);
+    // Determine where to resume based on stage
+    if (pack.stage === 'narrative' && pack.narratives?.length > 0) {
+        // Resume at Step 5 — show the most recent (or active) narrative
+        goToStep(5);
+        populateNarrativeStep();
         
-        // Restore the agent prompt/instructions that were used for this narrative
+        // Restore strategic question
+        const sqTextarea = document.getElementById('strategicQuestion');
+        if (sqTextarea && pack.strategicQuestion) sqTextarea.value = pack.strategicQuestion;
+        
+        // Restore agent prompt
         const promptTextarea = document.getElementById('narrativeAgentPrompt');
-        if (promptTextarea && pack.agentPrompt) {
-            promptTextarea.value = pack.agentPrompt;
-        }
+        if (promptTextarea && pack.agentPrompt) promptTextarea.value = pack.agentPrompt;
         
-        // Restore contacts to the UI grids
+        // Restore contacts UI
         restoreContactsToGrids(pack.contacts);
         
-        // Tell the backend about the source pack for this narrative (for chat)
-        if (state.isElectron && window.electronAPI?.narrativeChat?.setSourcePack && pack.sourcePack) {
-            window.electronAPI.narrativeChat.setSourcePack(pack.sourcePack);
-        }
+        // Find the active narrative (or latest)
+        const activeNarrative = pack.narratives.find(n => n.id === pack.activeNarrativeId) || pack.narratives[0];
         
-        // Load client narratives and then display the specific one
+        // Set the history tracking IDs
+        narrativeChat.currentHistoryEntryId = pack.id;
+        narrativeChat.currentNarrativeId = activeNarrative.id;
+        
+        // Load per-client narratives then display
         if (pack.client?.id) {
             loadClientNarratives(pack.client.id).then(() => {
-                // Display the narrative from the history entry, passing source pack and chat history
-                displayNarrative(pack.narrative, pack.sourcePack, pack.chatHistory, pack.id);
+                displayNarrative(activeNarrative, pack.sourcePack, activeNarrative.chatHistory, pack.id);
             });
         } else {
-            // No client ID, just display the narrative directly
-            displayNarrative(pack.narrative, pack.sourcePack, pack.chatHistory, pack.id);
+            displayNarrative(activeNarrative, pack.sourcePack, activeNarrative.chatHistory, pack.id);
         }
-    } else {
-        // Source Pack entry - go to Step 5 (Review)
-        renderReview(pack.sourcePack, pack.validation);
-        goToStep(5);
         
-        // Pre-load narratives for this client
-        if (pack.client?.id) {
-            loadClientNarratives(pack.client.id);
+    } else if (pack.stage === 'source-pack' && pack.sourcePack) {
+        // Resume at Step 4 — review / add documents
+        renderReview(pack.sourcePack, pack.validation);
+        goToStep(4);
+        
+        if (pack.client?.id) loadClientNarratives(pack.client.id);
+        
+    } else {
+        // 'client-created' — resume at Step 2 (context/POC)
+        // Re-select the client to set up step 2 properly
+        const client = state.clients.find(c => c.id === pack.client?.id);
+        if (client) {
+            state.selectedClient = client;
+            renderClientGrid(elements.clientSearch?.value || '');
+            document.getElementById('industry').value = client.industry || '';
+            document.getElementById('geography').value = client.geography || '';
         }
+        goToStep(2);
     }
 }
 
@@ -6215,6 +6676,39 @@ function renderPlaceholdersList(placeholders) {
                </span>`;
         }
         
+        // Build strategic question badge
+        const strategicBadge = p.considerStrategicQuestion ? 
+            `<span class="placeholder-list-badge" title="Considers strategic question as a factor" style="background: rgba(139, 92, 246, 0.2); color: #a78bfa;">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
+                   <circle cx="12" cy="12" r="10"/>
+                   <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                   <line x1="12" y1="17" x2="12.01" y2="17"/>
+                 </svg>
+                 Question
+               </span>` : '';
+        
+        // Build strategy document badge
+        const strategyBadge = p.considerStrategy ? 
+            `<span class="placeholder-list-badge" title="Uses client strategy document as context" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
+                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                   <polyline points="14,2 14,8 20,8"/>
+                   <line x1="16" y1="13" x2="8" y2="13"/>
+                   <line x1="16" y1="17" x2="8" y2="17"/>
+                 </svg>
+                 Strategy
+               </span>` : '';
+        
+        // Build research badge
+        const researchBadge = p.research ? 
+            `<span class="placeholder-list-badge" title="Uses web search for research" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">
+                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
+                   <circle cx="11" cy="11" r="8"/>
+                   <path d="M21 21l-4.35-4.35"/>
+                 </svg>
+                 Research
+               </span>` : '';
+        
         // Build usage hint based on configuration
         let usageHint;
         if (p.isList && p.hasTitleBody) {
@@ -6235,6 +6729,9 @@ function renderPlaceholdersList(placeholders) {
                     ${listBadge}
                     ${titleBodyBadge}
                     ${maxCharsBadge}
+                    ${strategicBadge}
+                    ${strategyBadge}
+                    ${researchBadge}
                 </div>
                 <div class="placeholder-actions">
                     <button class="btn btn-ghost btn-sm edit-placeholder" data-id="${p.id}" title="Edit">
@@ -6295,6 +6792,9 @@ function showPlaceholderModal(placeholder = null) {
     const maxCharsTitleBodyGroup = document.getElementById('maxCharsTitleBodyGroup');
     const maxCharsTitleInput = document.getElementById('placeholderMaxCharsTitle');
     const maxCharsBodyInput = document.getElementById('placeholderMaxCharsBody');
+    const considerStrategicQuestionCheckbox = document.getElementById('placeholderConsiderStrategicQuestion');
+    const considerStrategyCheckbox = document.getElementById('placeholderConsiderStrategy');
+    const researchCheckbox = document.getElementById('placeholderResearch');
     
     if (!modal) {
         console.error('[Placeholder] Modal not found');
@@ -6345,6 +6845,15 @@ function showPlaceholderModal(placeholder = null) {
         if (maxCharsBodyInput) {
             maxCharsBodyInput.value = placeholder.maxCharsBody || '';
         }
+        if (considerStrategicQuestionCheckbox) {
+            considerStrategicQuestionCheckbox.checked = placeholder.considerStrategicQuestion || false;
+        }
+        if (considerStrategyCheckbox) {
+            considerStrategyCheckbox.checked = placeholder.considerStrategy || false;
+        }
+        if (researchCheckbox) {
+            researchCheckbox.checked = placeholder.research || false;
+        }
         editingPlaceholderId = placeholder.id;
     } else {
         // Add mode
@@ -6370,6 +6879,15 @@ function showPlaceholderModal(placeholder = null) {
         }
         if (maxCharsBodyInput) {
             maxCharsBodyInput.value = '';
+        }
+        if (considerStrategicQuestionCheckbox) {
+            considerStrategicQuestionCheckbox.checked = false;
+        }
+        if (considerStrategyCheckbox) {
+            considerStrategyCheckbox.checked = false;
+        }
+        if (researchCheckbox) {
+            researchCheckbox.checked = false;
         }
         editingPlaceholderId = null;
     }
@@ -6406,6 +6924,12 @@ async function savePlaceholder(e) {
     const maxChars = maxCharsInput?.value ? parseInt(maxCharsInput.value) : null;
     const maxCharsTitle = maxCharsTitleInput?.value ? parseInt(maxCharsTitleInput.value) : null;
     const maxCharsBody = maxCharsBodyInput?.value ? parseInt(maxCharsBodyInput.value) : null;
+    const considerStrategicQuestionCheckbox = document.getElementById('placeholderConsiderStrategicQuestion');
+    const considerStrategicQuestion = considerStrategicQuestionCheckbox?.checked || false;
+    const considerStrategyCheckbox = document.getElementById('placeholderConsiderStrategy');
+    const considerStrategy = considerStrategyCheckbox?.checked || false;
+    const researchCheckbox = document.getElementById('placeholderResearch');
+    const research = researchCheckbox?.checked || false;
     
     if (!name || !promptText) {
         showToast('Please fill in all fields', 'warning');
@@ -6430,7 +6954,10 @@ async function savePlaceholder(e) {
                 hasTitleBody: hasTitleBody,
                 maxChars: maxChars,
                 maxCharsTitle: maxCharsTitle,
-                maxCharsBody: maxCharsBody
+                maxCharsBody: maxCharsBody,
+                considerStrategicQuestion: considerStrategicQuestion,
+                considerStrategy: considerStrategy,
+                research: research
             });
             
             if (result.success) {
@@ -6446,7 +6973,10 @@ async function savePlaceholder(e) {
                 hasTitleBody: hasTitleBody,
                 maxChars: maxChars,
                 maxCharsTitle: maxCharsTitle,
-                maxCharsBody: maxCharsBody
+                maxCharsBody: maxCharsBody,
+                considerStrategicQuestion: considerStrategicQuestion,
+                considerStrategy: considerStrategy,
+                research: research
             });
             
             if (result.success) {
@@ -7206,4 +7736,5 @@ window.exportJSON = exportJSON;
 window.exportMarkdown = exportMarkdown;
 window.resetGeneration = resetGeneration;
 window.viewHistoryPack = viewHistoryPack;
+window.deleteHistoryEntry = deleteHistoryEntry;
 window.exportHistoryPack = exportHistoryPack;

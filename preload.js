@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('clients:get', { id }),
         delete: (id) => 
             ipcRenderer.invoke('clients:delete', { id }),
+        update: (id, updates) =>
+            ipcRenderer.invoke('clients:update', { id, updates }),
         aiCreate: (companyName) => 
             ipcRenderer.invoke('clients:aiCreate', { companyName }),
         researchContacts: (client, type) => 
@@ -121,7 +123,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         reset: () =>
             ipcRenderer.invoke('narrativeChat:reset'),
         cancel: () =>
-            ipcRenderer.invoke('narrativeChat:cancel')
+            ipcRenderer.invoke('narrativeChat:cancel'),
+        setSourcePack: (sourcePack) =>
+            ipcRenderer.invoke('narrativeChat:setSourcePack', sourcePack)
     },
 
     // Persistent App Data

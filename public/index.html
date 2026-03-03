@@ -176,7 +176,7 @@
                             </div>
                             <div class="stat-content">
                                 <span class="stat-value" id="statPacks">0</span>
-                                <span class="stat-label">Source Packs</span>
+                                <span class="stat-label">Sessions</span>
                             </div>
                         </div>
                         <div class="stat-card glass-card">
@@ -187,7 +187,7 @@
                             </div>
                             <div class="stat-content">
                                 <span class="stat-value" id="statReady">0</span>
-                                <span class="stat-label">Ready</span>
+                                <span class="stat-label">Narratives</span>
                             </div>
                         </div>
                         <div class="stat-card glass-card">
@@ -198,7 +198,7 @@
                             </div>
                             <div class="stat-content">
                                 <span class="stat-value" id="statCaveats">0</span>
-                                <span class="stat-label">With Caveats</span>
+                                <span class="stat-label">In Progress</span>
                             </div>
                         </div>
                         <div class="stat-card glass-card">
@@ -366,7 +366,7 @@
                         <div class="step-line"></div>
                         <div class="step" data-step="3">
                             <div class="step-number">3</div>
-                            <span class="step-label">Generate Source Pack all </span>
+                            <span class="step-label">Generate Source Pack</span>
                         </div>
                         <div class="step-line"></div>
                         <div class="step" data-step="4">
@@ -376,11 +376,6 @@
                         <div class="step-line"></div>
                         <div class="step" data-step="5">
                             <div class="step-number">5</div>
-                            <span class="step-label">Narrative Builder</span>
-                        </div>
-                        <div class="step-line"></div>
-                        <div class="step" data-step="6">
-                            <div class="step-number">6</div>
                             <span class="step-label">Narrative</span>
                         </div>
                     </div>
@@ -734,103 +729,8 @@
                             </div>
                         </div>
 
-                        <!-- Step 5: Narrative Builder - Guided Prompt Creation -->
+                        <!-- Step 5: Narrative Generation -->
                         <div class="step-panel" data-step="5">
-                            <div class="source-chat-container">
-                                <div class="source-chat-header">
-                                    <div class="source-chat-icon narrative-builder-icon">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                            <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
-                                        </svg>
-                                    </div>
-                                    <div class="source-chat-title">
-                                        <h3>Narrative Builder</h3>
-                                        <p class="source-chat-subtitle">Let's craft the perfect narrative prompt together based on your sources</p>
-                                    </div>
-                                </div>
-                                
-                                <div class="source-chat-context glass-card">
-                                    <div class="context-badge">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                                            <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-                                        </svg>
-                                        <span id="chatSourceCount">0 sources loaded</span>
-                                    </div>
-                                    <div class="context-client">
-                                        <span id="chatClientName">--</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="source-chat-messages" id="sourceChatMessages">
-                                    <!-- Welcome message populated by JS -->
-                                </div>
-                                
-                                <div class="source-chat-input-area">
-                                    <div class="source-chat-input-wrapper">
-                                        <textarea id="sourceChatInput" placeholder="Type your response..." rows="1"></textarea>
-                                        <button class="btn btn-primary source-chat-send" id="sourceChatSendBtn" title="Send message">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                    <p class="source-chat-hint">Press Enter to send, Shift+Enter for new line</p>
-                                </div>
-                                
-                                <!-- Generated Prompt Preview (hidden until ready) -->
-                                <div class="generated-prompt-preview glass-card hidden" id="generatedPromptPreview">
-                                    <div class="prompt-preview-header">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
-                                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                        </svg>
-                                        <span>Generated Narrative Prompt</span>
-                                    </div>
-                                    <div class="prompt-preview-content" id="generatedPromptContent">
-                                        <!-- Prompt will be inserted here -->
-                                    </div>
-                                    <div class="prompt-preview-actions">
-                                        <button class="btn btn-ghost" id="editPromptBtn">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                                                <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                            </svg>
-                                            Edit in Next Step
-                                        </button>
-                                        <button class="btn btn-primary" id="usePromptBtn">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                                                <path d="M5 13l4 4L19 7"/>
-                                            </svg>
-                                            Use This Prompt
-                                        </button>
-                                    </div>
-                                </div>
-                                
-                                <div class="panel-actions panel-actions-spread">
-                                    <button class="btn btn-ghost" id="backToAddDocsBtn">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
-                                            <path d="M11 17l-5-5m0 0l5-5m-5 5h12"/>
-                                        </svg>
-                                        Back
-                                    </button>
-                                    <div class="action-buttons-group">
-                                        <button class="btn btn-ghost" id="exportSourcePackBtn">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
-                                                <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                            </svg>
-                                            <span>Export Source Pack</span>
-                                        </button>
-                                        <button class="btn btn-secondary" id="skipBuilderBtn">
-                                            <span>Skip to Manual Input</span>
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-left: 8px;">
-                                                <path d="M13 7l5 5m0 0l-5 5m5-5H6"/>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Step 6: Narrative Generation -->
-                        <div class="step-panel" data-step="6">
                             <div class="narrative-container">
                                 <div class="narrative-scrollable-content">
                                 <div class="narrative-header">
@@ -844,6 +744,19 @@
                                 </div>
                                 
                                 <div class="narrative-content">
+                                    <!-- Strategic Question (Optional but powerful) -->
+                                    <div class="narrative-section">
+                                        <label class="section-label">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                            Strategic Question
+                                            <span class="label-hint">(Optional - frames the entire narrative)</span>
+                                        </label>
+                                        <textarea id="strategicQuestion" class="agent-prompt-input strategic-question-input" rows="4" placeholder="Enter your strategic question here...&#10;&#10;Example: How might we build upon our customer data, route to market, and product innovation to win with the shopper and retailer in an AI-led market?&#10;&#10;This question becomes the central thesis that frames the entire narrative."></textarea>
+                                        <p class="field-hint">The narrative will be structured as an answer to this question. Key themes from the question will be woven throughout all sections.</p>
+                                    </div>
+                                    
                                     <!-- Agent Instructions (Primary) -->
                                     <div class="narrative-section">
                                         <label class="section-label">
@@ -2173,6 +2086,40 @@
                                 <p class="field-hint" style="margin-top: 4px;">Body limit</p>
                             </div>
                         </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="placeholderConsiderStrategicQuestion">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text">Consider Strategic Question</span>
+                        </label>
+                        <p class="field-hint" id="strategicQuestionHint">
+                            When checked, the AI will consider the strategic question as a factor when generating this content.
+                            The content will still be about what the prompt asks, but will incorporate strategic themes where relevant.
+                        </p>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="placeholderConsiderStrategy">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text">Consider Client Strategy</span>
+                        </label>
+                        <p class="field-hint" id="strategyHint">
+                            When checked, the AI will use the client's strategy document (from Source Pack) as contextual grounding.
+                            The content will still be about what the prompt asks, but will be informed by the client's strategic priorities.
+                        </p>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="placeholderResearch">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text">🔍 Enable Web Research</span>
+                        </label>
+                        <p class="field-hint" id="researchHint">
+                            When checked, the AI will use web search to research current information about the topic.
+                            Use this for prompts that require up-to-date data, market trends, or company-specific research.
+                            <strong>Note:</strong> This may take longer as the AI searches online sources.
+                        </p>
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-ghost" id="cancelPlaceholderBtn">Cancel</button>

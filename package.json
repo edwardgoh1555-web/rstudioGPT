@@ -65,7 +65,8 @@
       ],
       "icon": "assets/icon.ico",
       "publisherName": "R/StudioGPT Team",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "extraResources": []
     },
     "nsis": {
       "oneClick": false,
