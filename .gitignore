@@ -32,3 +32,4 @@ build/
 # Credentials (never commit)
 credentials.json
 secrets.json
+OPEN AI OAI API KEY FOR RGPT.txt

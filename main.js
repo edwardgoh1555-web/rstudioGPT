@@ -387,9 +387,6 @@ const appState = {
     placeholders: credentialManager.loadAppData('placeholders') || [],
     narrativeCancelled: false,  // Flag for cancelling narrative generation
     // Each placeholder: { id, name, prompt, createdAt }
-    
-    // Learnings system - stores user preferences inferred from behavior
-    learnings: credentialManager.loadAppData('narrativeLearnings') || getDefaultLearnings()
 };
 
 // Backfill commonName for existing clients that don't have one
@@ -411,143 +408,7 @@ const appState = {
     }
 })();
 
-// ============================================
-// Narrative Learning System
-// ============================================
-
-/**
- * Returns the default learnings structure
- */
-function getDefaultLearnings() {
-    return {
-        version: 1,
-        lastUpdated: new Date().toISOString(),
-        lastInferenceRun: null,
-        
-        // Aggregate preferences learned from behavior
-        preferences: {
-            tone: {
-                preferred: [],
-                avoid: [],
-                confidence: 0.0,
-                evidenceCount: 0
-            },
-            structure: {
-                preferredLength: null,
-                useBulletPoints: null,
-                preferredSections: [],
-                weakSections: [],
-                confidence: 0.0,
-                evidenceCount: 0
-            },
-            content: {
-                emphasize: [],
-                avoid: [],
-                confidence: 0.0,
-                evidenceCount: 0
-            },
-            vocabulary: {
-                preferred: [],
-                avoid: [],
-                replacements: {},
-                confidence: 0.0,
-                evidenceCount: 0
-            }
-        },
-        
-        // Section-specific learnings
-        sectionPatterns: {},
-        
-        // Client/Industry specific learnings
-        contextual: {
-            byIndustry: {},
-            byClient: {}
-        },
-        
-        // Raw evidence log (for reprocessing/auditing)
-        evidenceLog: [],
-        
-        // Statistics
-        stats: {
-            totalIterations: 0,
-            totalAcceptances: 0,
-            totalNarrativesGenerated: 0,
-            avgIterationsPerNarrative: 0
-        }
-    };
-}
-
-/**
- * Save learnings to persistent storage (debounced to prevent excessive disk writes)
- */
-let saveLearningsTimeout = null;
-function saveLearnings() {
-    // Debounce: wait 2 seconds after last call before actually saving
-    if (saveLearningsTimeout) {
-        clearTimeout(saveLearningsTimeout);
-    }
-    saveLearningsTimeout = setTimeout(() => {
-        appState.learnings.lastUpdated = new Date().toISOString();
-        credentialManager.saveAppData('narrativeLearnings', appState.learnings);
-        console.log('[Learnings] Saved to disk');
-        saveLearningsTimeout = null;
-    }, 2000);
-}
-
-/**
- * Force immediate save (for shutdown or critical operations)
- */
-function saveLearningsImmediate() {
-    if (saveLearningsTimeout) {
-        clearTimeout(saveLearningsTimeout);
-        saveLearningsTimeout = null;
-    }
-    appState.learnings.lastUpdated = new Date().toISOString();
-    credentialManager.saveAppData('narrativeLearnings', appState.learnings);
-    console.log('[Learnings] Saved to disk (immediate)');
-}
-
-/**
- * Capture a behavioral signal from user interaction
- */
-function captureSignal(signal) {
-    // Add timestamp if not present
-    if (!signal.timestamp) {
-        signal.timestamp = new Date().toISOString();
-    }
-    
-    // Add to evidence log
-    appState.learnings.evidenceLog.push(signal);
-    
-    // Keep only last 500 signals to prevent unbounded growth
-    if (appState.learnings.evidenceLog.length > 500) {
-        appState.learnings.evidenceLog = appState.learnings.evidenceLog.slice(-500);
-    }
-    
-    // Update statistics
-    if (signal.type === 'iteration') {
-        appState.learnings.stats.totalIterations++;
-    } else if (signal.type === 'acceptance') {
-        appState.learnings.stats.totalAcceptances++;
-    } else if (signal.type === 'generation') {
-        appState.learnings.stats.totalNarrativesGenerated++;
-    }
-    
-    // Calculate average iterations per narrative
-    if (appState.learnings.stats.totalNarrativesGenerated > 0) {
-        appState.learnings.stats.avgIterationsPerNarrative = 
-            appState.learnings.stats.totalIterations / appState.learnings.stats.totalNarrativesGenerated;
-    }
-    
-    // Save after each signal
-    saveLearnings();
-    
-    console.log(`[Learnings] Captured signal: ${signal.type}`, signal.section || '');
-    
-    return signal;
-}
-
-// Source chat history (for Step 5 Q&A)
+// Source chat history (for Step 6 Q&A)
 let sourceChatHistory = [];
 
 // Demo users
@@ -653,17 +514,17 @@ function createWindow() {
         
         // Show splash message in console
         console.log(`
-╔═══════════════════════════════════════════════════════════════╗
-║                                                               ║
-║   🚀 R/StudioGPT                                              ║
-║   ─────────────────────────────────────────────────────────   ║
-║   Desktop Application v1.0.0                                  ║
-║                                                               ║
-║   Demo Credentials:                                           ║
-║   • client.lead / demo123                                     ║
-║   • admin / admin123                                          ║
-║                                                               ║
-╚═══════════════════════════════════════════════════════════════╝
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ                                                               ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ R/StudioGPT                                              ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬   ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   Desktop Application v1.0.0                                  ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ                                                               ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   Demo Credentials:                                           ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ client.lead / demo123                                     ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ   ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ admin / admin123                                          ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ                                                               ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¡ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
         `);
     });
 
@@ -748,7 +609,7 @@ function createMenu() {
                             type: 'info',
                             title: 'About R/StudioGPT',
                             message: 'R/StudioGPT',
-                            detail: 'Version 1.0.0\n\nA governed intelligence assembly tool for generating schema-validated Source Packs from strategic data sources.\n\n© 2026 R/StudioGPT Team'
+                            detail: 'Version 1.0.0\n\nA governed intelligence assembly tool for generating schema-validated Source Packs from strategic data sources.\n\nÃƒâ€šÃ‚Â© 2026 R/StudioGPT Team'
                         });
                     }
                 },
@@ -1253,7 +1114,7 @@ CRITICAL RULES:
             }
         ];
         
-        const model = openaiCreds.model || 'gpt-4o';
+        const model = openaiCreds.model || 'gpt-5.2';
         const content = await callOpenAI(openaiCreds.apiKey, model, messages, 2000);
         
         if (!content) {
@@ -1271,7 +1132,7 @@ CRITICAL RULES:
         
         const currentCount = result.currentContacts?.length || 0;
         
-        emitAiConsoleLog('researcher', `✓ Extracted ${currentCount} stakeholder${currentCount !== 1 ? 's' : ''} from POC`, 'success');
+        emitAiConsoleLog('researcher', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Extracted ${currentCount} stakeholder${currentCount !== 1 ? 's' : ''} from POC`, 'success');
         
         return {
             success: true,
@@ -1292,7 +1153,7 @@ async function callOpenAIWithWebSearch(apiKey, query) {
     
     return new Promise((resolve, reject) => {
         const requestBody = JSON.stringify({
-            model: 'gpt-4o',  // Use gpt-4o for web search
+            model: 'gpt-5.2',  // Use GPT-5 series for web search
             input: query,
             tools: [{ type: 'web_search_preview' }],  // Enable web search
             tool_choice: 'auto',
@@ -1432,7 +1293,7 @@ async function callOpenAIWebSearchForResearch(apiKey, query, client) {
         try {
             const result = await new Promise((resolve, reject) => {
                 const requestBody = JSON.stringify({
-                    model: 'gpt-4o',  // Use gpt-4o for web search
+                    model: 'gpt-5.2',  // Use GPT-5 series for web search
                     input: query,
                     tools: [{ type: 'web_search_preview' }],
                     tool_choice: 'auto',
@@ -1559,7 +1420,7 @@ async function callOpenAIWebSearchForResearch(apiKey, query, client) {
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('ai-console-log', {
                         agent: 'workshop',
-                        message: `⚠ Research network issue, retrying (${attempt}/${maxRetries})...`,
+                        message: `ÃƒÂ¢Ã…Â¡Ã‚Â  Research network issue, retrying (${attempt}/${maxRetries})...`,
                         type: 'warning'
                     });
                 }
@@ -1672,16 +1533,16 @@ IMPORTANT: headquartersCountry must ALWAYS be filled in with a specific country 
         }
         
         const result = JSON.parse(jsonStr);
-        emitAiConsoleLog('system', `✓ Successfully analyzed "${result.officialName || companyName}" (${result.headquartersCountry || result.geography})`, 'success');
+        emitAiConsoleLog('system', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Successfully analyzed "${result.officialName || companyName}" (${result.headquartersCountry || result.geography})`, 'success');
         
         // Web search verification: confirm the current official and common names
-        // Companies rebrand (e.g., Reckitt Benckiser → Reckitt, Facebook → Meta)
+        // Companies rebrand (e.g., Reckitt Benckiser ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Reckitt, Facebook ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Meta)
         // The AI model's training data may be stale, so we verify with a live web search
         let verifiedOfficialName = result.officialName || companyName;
         let verifiedCommonName = result.commonName || result.officialName || companyName;
         
         try {
-            emitAiConsoleLog('system', `🔍 Verifying current company name via web search...`, 'info');
+            emitAiConsoleLog('system', `ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â Verifying current company name via web search...`, 'info');
             
             const nameVerificationQuery = `What is the current official legal name and commonly known brand name of "${companyName}" as of ${new Date().getFullYear()}? Has this company rebranded, changed its name, or simplified its trading name recently? Respond with ONLY a JSON object: {"officialName": "current full legal name", "commonName": "the short name commonly used in business and media"}`;
             
@@ -1701,7 +1562,7 @@ IMPORTANT: headquartersCountry must ALWAYS be filled in with a specific country 
                             verifiedCommonName = nameData.commonName;
                             console.log(`[ClientAnalysis] Web verified common name: ${verifiedCommonName}`);
                         }
-                        emitAiConsoleLog('system', `✓ Name verified: "${verifiedCommonName}" (official: ${verifiedOfficialName})`, 'success');
+                        emitAiConsoleLog('system', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Name verified: "${verifiedCommonName}" (official: ${verifiedOfficialName})`, 'success');
                     } catch (parseErr) {
                         console.log('[ClientAnalysis] Could not parse name verification JSON, using AI result');
                     }
@@ -1715,17 +1576,17 @@ IMPORTANT: headquartersCountry must ALWAYS be filled in with a specific country 
                     
                     if (officialMatch?.[1]) {
                         verifiedOfficialName = officialMatch[1].trim();
-                        emitAiConsoleLog('system', `✓ Official name verified: "${verifiedOfficialName}"`, 'success');
+                        emitAiConsoleLog('system', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Official name verified: "${verifiedOfficialName}"`, 'success');
                     }
                     if (commonMatch?.[1]) {
                         verifiedCommonName = commonMatch[1].trim();
-                        emitAiConsoleLog('system', `✓ Common name verified: "${verifiedCommonName}"`, 'success');
+                        emitAiConsoleLog('system', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Common name verified: "${verifiedCommonName}"`, 'success');
                     }
                 }
             }
         } catch (verifyError) {
             console.log('[ClientAnalysis] Name web verification failed (non-critical):', verifyError.message);
-            emitAiConsoleLog('system', `⚠ Name verification skipped (using AI result)`, 'warning');
+            emitAiConsoleLog('system', `ÃƒÂ¢Ã…Â¡Ã‚Â  Name verification skipped (using AI result)`, 'warning');
         }
         
         return {
@@ -2108,7 +1969,7 @@ ipcMain.handle('sourcePack:generateZip', async (event, { clientId, context }) =>
             emitAiConsoleLog('researcher', 'ChatGPT: Starting comprehensive research...', 'thinking');
             try {
                 const chatgptPrompt = substitutePromptVars(sourcePrompts.chatgpt);
-                const model = context.fastGenerate ? 'gpt-4o-mini' : (openaiCreds.model || 'gpt-4o');
+                const model = openaiCreds.model || 'gpt-5.2';
                 
                 const response = await callOpenAI(openaiCreds.apiKey, model, [
                     { role: 'system', content: 'You are a senior business researcher providing comprehensive analysis for executive-level decision making. Format your response in clear markdown with headers and bullet points.' },
@@ -2117,12 +1978,12 @@ ipcMain.handle('sourcePack:generateZip', async (event, { clientId, context }) =>
                 
                 documents[sourceResults.chatgpt.fileName] = `# ChatGPT Research Report\n\n**Client:** ${client.name}  \n**Generated:** ${timestamp}  \n**Model:** ${model}\n\n---\n\n${response}`;
                 sourceResults.chatgpt.success = true;
-                emitAiConsoleLog('researcher', '✓ ChatGPT research report complete', 'success');
+                emitAiConsoleLog('researcher', 'ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ ChatGPT research report complete', 'success');
                 sendProgress('chatgpt', 'ChatGPT research complete', 30, 100);
             } catch (e) {
                 console.error('[ChatGPT Error]', e);
                 sourceResults.chatgpt.error = e.message;
-                emitAiConsoleLog('researcher', `⚠ ChatGPT error: ${e.message}`, 'error');
+                emitAiConsoleLog('researcher', `ÃƒÂ¢Ã…Â¡Ã‚Â  ChatGPT error: ${e.message}`, 'error');
                 documents[sourceResults.chatgpt.fileName] = generateSourcePlaceholder('ChatGPT', client, e.message);
             }
         } else {
@@ -2145,12 +2006,12 @@ ipcMain.handle('sourcePack:generateZip', async (event, { clientId, context }) =>
                 
                 documents[sourceResults.arc.fileName] = arcConnector.formatComprehensiveReport(client, context, arcResults);
                 sourceResults.arc.success = true;
-                emitAiConsoleLog('researcher', `✓ ARC report: ${arcResults?.assets?.length || 0} assets found`, 'success');
+                emitAiConsoleLog('researcher', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ ARC report: ${arcResults?.assets?.length || 0} assets found`, 'success');
                 sendProgress('arc', 'ARC assets report complete', 55, 100);
             } catch (e) {
                 console.error('[ARC Error]', e);
                 sourceResults.arc.error = e.message;
-                emitAiConsoleLog('researcher', `⚠ ARC error: ${e.message}`, 'error');
+                emitAiConsoleLog('researcher', `ÃƒÂ¢Ã…Â¡Ã‚Â  ARC error: ${e.message}`, 'error');
                 documents[sourceResults.arc.fileName] = generateSourcePlaceholder('ARC', client, e.message);
             }
         } else {
@@ -2173,12 +2034,12 @@ ipcMain.handle('sourcePack:generateZip', async (event, { clientId, context }) =>
                 
                 documents[sourceResults.alphasense.fileName] = alphasenseConnector.formatComprehensiveReport(client, context, alphaResults);
                 sourceResults.alphasense.success = true;
-                emitAiConsoleLog('researcher', `✓ AlphaSense: ${alphaResults?.documents?.length || 0} documents analysed`, 'success');
+                emitAiConsoleLog('researcher', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ AlphaSense: ${alphaResults?.documents?.length || 0} documents analysed`, 'success');
                 sendProgress('alphasense', 'AlphaSense market report complete', 70, 100);
             } catch (e) {
                 console.error('[AlphaSense Error]', e);
                 sourceResults.alphasense.error = e.message;
-                emitAiConsoleLog('researcher', `⚠ AlphaSense error: ${e.message}`, 'error');
+                emitAiConsoleLog('researcher', `ÃƒÂ¢Ã…Â¡Ã‚Â  AlphaSense error: ${e.message}`, 'error');
                 documents[sourceResults.alphasense.fileName] = generateSourcePlaceholder('AlphaSense Market', client, e.message);
             }
         } else {
@@ -2208,12 +2069,12 @@ ipcMain.handle('sourcePack:generateZip', async (event, { clientId, context }) =>
                     
                 documents[sourceResults.alphasenseStrategy.fileName] = strategyReport;
                 sourceResults.alphasenseStrategy.success = true;
-                emitAiConsoleLog('researcher', `✓ AlphaSense Strategy: Client strategy analysis complete`, 'success');
+                emitAiConsoleLog('researcher', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ AlphaSense Strategy: Client strategy analysis complete`, 'success');
                 sendProgress('alphasenseStrategy', 'AlphaSense strategy report complete', 85, 100);
             } catch (e) {
                 console.error('[AlphaSense Strategy Error]', e);
                 sourceResults.alphasenseStrategy.error = e.message;
-                emitAiConsoleLog('researcher', `⚠ AlphaSense Strategy error: ${e.message}`, 'error');
+                emitAiConsoleLog('researcher', `ÃƒÂ¢Ã…Â¡Ã‚Â  AlphaSense Strategy error: ${e.message}`, 'error');
                 documents[sourceResults.alphasenseStrategy.fileName] = generateSourcePlaceholder('AlphaSense Strategy', client, e.message);
             }
         } else {
@@ -2326,7 +2187,7 @@ function generateSourcePlaceholder(sourceName, client, reason) {
     return `# ${sourceName} Report
 
 **Client:** ${client.name}  
-**Status:** ⚠️ Placeholder - Source Not Available
+**Status:** ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Placeholder - Source Not Available
 
 ---
 
@@ -2401,7 +2262,7 @@ ipcMain.handle('sourcePack:addFiles', async (event) => {
         });
         
         console.log(`[Source Pack] Added user file: ${fileName}${extracted.converted ? ` (converted to ${savedFileName})` : ''}`);
-        emitAiConsoleLog('system', `Added: ${fileName}${extracted.converted ? ` → ${savedFileName}` : ''}`, 'success');
+        emitAiConsoleLog('system', `Added: ${fileName}${extracted.converted ? ` ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ${savedFileName}` : ''}`, 'success');
     }
     
     return {
@@ -2482,7 +2343,7 @@ This document contains key client contact information including:
     appState.pendingSourcePack.documents[`${pocFolder}/_INDEX.md`] = indexContent;
     
     console.log(`[Source Pack] Added POC file: ${finalFileName}`);
-    emitAiConsoleLog('system', `✓ POC file added: ${finalFileName}`, 'success');
+    emitAiConsoleLog('system', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ POC file added: ${finalFileName}`, 'success');
     
     return {
         success: true,
@@ -2562,7 +2423,7 @@ ipcMain.handle('sourcePack:replacePlaceholder', async (event, { placeholderId, f
     placeholder.uploadedFileName = fileName;
     
     console.log(`[Source Pack] Replaced placeholder ${placeholderId}: ${schemaFileName} with ${fileName}${extracted.converted ? ' (text extracted)' : ''}`);
-    emitAiConsoleLog('system', `✓ Replaced ${placeholder.name} with ${fileName}`, 'success');
+    emitAiConsoleLog('system', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced ${placeholder.name} with ${fileName}`, 'success');
     
     return {
         success: true,
@@ -2624,7 +2485,7 @@ They may include:
 *Source Pack: ${client.name}*
 `;
         documents[`${additionalFolder}/_INDEX.md`] = indexContent;
-        emitAiConsoleLog('system', `✓ ${additionalFilesCount} additional documents included in Source Pack`, 'success');
+        emitAiConsoleLog('system', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ ${additionalFilesCount} additional documents included in Source Pack`, 'success');
     }
     
     // Create ZIP file
@@ -2695,6 +2556,2128 @@ They may include:
         return { success: false, error: error.message };
     }
 });
+
+// ============================================
+// Supporting Documents – Upload & Chunking
+// ============================================
+
+const documentChunker = require('./src/services/documentChunker');
+
+// In-memory corpus per session
+if (!appState.supportingDocsCorpus) {
+    appState.supportingDocsCorpus = null;     // { documents[], totalChunks, ... }
+}
+if (!appState.supportingDocFiles) {
+    appState.supportingDocFiles = [];         // {id, fileName, filePath, size, status, error?}
+}
+
+// Let the user pick files via native dialog, copy to temp, return metadata
+ipcMain.handle('supportingDocs:upload', async () => {
+    const fileSelection = await dialog.showOpenDialog(mainWindow, {
+        title: 'Upload Supporting Documents',
+        buttonLabel: 'Upload',
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+            { name: 'Documents', extensions: ['pptx','pdf','docx','doc','xlsx','xls','csv','md','txt','rtf','html','htm','json','eml','msg'] },
+            { name: 'Images', extensions: ['jpg','jpeg','png','gif','bmp','webp'] },
+            { name: 'All Files', extensions: ['*'] }
+        ]
+    });
+
+    if (fileSelection.canceled || fileSelection.filePaths.length === 0) {
+        return { success: false, canceled: true };
+    }
+
+    // Create temp dir for copies
+    const tmpDir = path.join(app.getPath('temp'), 'rstudiogpt-docs');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+    const added = [];
+    for (const fp of fileSelection.filePaths) {
+        const fileName = path.basename(fp);
+        const id = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const tmpPath = path.join(tmpDir, `${id}_${fileName}`);
+        fs.copyFileSync(fp, tmpPath);
+
+        const entry = {
+            id,
+            fileName,
+            filePath: tmpPath,
+            originalPath: fp,
+            size: fs.statSync(fp).size,
+            ext: path.extname(fileName).toLowerCase(),
+            status: 'pending'   // pending → processing → done | error
+        };
+        appState.supportingDocFiles.push(entry);
+        added.push(entry);
+    }
+
+    return { success: true, files: added, totalFiles: appState.supportingDocFiles.length };
+});
+
+// Serialisation chain – ensures only one batch processes at a time so
+// concurrent uploads never race on the corpus merge.
+let _docProcessChain = Promise.resolve();
+
+// Process all pending docs into chunks (or re-process everything)
+ipcMain.handle('supportingDocs:process', async () => {
+    const p = _docProcessChain.then(() => _doProcessSupportingDocs());
+    _docProcessChain = p.catch(() => {}); // keep chain alive on error
+    return p;
+});
+
+async function _doProcessSupportingDocs() {
+    const files = appState.supportingDocFiles.filter(f => f.status === 'pending' || f.status === 'error');
+    if (files.length === 0 && appState.supportingDocsCorpus) {
+        return { success: true, corpus: getSafeCorpusSummary(), message: 'Already processed' };
+    }
+    if (files.length === 0) {
+        return { success: true, corpus: getSafeCorpusSummary(), message: 'No files to process' };
+    }
+
+    console.log(`[SupportingDocs] Processing ${files.length} file(s)...`);
+
+    // Grab OpenAI key for image extraction
+    const openaiCreds = credentialManager.getCredentials('openai');
+    const openaiApiKey = (openaiCreds && openaiCreds.configured && openaiCreds.apiKey) ? openaiCreds.apiKey : null;
+
+    // Mark as processing
+    for (const f of files) f.status = 'processing';
+
+    // Send progress to renderer
+    const onProgress = (current, total, fileName) => {
+        mainWindow?.webContents?.send('supportingDocs:progress', { current, total, fileName });
+    };
+
+    try {
+        const batchResult = await documentChunker.processDocumentBatch(
+            files.map(f => ({ filePath: f.filePath, fileName: f.fileName })),
+            { openaiApiKey, onProgress }
+        );
+
+        // Update file statuses — detect 0-chunk docs as warnings
+        for (let i = 0; i < files.length; i++) {
+            const doc = batchResult.documents[i];
+            if (doc && !doc.error) {
+                if (doc.chunks.length === 0) {
+                    // Extracted OK but no text — flag so user knows
+                    files[i].status = 'error';
+                    files[i].error = 'No extractable text content found in this file';
+                    files[i].chunkCount = 0;
+                    console.warn(`[SupportingDocs] 0 chunks from: ${files[i].fileName}`);
+                } else {
+                    files[i].status = 'done';
+                    files[i].chunkCount = doc.chunks.length;
+                }
+            } else {
+                files[i].status = 'error';
+                files[i].error = doc?.error || 'Unknown error';
+                console.error(`[SupportingDocs] Error processing ${files[i].fileName}: ${files[i].error}`);
+            }
+        }
+
+        // Merge with any previously processed docs
+        if (appState.supportingDocsCorpus) {
+            appState.supportingDocsCorpus.documents.push(...batchResult.documents);
+            appState.supportingDocsCorpus.totalChunks += batchResult.totalChunks;
+            appState.supportingDocsCorpus.totalDocuments += batchResult.totalDocuments;
+            appState.supportingDocsCorpus.successfulDocuments += batchResult.successfulDocuments;
+            appState.supportingDocsCorpus.failedDocuments += batchResult.failedDocuments;
+        } else {
+            appState.supportingDocsCorpus = batchResult;
+        }
+
+        const doneCount = files.filter(f => f.status === 'done').length;
+        const errCount = files.filter(f => f.status === 'error').length;
+        console.log(`[SupportingDocs] Batch complete: ${doneCount} OK, ${errCount} failed`);
+
+        return {
+            success: true,
+            corpus: getSafeCorpusSummary(),
+            files: appState.supportingDocFiles
+        };
+    } catch (error) {
+        console.error('[SupportingDocs] Processing failed:', error);
+        for (const f of files) {
+            f.status = 'error';
+            f.error = error.message;
+        }
+        return { success: false, error: error.message, files: appState.supportingDocFiles };
+    }
+}
+
+// Remove a single file from the upload list (and its chunks from corpus)
+ipcMain.handle('supportingDocs:remove', async (event, { fileId }) => {
+    const idx = appState.supportingDocFiles.findIndex(f => f.id === fileId);
+    if (idx === -1) return { success: false, error: 'File not found' };
+
+    const removed = appState.supportingDocFiles.splice(idx, 1)[0];
+    // Clean up temp file
+    try { if (fs.existsSync(removed.filePath)) fs.unlinkSync(removed.filePath); } catch {}
+
+    // Remove from corpus
+    if (appState.supportingDocsCorpus) {
+        const sourceId = appState.supportingDocsCorpus.documents.find(
+            d => d.sourceName === removed.fileName
+        )?.sourceId;
+        if (sourceId) {
+            appState.supportingDocsCorpus.documents = appState.supportingDocsCorpus.documents.filter(
+                d => d.sourceId !== sourceId
+            );
+            appState.supportingDocsCorpus.totalChunks = appState.supportingDocsCorpus.documents.reduce(
+                (sum, d) => sum + (d.chunks?.length || 0), 0
+            );
+            appState.supportingDocsCorpus.totalDocuments = appState.supportingDocsCorpus.documents.length;
+        }
+    }
+
+    return { success: true, files: appState.supportingDocFiles, corpus: getSafeCorpusSummary() };
+});
+
+// Clear everything
+ipcMain.handle('supportingDocs:clear', async () => {
+    // Delete temp files
+    for (const f of appState.supportingDocFiles) {
+        try { if (fs.existsSync(f.filePath)) fs.unlinkSync(f.filePath); } catch {}
+    }
+    appState.supportingDocFiles = [];
+    appState.supportingDocsCorpus = null;
+    return { success: true };
+});
+
+// Get current state (files + corpus summary)
+ipcMain.handle('supportingDocs:getState', async () => {
+    return {
+        files: appState.supportingDocFiles,
+        corpus: getSafeCorpusSummary()
+    };
+});
+
+// Search the corpus
+ipcMain.handle('supportingDocs:search', async (event, { query, limit }) => {
+    if (!appState.supportingDocsCorpus) return { results: [] };
+    const results = documentChunker.searchCorpus(appState.supportingDocsCorpus, query, limit || 20);
+    return { results };
+});
+
+// Helper: return a safe summary (no huge content payloads)
+function getSafeCorpusSummary() {
+    if (!appState.supportingDocsCorpus) return null;
+    const c = appState.supportingDocsCorpus;
+    return {
+        totalChunks: c.totalChunks,
+        totalDocuments: c.totalDocuments,
+        successfulDocuments: c.successfulDocuments,
+        failedDocuments: c.failedDocuments,
+        processedAt: c.processedAt,
+        documents: (c.documents || []).map(d => ({
+            sourceId: d.sourceId,
+            sourceName: d.sourceName,
+            sourceType: d.sourceType,
+            chunkCount: d.chunks?.length || 0,
+            error: d.error || null,
+            processedAt: d.processedAt
+        }))
+    };
+}
+
+
+// ============================================
+// Qualification Criteria – Document Generation
+// ============================================
+
+// In-memory state for last generated qualification doc
+if (!appState.lastQualificationDoc) {
+    appState.lastQualificationDoc = null; // { markdown, htmlPreview, docxBuffer, fileName }
+}
+
+// Initialize qualification prompt from persistent storage
+if (!appState.qualificationPrompt) {
+    appState.qualificationPrompt = credentialManager.loadAppData('qualificationPrompt') || '';
+}
+
+// Get / save qualification prompt (settings)
+ipcMain.handle('settings:getQualPrompt', async () => {
+    return appState.qualificationPrompt || '';
+});
+
+ipcMain.handle('settings:saveQualPrompt', async (event, prompt) => {
+    appState.qualificationPrompt = prompt || '';
+    credentialManager.saveAppData('qualificationPrompt', prompt || '');
+    auditLogger.log('ADMIN', 'QUAL_PROMPT_UPDATED', { promptLength: prompt?.length || 0 });
+    return { success: true };
+});
+
+// ============================================
+// Smart Context Builder
+// ============================================
+
+/**
+ * Stopwords list for keyword extraction — common English words that carry
+ * no retrieval signal. Kept small to avoid accidentally removing domain
+ * terms that happen to be common (e.g. "market", "growth" are NOT here).
+ */
+const STOPWORDS = new Set([
+    'the','a','an','and','or','but','in','on','at','to','for','of','with',
+    'by','from','is','it','as','be','was','are','been','being','have','has',
+    'had','do','does','did','will','would','shall','should','may','might',
+    'can','could','this','that','these','those','not','no','nor','so',
+    'if','then','than','too','very','just','about','also','which','what',
+    'who','whom','when','where','how','all','each','every','both','few',
+    'more','most','other','some','such','only','own','same','into','over',
+    'such','up','out','its','your','our','their','my','we','you','they',
+    'he','she','him','her','his','them','me','us','i','using','produce',
+    'write','document','content','following','must','provide','include',
+    'based','use','make','generate','create','please','ensure','above',
+    'below'
+]);
+
+/**
+ * Extract meaningful keywords from a prompt string.
+ * Returns an array of lowercase terms, longest first (multi-word phrases
+ * score higher matches than single words).
+ */
+function extractPromptKeywords(prompt, clientName, industry, geography) {
+    if (!prompt) return [];
+
+    // 1. Remove markdown/formatting noise
+    const clean = prompt
+        .replace(/```[\s\S]*?```/g, ' ')
+        .replace(/\*\*|__|##|#+/g, ' ')
+        .replace(/\{\{[^}]+\}\}/g, ' ')   // template vars
+        .replace(/[|<>\\\/\-]{2,}/g, ' ')  // table dividers, HTML-ish
+        .replace(/https?:\/\/\S+/g, ' ')
+        .replace(/[^a-zA-Z0-9\s'-]/g, ' ');
+
+    // 2. Extract multi-word phrases (bigrams/trigrams from headings & key phrases)
+    const phrases = [];
+    const headingMatches = prompt.match(/(?:^|\n)#+\s+(.+)/g) || [];
+    for (const h of headingMatches) {
+        const headingText = h.replace(/^#+\s*/, '').trim().toLowerCase();
+        if (headingText.length > 3 && headingText.length < 80) phrases.push(headingText);
+    }
+    // Bold phrases
+    const boldMatches = prompt.match(/\*\*([^*]+)\*\*/g) || [];
+    for (const b of boldMatches) {
+        const text = b.replace(/\*\*/g, '').trim().toLowerCase();
+        if (text.length > 3 && text.length < 60) phrases.push(text);
+    }
+
+    // 3. Single-word keywords
+    const words = clean.toLowerCase().split(/\s+/)
+        .filter(w => w.length > 3 && !STOPWORDS.has(w))
+        .filter(w => !/^\d+$/.test(w));
+
+    // 4. Count word frequency — higher freq = more important to the prompt
+    const freq = {};
+    for (const w of words) freq[w] = (freq[w] || 0) + 1;
+
+    // 5. Add client/industry/geography as high-priority terms
+    const boostTerms = [];
+    if (clientName) boostTerms.push(...clientName.toLowerCase().split(/\s+/).filter(t => t.length > 2));
+    if (industry)   boostTerms.push(...industry.toLowerCase().split(/\s+/).filter(t => t.length > 2));
+    if (geography)  boostTerms.push(...geography.toLowerCase().split(/\s+/).filter(t => t.length > 2));
+    for (const t of boostTerms) freq[t] = (freq[t] || 0) + 5; // heavy boost
+
+    // 6. Sort by freq descending, then return top N single words + all phrases
+    const sortedWords = Object.entries(freq)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 60)
+        .map(e => e[0]);
+
+    return { singleTerms: sortedWords, phrases };
+}
+
+/**
+ * Score a chunk against extracted keywords.
+ * Returns a numeric relevance score (higher = more relevant).
+ * Phrase matches count 3x to reward topical coherence.
+ */
+function scoreChunk(chunk, keywords) {
+    const lower = chunk.content.toLowerCase();
+    let score = 0;
+
+    // Single-term matches (each occurrence adds 1)
+    for (const term of keywords.singleTerms) {
+        // Use indexOf loop instead of regex for speed on large text
+        let pos = 0;
+        while ((pos = lower.indexOf(term, pos)) !== -1) {
+            score += 1;
+            pos += term.length;
+        }
+    }
+
+    // Phrase matches (3x multiplier — topical coherence signal)
+    for (const phrase of keywords.phrases) {
+        let pos = 0;
+        while ((pos = lower.indexOf(phrase, pos)) !== -1) {
+            score += 3;
+            pos += phrase.length;
+        }
+    }
+
+    // Structural bonus: chunks with headings/entities/numbers are richer
+    const struct = chunk.structure || {};
+    if (struct.headings?.length > 0) score += 2;
+    if (struct.numbers?.length > 0)  score += 1;
+    if (struct.entities?.length > 0) score += 1;
+
+    return score;
+}
+
+/**
+ * Build smart context for a generation step.
+ *
+ * @param {object} options
+ * @param {string} options.stepName           - 'qualification' | 'valueCase' | 'provoke'
+ * @param {string} options.userPrompt         - The user-configurable prompt for this step
+ * @param {string} options.clientName
+ * @param {string} options.industry
+ * @param {string} options.geography
+ * @param {object[]} [options.priorOutputs]   - Array of { label, markdown } from earlier steps
+ * @param {number} [options.maxContextChars]  - Total char budget (default 100000 = ~25k tokens)
+ * @returns {object} { contextStr, includedChunks, totalChunks, stats }
+ */
+function buildSmartContext(options) {
+    const {
+        stepName,
+        userPrompt,
+        clientName,
+        industry,
+        geography,
+        priorOutputs = [],
+        maxContextChars = 100000
+    } = options;
+
+    // ── 1. Reserve space for prior-step outputs (LAYER 1 — highest priority) ──
+    // These are passed as full markdown, NOT re-chunked. They provide the
+    // analytical backbone that later steps should build on.
+    let layer1 = '';
+    let layer1Budget = 0;
+    const LAYER1_BUDGET_FRACTION = 0.35; // max 35% of total budget for prior outputs
+
+    if (priorOutputs.length > 0) {
+        const maxLayer1 = Math.floor(maxContextChars * LAYER1_BUDGET_FRACTION);
+        for (const prior of priorOutputs) {
+            if (!prior.markdown) continue;
+            const section = `\n\n========== PRIOR ANALYSIS: ${prior.label} ==========\n\n${prior.markdown}\n`;
+            if (layer1.length + section.length <= maxLayer1) {
+                layer1 += section;
+            } else {
+                // Truncate last one to fit
+                const remaining = maxLayer1 - layer1.length;
+                if (remaining > 500) {
+                    layer1 += `\n\n========== PRIOR ANALYSIS: ${prior.label} (truncated) ==========\n\n${prior.markdown.slice(0, remaining - 100)}\n\n[... truncated for context budget ...]\n`;
+                }
+            }
+        }
+        layer1Budget = layer1.length;
+    }
+
+    // ── 2. Collect source-document chunks only (exclude auto-chunked outputs) ──
+    const sourceChunks = [];
+    if (appState.supportingDocsCorpus) {
+        for (const doc of appState.supportingDocsCorpus.documents) {
+            if (doc.error) continue;
+            // Skip auto-generated documents (qualification, value case, provoke)
+            // They start with these prefixes when auto-chunked
+            const isAutoDoc = /^(Qualification_|ValueCase_|Provocation_)/i.test(doc.sourceName);
+            if (isAutoDoc) continue;
+            for (const chunk of (doc.chunks || [])) {
+                sourceChunks.push(chunk);
+            }
+        }
+    }
+
+    if (sourceChunks.length === 0 && layer1.length === 0) {
+        return { contextStr: '', includedChunks: 0, totalChunks: 0, stats: { layer1Chars: 0, layer2Chars: 0, layer3Chars: 0 } };
+    }
+
+    // ── 3. Score and rank source chunks by relevance ──
+    const keywords = extractPromptKeywords(userPrompt, clientName, industry, geography);
+
+    const scored = sourceChunks.map(chunk => ({
+        chunk,
+        score: scoreChunk(chunk, keywords)
+    }));
+
+    // Sort by score descending, then by original order (chunkIndex) as tiebreaker
+    scored.sort((a, b) => b.score - a.score || a.chunk.chunkIndex - b.chunk.chunkIndex);
+
+    // ── 4. Fill Layer 2 (high-relevance) and Layer 3 (remaining) ──
+    const layer2Budget = maxContextChars - layer1Budget;
+    let layer2 = '';
+    let layer2Count = 0;
+    let layer3 = '';
+    let layer3Count = 0;
+    const usedChunkIds = new Set(); // dedup (overlap chunks may share content)
+
+    // Tier split: top 60% of budget for high-scoring chunks, rest for coverage
+    const TIER1_FRACTION = 0.60;
+    const tier1Budget = Math.floor(layer2Budget * TIER1_FRACTION);
+    const tier2Budget = layer2Budget - tier1Budget;
+
+    // LAYER 2 — High-relevance chunks (by score)
+    for (const { chunk, score } of scored) {
+        if (score === 0) break; // no point including zero-relevance chunks in Layer 2
+        if (usedChunkIds.has(chunk.id)) continue;
+
+        const entry = `\n--- [${chunk.sourceName} | ${chunk.anchor} | relevance:${score}] ---\n${chunk.content}\n`;
+        if (layer2.length + entry.length > tier1Budget) continue; // skip, try smaller chunks
+        layer2 += entry;
+        layer2Count++;
+        usedChunkIds.add(chunk.id);
+    }
+
+    // LAYER 3 — Coverage chunks (fill remaining budget with unseen chunks, original order)
+    // This ensures we don't miss important info that keyword scoring might underweight
+    const unseenChunks = sourceChunks
+        .filter(c => !usedChunkIds.has(c.id))
+        .sort((a, b) => a.sourceName.localeCompare(b.sourceName) || a.chunkIndex - b.chunkIndex);
+
+    for (const chunk of unseenChunks) {
+        const entry = `\n--- [${chunk.sourceName} | ${chunk.anchor}] ---\n${chunk.content}\n`;
+        if (layer3.length + entry.length > tier2Budget) break;
+        layer3 += entry;
+        layer3Count++;
+        usedChunkIds.add(chunk.id);
+    }
+
+    // ── 5. Assemble final context ──
+    let contextStr = '';
+    const totalSourceDocs = appState.supportingDocsCorpus?.totalDocuments || 0;
+    const totalIncluded = layer2Count + layer3Count;
+
+    if (layer1) {
+        contextStr += `\n## Prior Step Analysis\nThe following sections are the outputs from earlier workflow steps. Use them as your analytical foundation — do not contradict their findings without explicit justification.\n${layer1}\n`;
+    }
+
+    if (layer2 || layer3) {
+        contextStr += `\n## Source Document Evidence\nThe following excerpts are from ${totalSourceDocs} uploaded source documents, ranked by relevance to this step. ${layer2Count} high-relevance chunks + ${layer3Count} coverage chunks.\n`;
+        if (layer2) contextStr += layer2;
+        if (layer3) contextStr += `\n--- [Lower-relevance coverage chunks follow] ---\n${layer3}`;
+    }
+
+    const stats = {
+        layer1Chars: layer1Budget,
+        layer2Chars: layer2.length,
+        layer2Chunks: layer2Count,
+        layer3Chars: layer3.length,
+        layer3Chunks: layer3Count,
+        totalChunks: sourceChunks.length,
+        includedChunks: totalIncluded,
+        keywordCount: keywords.singleTerms.length + keywords.phrases.length,
+        topKeywords: keywords.singleTerms.slice(0, 10)
+    };
+
+    console.log(`[SmartContext:${stepName}] Layer1: ${Math.round(layer1Budget/1000)}KB prior outputs | Layer2: ${layer2Count} chunks (${Math.round(layer2.length/1000)}KB) | Layer3: ${layer3Count} chunks (${Math.round(layer3.length/1000)}KB) | Total: ${Math.round(contextStr.length/1000)}KB`);
+    emitAiConsoleLog('system', `Smart context: ${totalIncluded}/${sourceChunks.length} source chunks (${layer2Count} relevant + ${layer3Count} coverage)${priorOutputs.length > 0 ? ` + ${priorOutputs.length} prior step output(s)` : ''} = ${Math.round(contextStr.length/1000)}KB`, 'info');
+
+    return { contextStr, includedChunks: totalIncluded, totalChunks: sourceChunks.length, stats };
+}
+
+
+// Generate qualification document
+ipcMain.handle('qualification:generate', async (event, { prompt, clientName, industry, geography }) => {
+    console.log('[Qualification] Starting generation...');
+    emitAiConsoleLog('system', 'Starting qualification document generation...', 'info');
+
+    // 1. Validate
+    const openaiCreds = credentialManager.getCredentials('openai');
+    if (!openaiCreds || !openaiCreds.apiKey) {
+        return { success: false, error: 'OpenAI API key not configured' };
+    }
+    if (!appState.supportingDocsCorpus || appState.supportingDocsCorpus.totalChunks === 0) {
+        return { success: false, error: 'No supporting documents processed. Go back to Step 3 and process documents first.' };
+    }
+
+    // 2. Build smart context — relevance-ranked source doc chunks only (no prior steps for qualification)
+    const { contextStr, includedChunks, totalChunks, stats: ctxStats } = buildSmartContext({
+        stepName: 'qualification',
+        userPrompt: prompt || '',
+        clientName,
+        industry,
+        geography,
+        priorOutputs: [],           // qualification is first analytical step — no prior outputs
+        maxContextChars: 100000     // ~25k tokens, leaves room for prompt + response
+    });
+
+    // 3. Interpolate variables in step-level prompt
+    let userPrompt = (prompt || '').trim();
+    userPrompt = userPrompt
+        .replace(/\{\{client_name\}\}/gi, clientName || 'the client')
+        .replace(/\{\{industry\}\}/gi, industry || 'their industry')
+        .replace(/\{\{geography\}\}/gi, geography || 'Global')
+        .replace(/\{\{chunk_count\}\}/gi, String(includedChunks));
+
+    // 4. Call OpenAI
+    const model = openaiCreds.model || 'gpt-5.2';
+    const systemMessage = `You are an elite management consultant producing a client qualification assessment document.
+
+ROLE: Produce the document content directly in well-structured Markdown. The system will automatically convert your Markdown into a formatted Word (.docx) file — you must NOT generate code, scripts, instructions, or references to python-docx or any file-creation tools. Just write the document content.
+
+INSTRUCTIONS FOR USING CONTEXT:
+- You have been given chunks from ${appState.supportingDocsCorpus.totalDocuments} supporting documents about the client.
+- SYNTHESIZE and REASON from the evidence. Connect data points, draw inferences, identify patterns, and form strategic conclusions — do not merely quote or parrot the source text.
+- Where data is partial, state what IS known, what can be reasonably inferred, and what remains a gap. Do NOT simply say "Insufficient data" — instead provide your best analytical assessment using whatever signals exist, then note specific gaps.
+- Only say "No data available" if there is genuinely zero relevant information across all provided documents.
+- Be thorough, specific, and analytical. Use actual figures, percentages, and facts from the documents.
+
+FORMATTING:
+- Use clean Markdown: ## for section headings, ### for subsections, **bold** for emphasis, bullet lists, numbered lists.
+- Start with a title and executive summary.
+- End with a summary/recommendation section.
+- DO NOT wrap output in code blocks or fences. DO NOT include \`\`\`markdown or \`\`\`python tags.
+- DO NOT provide instructions on how to generate files. Just provide the document content.
+
+CRITICAL TABLE FORMAT FOR FRAMEWORK PROMPTS:
+When the user's prompt contains numbered frameworks with diagnostic prompts/questions, you MUST format each framework's prompts as a markdown table. Each framework gets its own table. The table has exactly two columns:
+- Column 1 (narrow): The prompt number (e.g., "1", "2", "36.1")
+- Column 2 (wide): The question in bold on the first line, then a blank line, then the client-specific answer with bullet points, data, and analysis
+
+Example format for a framework table:
+| # | Prompt & Response |
+|---|---|
+| 1 | **What is the structural growth rate of your economy?** <br><br> The UK economy grew 0.1% in Q3 2025... <br> - GDP growth constrained to 1.1% forecast <br> - Sector productivity gap vs US peers: ~25% <br> - Incremental improvement cannot close a structural gap of this magnitude |
+| 2 | **What is the productivity differential?** <br><br> UK retail productivity lags US peers by... <br> - Revenue per employee: £X vs $Y <br> - Operating margin differential: X% vs Y% |
+
+Use <br> for line breaks within table cells. Use <br><br> to separate the question from the answer. Put the question text in **bold**. The answer should include specific data, bullet points (using <br> - format), and analytical reasoning.
+
+This table format is MANDATORY for any section that contains numbered diagnostic prompts or questions. Non-prompt sections (like "The Origination Cascade" or "The Dual Commercial Pathway") should use regular markdown headings, paragraphs, and bullet lists.`;
+
+    const messages = [
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: `# Supporting Document Context\n\nThe following excerpts are from ${appState.supportingDocsCorpus.totalDocuments} uploaded documents (${includedChunks} chunks) for client "${clientName || 'Unknown'}" in the ${industry || 'unspecified'} industry (${geography || 'Global'}).\n\n${contextStr}\n\n---\n\n# Qualification Criteria Assessment\n\nUsing the context above, produce the following document. Write the FULL document content in Markdown — do NOT generate code or scripts.\n\n${userPrompt}` }
+    ];
+
+    emitAiConsoleLog('system', `Sending to ${model} (${messages[1].content.length} chars)...`, 'thinking');
+
+    // Send progress events
+    mainWindow?.webContents?.send('qualification:progress', { stage: 'generating', pct: 30 });
+
+    let markdown;
+    try {
+        markdown = await callOpenAI(openaiCreds.apiKey, model, messages, 16000);
+    } catch (err) {
+        console.error('[Qualification] OpenAI call failed:', err);
+        return { success: false, error: `AI generation failed: ${err.message}` };
+    }
+
+    if (!markdown) {
+        return { success: false, error: 'AI returned an empty response. Try again or adjust the prompt.' };
+    }
+
+    // Post-process: strip code fences if the AI wrapped output in them
+    markdown = markdown.trim();
+    if (markdown.startsWith('```')) {
+        markdown = markdown
+            .replace(/^```(?:markdown|md|python|javascript|text)?\s*\n?/i, '')
+            .replace(/\n?```\s*$/, '')
+            .trim();
+    }
+
+    emitAiConsoleLog('system', `Received ${markdown.length} chars of qualification content`, 'success');
+    mainWindow?.webContents?.send('qualification:progress', { stage: 'building_doc', pct: 70 });
+
+    // 5. Build Word document from markdown
+    let docxBuffer;
+    try {
+        loadHeavyModules();
+        docxBuffer = await buildQualificationDocx(markdown, clientName);
+    } catch (err) {
+        console.error('[Qualification] DOCX build failed:', err);
+        return { success: false, error: `Word document creation failed: ${err.message}` };
+    }
+
+    mainWindow?.webContents?.send('qualification:progress', { stage: 'chunking', pct: 90 });
+
+    // 6. Auto-chunk the qualification doc and merge into corpus
+    try {
+        const tmpDir = path.join(app.getPath('temp'), 'rstudiogpt-docs');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+        const qualMdPath = path.join(tmpDir, `qualification_${Date.now()}.md`);
+        fs.writeFileSync(qualMdPath, markdown, 'utf8');
+
+        const qualDoc = await documentChunker.processDocument(qualMdPath, `Qualification_${clientName || 'Client'}.md`, {});
+        
+        // Add to corpus
+        if (appState.supportingDocsCorpus) {
+            appState.supportingDocsCorpus.documents.push(qualDoc);
+            appState.supportingDocsCorpus.totalChunks += qualDoc.chunks.length;
+            appState.supportingDocsCorpus.totalDocuments += 1;
+            appState.supportingDocsCorpus.successfulDocuments += 1;
+        }
+        emitAiConsoleLog('system', `Qualification doc chunked (${qualDoc.chunks.length} chunks) and added to corpus`, 'success');
+    } catch (err) {
+        console.warn('[Qualification] Auto-chunking failed (non-fatal):', err.message);
+    }
+
+    // 7. Store result
+    const sanitized = (clientName || 'Client').replace(/[^a-zA-Z0-9]/g, '_');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fileName = `${sanitized}_Qualification_${ts}.docx`;
+
+    appState.lastQualificationDoc = {
+        markdown,
+        docxBuffer: Buffer.from(docxBuffer),
+        fileName
+    };
+
+    mainWindow?.webContents?.send('qualification:progress', { stage: 'done', pct: 100 });
+
+    auditLogger.log('QUALIFICATION', 'DOC_GENERATED', {
+        clientName,
+        markdownLength: markdown.length,
+        docxSize: docxBuffer.length,
+        chunksUsed: includedChunks
+    });
+
+    return {
+        success: true,
+        markdown,
+        fileName,
+        corpusSummary: getSafeCorpusSummary()
+    };
+});
+
+// Download the generated qualification docx
+ipcMain.handle('qualification:download', async () => {
+    if (!appState.lastQualificationDoc) {
+        return { success: false, error: 'No qualification document to download' };
+    }
+
+    // Lazy-rebuild docx if only markdown is available (e.g. restored from history)
+    if (!appState.lastQualificationDoc.docxBuffer && appState.lastQualificationDoc.markdown) {
+        try {
+            loadHeavyModules();
+            const buf = await buildQualificationDocx(appState.lastQualificationDoc.markdown, 'Client', {});
+            appState.lastQualificationDoc.docxBuffer = Buffer.from(buf);
+        } catch (err) {
+            return { success: false, error: 'Failed to rebuild document: ' + err.message };
+        }
+    }
+
+    if (!appState.lastQualificationDoc.docxBuffer) {
+        return { success: false, error: 'No qualification document to download' };
+    }
+
+    const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: appState.lastQualificationDoc.fileName,
+        filters: [{ name: 'Word Document', extensions: ['docx'] }]
+    });
+
+    if (result.canceled) return { success: false, canceled: true };
+
+    try {
+        fs.writeFileSync(result.filePath, appState.lastQualificationDoc.docxBuffer);
+        emitAiConsoleLog('system', `Qualification doc saved: ${path.basename(result.filePath)}`, 'success');
+        return { success: true, filePath: result.filePath };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
+// ============================================
+// Step 5: Value Case
+// ============================================
+
+// Initialize value case prompt from persistent storage
+if (!appState.valueCasePrompt) {
+    appState.valueCasePrompt = credentialManager.loadAppData('valueCasePrompt') || '';
+}
+
+// Initialise value case document store
+if (!appState.lastValueCaseDoc) {
+    appState.lastValueCaseDoc = null; // { markdown, docxBuffer, fileName }
+}
+
+// Get / save value case prompt (settings)
+ipcMain.handle('settings:getValueCasePrompt', async () => {
+    return appState.valueCasePrompt || '';
+});
+
+ipcMain.handle('settings:saveValueCasePrompt', async (event, prompt) => {
+    appState.valueCasePrompt = prompt || '';
+    credentialManager.saveAppData('valueCasePrompt', prompt || '');
+    auditLogger.log('ADMIN', 'VALUE_CASE_PROMPT_UPDATED', { promptLength: prompt?.length || 0 });
+    return { success: true };
+});
+
+// Generate value case document
+ipcMain.handle('valueCase:generate', async (event, { prompt, clientName, industry, geography }) => {
+    console.log('[ValueCase] Starting generation...');
+    emitAiConsoleLog('system', 'Starting value case document generation...', 'info');
+
+    // 1. Validate
+    const openaiCreds = credentialManager.getCredentials('openai');
+    if (!openaiCreds || !openaiCreds.apiKey) {
+        return { success: false, error: 'OpenAI API key not configured' };
+    }
+    if (!appState.supportingDocsCorpus || appState.supportingDocsCorpus.totalChunks === 0) {
+        return { success: false, error: 'No supporting documents processed. Go back to Step 3 and process documents first.' };
+    }
+
+    // 2. Build smart context — qualification as prior output + relevance-ranked source docs
+    const qualMarkdown = appState.lastQualificationDoc?.markdown || '';
+    const priorOutputs = qualMarkdown ? [{ label: 'Qualification Assessment', markdown: qualMarkdown }] : [];
+
+    const { contextStr, includedChunks, totalChunks, stats: ctxStats } = buildSmartContext({
+        stepName: 'valueCase',
+        userPrompt: prompt || '',
+        clientName,
+        industry,
+        geography,
+        priorOutputs,
+        maxContextChars: 120000
+    });
+
+    // 3. Interpolate variables
+    let userPrompt = (prompt || '').trim();
+    userPrompt = userPrompt
+        .replace(/\{\{client_name\}\}/gi, clientName || 'the client')
+        .replace(/\{\{industry\}\}/gi, industry || 'their industry')
+        .replace(/\{\{geography\}\}/gi, geography || 'Global')
+        .replace(/\{\{chunk_count\}\}/gi, String(includedChunks));
+
+    // 4. Call OpenAI
+    const model = openaiCreds.model || 'gpt-5.2';
+    const systemMessage = `You are an elite strategy consultant producing a comprehensive Value Case document for a client engagement.
+
+ROLE: Produce the document content directly in well-structured Markdown. The system will automatically convert your Markdown into a formatted Word (.docx) file — you must NOT generate code, scripts, instructions, or references to python-docx or any file-creation tools. Just write the document content.
+
+INSTRUCTIONS FOR USING CONTEXT:
+- You have been given chunks from supporting documents AND potentially a qualification assessment about the client.
+- SYNTHESIZE and REASON from the evidence. Connect data points, draw inferences, identify patterns, and form strategic conclusions.
+- Every claim must be specific to the client: use sector economics, geography, competitive set, regulatory context, operating model realities.
+- If a fact is unknown, state a reasonable assumption explicitly and label it "Assumption".
+- Use evidence where possible — reference public, reputable sources (annual reports, investor presentations, ONS/OECD/IMF, sector benchmarks).
+- Where data is partial, state what IS known, what can be reasonably inferred, and what remains a gap. Do NOT simply say "Insufficient data".
+- Be thorough, specific, and analytical. Use actual figures, percentages, and facts from the documents.
+- Tone: boardroom-credible, evidence-based, compelling, CFO-literate.
+
+FORMAT REQUIREMENTS — THIS IS CRITICAL:
+Your output is Markdown that will be automatically converted into a formatted Word (.docx) document.
+The system handles all document creation — you must NOT generate code, scripts, python-docx instructions, or technical implementation details.
+
+You MUST use these Markdown conventions precisely:
+- # for main title (use once)
+- ## for major section headings
+- ### for subsection headings
+- #### for sub-subsection headings
+- **bold text** for emphasis, key terms, metrics, and labels
+- *italic text* for supporting commentary
+- Bullet points using - for lists
+- Numbered lists using 1. 2. 3. format
+- DO NOT wrap output in code blocks or fences. DO NOT include \`\`\`markdown or \`\`\`python tags.
+- DO NOT provide instructions on how to generate files. Just provide the document content.
+
+TABLE FORMATTING — MANDATORY:
+Whenever you present structured data, you MUST use Markdown tables. This includes:
+- Financial projections, ROI analysis, cost-benefit breakdowns
+- Comparisons (e.g., current state vs future state)
+- KPIs, metrics, or benchmarks
+- Risk assessments and scoring matrices
+- Any side-by-side or multi-attribute analysis
+
+Every table MUST have the header row and separator row (|---|---|).
+Use <br> for line breaks within table cells.
+
+DOCUMENT STRUCTURE:
+The user will provide their specific prompt structure. Follow it precisely. The output should be a complete, narrative value case document that reads as a cohesive business case — not just a list of answers. Sections should flow as prose with appropriate headings, subheadings, tables, and bullet lists.
+
+Include a "Sources Consulted" section at the end as a bullet list.`;
+
+    const messages = [
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: `# Supporting Document Context\n\nThe following excerpts are from ${appState.supportingDocsCorpus?.totalDocuments || 0} uploaded documents (${includedChunks} chunks) for client "${clientName || 'Unknown'}" in the ${industry || 'unspecified'} industry (${geography || 'Global'}).\n\n${contextStr}\n\n---\n\n# Value Case Document\n\nUsing the context above, produce the following value case document for ${clientName || 'the client'}. Write the FULL document content in Markdown — do NOT generate code or scripts.\n\n${userPrompt}` }
+    ];
+
+    emitAiConsoleLog('system', `Sending to ${model} (${messages[1].content.length} chars)...`, 'thinking');
+    mainWindow?.webContents?.send('valueCase:progress', { stage: 'generating', pct: 30 });
+
+    let markdown;
+    try {
+        markdown = await callOpenAI(openaiCreds.apiKey, model, messages, 16000);
+    } catch (err) {
+        console.error('[ValueCase] OpenAI call failed:', err);
+        return { success: false, error: `AI generation failed: ${err.message}` };
+    }
+
+    if (!markdown) {
+        return { success: false, error: 'AI returned an empty response. Try again or adjust the prompt.' };
+    }
+
+    // Post-process: strip code fences if the AI wrapped output in them
+    markdown = markdown.trim();
+    if (markdown.startsWith('```')) {
+        markdown = markdown
+            .replace(/^```(?:markdown|md|python|javascript|text)?\s*\n?/i, '')
+            .replace(/\n?```\s*$/, '')
+            .trim();
+    }
+
+    emitAiConsoleLog('system', `Received ${markdown.length} chars of value case content`, 'success');
+    mainWindow?.webContents?.send('valueCase:progress', { stage: 'building_doc', pct: 70 });
+
+    // 5. Build Word document (reuse the same builder)
+    let docxBuffer;
+    try {
+        loadHeavyModules();
+        docxBuffer = await buildQualificationDocx(markdown, clientName, { pageBreakOnSections: true });
+    } catch (err) {
+        console.error('[ValueCase] DOCX build failed:', err);
+        return { success: false, error: `Word document creation failed: ${err.message}` };
+    }
+
+    mainWindow?.webContents?.send('valueCase:progress', { stage: 'chunking', pct: 90 });
+
+    // 6. Auto-chunk the value case doc and merge into corpus (so provoke can use it)
+    try {
+        const tmpDir = path.join(app.getPath('temp'), 'rstudiogpt-docs');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+        const vcMdPath = path.join(tmpDir, `valuecase_${Date.now()}.md`);
+        fs.writeFileSync(vcMdPath, markdown, 'utf8');
+
+        const vcDoc = await documentChunker.processDocument(vcMdPath, `ValueCase_${clientName || 'Client'}.md`, {});
+
+        if (appState.supportingDocsCorpus) {
+            appState.supportingDocsCorpus.documents.push(vcDoc);
+            appState.supportingDocsCorpus.totalChunks += vcDoc.chunks.length;
+            appState.supportingDocsCorpus.totalDocuments += 1;
+            appState.supportingDocsCorpus.successfulDocuments += 1;
+        }
+        emitAiConsoleLog('system', `Value case doc chunked (${vcDoc.chunks.length} chunks) and added to corpus`, 'success');
+    } catch (err) {
+        console.warn('[ValueCase] Auto-chunking failed (non-fatal):', err.message);
+    }
+
+    // 7. Store result
+    const sanitized = (clientName || 'Client').replace(/[^a-zA-Z0-9]/g, '_');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fileName = `${sanitized}_Value_Case_${ts}.docx`;
+
+    appState.lastValueCaseDoc = {
+        markdown,
+        docxBuffer: Buffer.from(docxBuffer),
+        fileName
+    };
+
+    mainWindow?.webContents?.send('valueCase:progress', { stage: 'done', pct: 100 });
+
+    auditLogger.log('VALUE_CASE', 'DOC_GENERATED', {
+        clientName,
+        markdownLength: markdown.length,
+        docxSize: docxBuffer.length,
+        chunksUsed: includedChunks
+    });
+
+    return {
+        success: true,
+        markdown,
+        fileName,
+        corpusSummary: getSafeCorpusSummary()
+    };
+});
+
+// Download the generated value case docx
+ipcMain.handle('valueCase:download', async () => {
+    if (!appState.lastValueCaseDoc) {
+        return { success: false, error: 'No value case document to download' };
+    }
+
+    // Lazy-rebuild docx if only markdown is available (e.g. restored from history)
+    if (!appState.lastValueCaseDoc.docxBuffer && appState.lastValueCaseDoc.markdown) {
+        try {
+            loadHeavyModules();
+            const buf = await buildQualificationDocx(appState.lastValueCaseDoc.markdown, 'Client', { pageBreakOnSections: true });
+            appState.lastValueCaseDoc.docxBuffer = Buffer.from(buf);
+        } catch (err) {
+            return { success: false, error: 'Failed to rebuild document: ' + err.message };
+        }
+    }
+
+    if (!appState.lastValueCaseDoc.docxBuffer) {
+        return { success: false, error: 'No value case document to download' };
+    }
+
+    const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: appState.lastValueCaseDoc.fileName,
+        filters: [{ name: 'Word Document', extensions: ['docx'] }]
+    });
+
+    if (result.canceled) return { success: false, canceled: true };
+
+    try {
+        fs.writeFileSync(result.filePath, appState.lastValueCaseDoc.docxBuffer);
+        emitAiConsoleLog('system', `Value case doc saved: ${path.basename(result.filePath)}`, 'success');
+        return { success: true, filePath: result.filePath };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
+// Extract and rate assumptions from the value case
+ipcMain.handle('valueCase:extractAssumptions', async (event, { clientName }) => {
+    console.log('[ValueCase] Extracting assumptions...');
+    emitAiConsoleLog('system', 'Analysing value case for assumptions...', 'info');
+
+    const openaiCreds = credentialManager.getCredentials('openai');
+    if (!openaiCreds || !openaiCreds.apiKey) {
+        return { success: false, error: 'OpenAI API key not configured' };
+    }
+
+    const vcMarkdown = appState.lastValueCaseDoc?.markdown;
+    if (!vcMarkdown) {
+        return { success: false, error: 'No value case document found. Generate one first.' };
+    }
+
+    const model = openaiCreds.model || 'gpt-5.2';
+
+    const systemMessage = `You are a senior strategy analyst reviewing a value case document. Your task is to identify every assumption made in the document and rate each one.
+
+For each assumption, assess:
+1. IMPACT: How much does this assumption affect the overall value case conclusions? If this assumption were wrong, how badly would it undermine the business case?
+   - Red: Critical impact. If wrong, the value case fundamentally falls apart.
+   - Amber: Significant impact. If wrong, key figures or conclusions would need substantial revision.
+   - Green: Low impact. If wrong, the value case still broadly holds.
+
+2. CONFIDENCE: How confident should we be that this assumption is correct, given publicly available evidence?
+   - Red: Low confidence. No supporting evidence, speculative, or contradicted by known data.
+   - Amber: Medium confidence. Some supporting evidence but not verified or could vary significantly.
+   - Green: High confidence. Well-supported by public data, industry norms, or stated sources.
+
+RULES:
+- Return ONLY a JSON array of assumption objects. No preamble, no markdown, no code fences.
+- Each object has: "assumption" (the assumption text, 1-2 sentences), "impact" ("red", "amber", or "green"), "confidence" ("red", "amber", or "green")
+- Extract ALL meaningful assumptions — typically 8-15 from a value case. Include financial assumptions, market assumptions, capability assumptions, timeline assumptions, competitive assumptions.
+- Be specific. Don't say "Revenue will grow" — say "Revenue growth of 8% CAGR assumed for FY2026-2029 based on historical trend".
+- Order by impact: most critical assumptions first.
+
+RESPONSE FORMAT:
+[
+  {"assumption": "The 25% productivity improvement is achievable within 18 months based on comparable implementations at similar-scale retailers", "impact": "red", "confidence": "amber"},
+  {"assumption": "Current IT infrastructure can support the proposed AI workloads without major capital expenditure", "impact": "amber", "confidence": "red"}
+]`;
+
+    const messages = [
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: `Extract and rate all assumptions from this value case document for client "${clientName || 'Unknown'}":\n\n${vcMarkdown}` }
+    ];
+
+    emitAiConsoleLog('system', `Sending to ${model} for assumptions extraction...`, 'thinking');
+
+    let rawResponse;
+    try {
+        rawResponse = await callOpenAI(openaiCreds.apiKey, model, messages, 4000);
+    } catch (err) {
+        console.error('[ValueCase] Assumptions extraction failed:', err);
+        return { success: false, error: `AI extraction failed: ${err.message}` };
+    }
+
+    if (!rawResponse) {
+        return { success: false, error: 'AI returned an empty response.' };
+    }
+
+    let assumptions = [];
+    try {
+        let cleaned = rawResponse.trim();
+        if (cleaned.startsWith('```')) {
+            cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/, '').trim();
+        }
+        const parsed = JSON.parse(cleaned);
+        assumptions = (Array.isArray(parsed) ? parsed : [parsed]).slice(0, 20).map((a, i) => ({
+            id: `assumption-${i}`,
+            assumption: String(a.assumption || '').slice(0, 500),
+            impact: ['red', 'amber', 'green'].includes(a.impact) ? a.impact : 'amber',
+            confidence: ['red', 'amber', 'green'].includes(a.confidence) ? a.confidence : 'amber'
+        }));
+    } catch (parseErr) {
+        console.error('[ValueCase] Failed to parse assumptions JSON:', parseErr.message);
+        return { success: false, error: 'Failed to parse AI response as structured data.' };
+    }
+
+    emitAiConsoleLog('system', `Extracted ${assumptions.length} assumptions from value case`, 'success');
+
+    // Store in app state
+    appState.valueCaseAssumptions = assumptions;
+
+    return { success: true, assumptions };
+});
+
+// ============================================
+// Step 6: Provoke — Origination Engine Document
+// ============================================
+
+// Initialize provocation prompt from persistent storage
+if (!appState.provocationPrompt) {
+    appState.provocationPrompt = credentialManager.loadAppData('provocationPrompt') || '';
+}
+
+// Initialise provocation document store
+if (!appState.lastProvocationDoc) {
+    appState.lastProvocationDoc = null; // { markdown, docxBuffer, fileName }
+}
+
+// Get / save provocation prompt (settings)
+ipcMain.handle('settings:getProvokePrompt', async () => {
+    return appState.provocationPrompt || '';
+});
+
+ipcMain.handle('settings:saveProvokePrompt', async (event, prompt) => {
+    appState.provocationPrompt = prompt || '';
+    credentialManager.saveAppData('provocationPrompt', prompt || '');
+    auditLogger.log('ADMIN', 'PROVOKE_PROMPT_UPDATED', { promptLength: prompt?.length || 0 });
+    return { success: true };
+});
+
+// C-Suite review persona prompts (settings)
+const DEFAULT_CSUITE_PROMPTS = {
+    ceo: `You are reviewing these documents as the CEO. Focus on: overall strategic vision and alignment, competitive positioning, market opportunity sizing, board-level narrative coherence, whether the story is compelling enough to secure investment and executive commitment. Challenge whether the strategy addresses the most critical existential questions facing the business.`,
+    cfo: `You are reviewing these documents as the CFO. Focus on: financial rigour of all claims, ROI projections and payback periods, risk quantification and sensitivity analysis, capital allocation implications, whether the business case would withstand investor and analyst scrutiny. Flag any unsubstantiated financial claims or optimistic projections lacking evidence.`,
+    coo: `You are reviewing these documents as the COO. Focus on: operational feasibility of proposed transformations, implementation complexity and timeline realism, change management requirements, resource and capability gaps, supply chain and process implications. Challenge whether the execution plan is realistic given current operational constraints.`,
+    cto: `You are reviewing these documents as the CTO. Focus on: technology architecture feasibility, AI/data readiness and maturity assessment, integration complexity with existing systems, technical debt implications, cybersecurity and data governance considerations. Evaluate whether technology claims are grounded in reality versus vendor hype.`,
+    cmo: `You are reviewing these documents as the CMO. Focus on: market positioning claims and competitive differentiation, customer insight depth and segmentation quality, brand and reputation implications, go-to-market strategy coherence, digital engagement and customer experience considerations. Challenge whether the market narrative resonates with target audiences.`
+};
+
+if (!appState.csuitePrompts) {
+    const saved = credentialManager.loadAppData('csuitePrompts');
+    appState.csuitePrompts = saved || { ...DEFAULT_CSUITE_PROMPTS };
+}
+
+ipcMain.handle('settings:getCsuitePrompts', async () => {
+    return appState.csuitePrompts || { ...DEFAULT_CSUITE_PROMPTS };
+});
+
+ipcMain.handle('settings:saveCsuitePrompts', async (event, prompts) => {
+    appState.csuitePrompts = prompts || {};
+    credentialManager.saveAppData('csuitePrompts', prompts || {});
+    auditLogger.log('ADMIN', 'CSUITE_PROMPTS_UPDATED', { roles: Object.keys(prompts || {}) });
+    return { success: true };
+});
+
+// Generate provocation document
+ipcMain.handle('provocation:generate', async (event, { prompt, clientName, industry, geography }) => {
+    console.log('[Provocation] Starting generation...');
+    emitAiConsoleLog('system', 'Starting provocation document generation...', 'info');
+
+    // 1. Validate
+    const openaiCreds = credentialManager.getCredentials('openai');
+    if (!openaiCreds || !openaiCreds.apiKey) {
+        return { success: false, error: 'OpenAI API key not configured' };
+    }
+
+    // 2. Build smart context — qualification + value case as prior outputs, relevance-ranked source docs
+    const priorOutputs = [];
+    if (appState.lastQualificationDoc?.markdown) {
+        priorOutputs.push({ label: 'Qualification Assessment', markdown: appState.lastQualificationDoc.markdown });
+    }
+    if (appState.lastValueCaseDoc?.markdown) {
+        priorOutputs.push({ label: 'Value Case', markdown: appState.lastValueCaseDoc.markdown });
+    }
+
+    const { contextStr, includedChunks, totalChunks, stats: ctxStats } = buildSmartContext({
+        stepName: 'provoke',
+        userPrompt: prompt || '',
+        clientName,
+        industry,
+        geography,
+        priorOutputs,
+        maxContextChars: 120000
+    });
+
+    // 3. Interpolate variables
+    let userPrompt = (prompt || '').trim();
+    userPrompt = userPrompt
+        .replace(/\{\{client_name\}\}/gi, clientName || 'the client')
+        .replace(/\{\{industry\}\}/gi, industry || 'their industry')
+        .replace(/\{\{geography\}\}/gi, geography || 'Global')
+        .replace(/\{\{chunk_count\}\}/gi, String(includedChunks));
+
+    // 4. Call OpenAI
+    const model = openaiCreds.model || 'gpt-5.2';
+    const systemMessage = `You are an elite strategy and AI origination analyst producing a client-specific version of "The Origination Engine" — a boardroom-credible, slightly provocative, CFO-literate strategic document.
+
+ROLE: Produce the document content directly in well-structured Markdown. The system will automatically convert your Markdown into a formatted Word (.docx) file — you must NOT generate code, scripts, instructions, or references to python-docx or any file-creation tools. Just write the document content.
+
+INSTRUCTIONS FOR USING CONTEXT:
+- You have been given chunks from supporting documents AND potentially a qualification assessment from Step 4 and a value case from Step 5 about the client.
+- SYNTHESIZE and REASON from the evidence. Connect data points, draw inferences, identify patterns, and form strategic conclusions.
+- Every answer must be specific to the client: use sector economics, geography, competitive set, regulatory context, operating model realities.
+- If a fact is unknown, state a reasonable assumption explicitly and label it "Assumption".
+- Use evidence where possible — reference public, reputable sources (annual reports, investor presentations, ONS/OECD/IMF, sector benchmarks).
+- Where data is partial, state what IS known, what can be reasonably inferred, and what remains a gap. Do NOT simply say "Insufficient data".
+- Be thorough, specific, and analytical. Use actual figures, percentages, and facts from the documents.
+- Tone: boardroom-credible, crisp, slightly provocative, CFO-literate.
+
+FORMAT REQUIREMENTS — THIS IS CRITICAL:
+Your output is Markdown that will be automatically converted into a formatted Word (.docx) document.
+The system handles all document creation — you must NOT generate code, scripts, python-docx instructions, or technical implementation details.
+
+You MUST use these Markdown conventions precisely:
+- # for main title (use once)
+- ## for major section headings
+- ### for subsection headings
+- #### for sub-subsection headings
+- **bold text** for emphasis, key terms, metrics, and labels
+- *italic text* for supporting commentary
+- Bullet points using - for lists
+- Numbered lists using 1. 2. 3. format
+- DO NOT wrap output in code blocks or fences. DO NOT include \`\`\`markdown or \`\`\`python tags.
+- DO NOT provide instructions on how to generate files. Just provide the document content.
+
+TABLE FORMATTING — MANDATORY:
+Whenever you present structured data, you MUST use Markdown tables. This includes:
+- Diagnostic prompts / questions with answers
+- Comparisons (e.g., current state vs future state, Lane 1 vs Lane 2)
+- Financial data, metrics, KPIs, or benchmarks
+- Assessment matrices, scoring, or RAG ratings
+- Any side-by-side or multi-attribute analysis
+
+Every table MUST have the header row and separator row (|---|---|).
+
+CRITICAL TABLE FORMAT FOR FRAMEWORK PROMPTS:
+When the user's prompt contains numbered frameworks with diagnostic prompts/questions, you MUST format each framework's prompts as a markdown table. Each framework gets its own table. The table has exactly two columns:
+- Column 1 (narrow): The prompt number (e.g., "1", "2", "36.1")
+- Column 2 (wide): The question in bold on the first line, then a blank line, then the client-specific answer with bullet points, data, and analysis
+
+Example format for a framework table:
+| # | Prompt & Response |
+|---|---|
+| 1 | **What is the structural growth rate of your economy?** <br><br> The UK economy grew 0.1% in Q3 2025... <br> - GDP growth constrained to 1.1% forecast <br> - Sector productivity gap vs US peers: ~25% <br> - Incremental improvement cannot close a structural gap of this magnitude |
+| 2 | **What is the productivity differential?** <br><br> UK retail productivity lags US peers by... <br> - Revenue per employee: £X vs $Y <br> - Operating margin differential: X% vs Y% |
+
+Use <br> for line breaks within table cells. Use <br><br> to separate the question from the answer. Put the question text in **bold**. The answer should include specific data, bullet points (using <br> - format), and analytical reasoning.
+
+This table format is MANDATORY for any section that contains numbered diagnostic prompts or questions. Non-prompt sections (like "The Origination Cascade" or "The Dual Commercial Pathway") should use regular markdown headings, paragraphs, and bullet lists.
+
+DOCUMENT STRUCTURE:
+The user will provide their specific prompt structure. Follow it precisely. The output should be a complete, narrative strategic document that reads as a cohesive piece — not just a list of answers. Sections that are not tables should flow as prose with appropriate headings, subheadings, and bullet lists.
+
+If the prompt includes sections like "The Origination Cascade" or "The Dual Commercial Pathway", render those as structured markdown (headings, subheadings, bullet lists, bold labels) — NOT as tables.
+
+Include a "Sources Consulted" section at the end as a bullet list.`;
+
+    const messages = [
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: `# Supporting Document Context\n\nThe following excerpts are from ${appState.supportingDocsCorpus?.totalDocuments || 0} uploaded documents (${includedChunks} chunks) for client "${clientName || 'Unknown'}" in the ${industry || 'unspecified'} industry (${geography || 'Global'}).\n\n${contextStr}\n\n---\n\n# Provocation Document: The Origination Engine\n\nUsing the context above, produce the following document for ${clientName || 'the client'}. Write the FULL document content in Markdown — do NOT generate code or scripts.\n\n${userPrompt}` }
+    ];
+
+    emitAiConsoleLog('system', `Sending to ${model} (${messages[1].content.length} chars)...`, 'thinking');
+    mainWindow?.webContents?.send('provocation:progress', { stage: 'generating', pct: 30 });
+
+    let markdown;
+    try {
+        markdown = await callOpenAI(openaiCreds.apiKey, model, messages, 16000);
+    } catch (err) {
+        console.error('[Provocation] OpenAI call failed:', err);
+        return { success: false, error: `AI generation failed: ${err.message}` };
+    }
+
+    if (!markdown) {
+        return { success: false, error: 'AI returned an empty response. Try again or adjust the prompt.' };
+    }
+
+    // Post-process: strip code fences if the AI wrapped output in them
+    markdown = markdown.trim();
+    if (markdown.startsWith('```')) {
+        markdown = markdown
+            .replace(/^```(?:markdown|md|python|javascript|text)?\s*\n?/i, '')
+            .replace(/\n?```\s*$/, '')
+            .trim();
+    }
+
+    emitAiConsoleLog('system', `Received ${markdown.length} chars of provocation content`, 'success');
+    mainWindow?.webContents?.send('provocation:progress', { stage: 'building_doc', pct: 70 });
+
+    // 5. Build Word document (reuse the same builder)
+    let docxBuffer;
+    try {
+        loadHeavyModules();
+        docxBuffer = await buildQualificationDocx(markdown, clientName, { pageBreakOnSections: true });
+    } catch (err) {
+        console.error('[Provocation] DOCX build failed:', err);
+        return { success: false, error: `Word document creation failed: ${err.message}` };
+    }
+
+    mainWindow?.webContents?.send('provocation:progress', { stage: 'chunking', pct: 90 });
+
+    // 6. Auto-chunk the provocation doc and merge into corpus
+    try {
+        const tmpDir = path.join(app.getPath('temp'), 'rstudiogpt-docs');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+        const provMdPath = path.join(tmpDir, `provocation_${Date.now()}.md`);
+        fs.writeFileSync(provMdPath, markdown, 'utf8');
+
+        const provDoc = await documentChunker.processDocument(provMdPath, `Provocation_${clientName || 'Client'}.md`, {});
+
+        if (appState.supportingDocsCorpus) {
+            appState.supportingDocsCorpus.documents.push(provDoc);
+            appState.supportingDocsCorpus.totalChunks += provDoc.chunks.length;
+            appState.supportingDocsCorpus.totalDocuments += 1;
+            appState.supportingDocsCorpus.successfulDocuments += 1;
+        }
+        emitAiConsoleLog('system', `Provocation doc chunked (${provDoc.chunks.length} chunks) and added to corpus`, 'success');
+    } catch (err) {
+        console.warn('[Provocation] Auto-chunking failed (non-fatal):', err.message);
+    }
+
+    // 7. Store result
+    const sanitized = (clientName || 'Client').replace(/[^a-zA-Z0-9]/g, '_');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fileName = `${sanitized}_Origination_Engine_${ts}.docx`;
+
+    appState.lastProvocationDoc = {
+        markdown,
+        docxBuffer: Buffer.from(docxBuffer),
+        fileName
+    };
+
+    // Save original as version 0
+    if (!appState.provokeVersions) appState.provokeVersions = [];
+    appState.provokeVersions = [{
+        label: 'Original Provoke',
+        markdown,
+        docxBuffer: Buffer.from(docxBuffer),
+        fileName,
+        role: null,
+        timestamp: Date.now()
+    }];
+
+    mainWindow?.webContents?.send('provocation:progress', { stage: 'done', pct: 100 });
+
+    auditLogger.log('PROVOCATION', 'DOC_GENERATED', {
+        clientName,
+        markdownLength: markdown.length,
+        docxSize: docxBuffer.length,
+        chunksUsed: includedChunks
+    });
+
+    return {
+        success: true,
+        markdown,
+        fileName,
+        corpusSummary: getSafeCorpusSummary()
+    };
+});
+
+// Download the generated provocation docx
+ipcMain.handle('provocation:download', async () => {
+    if (!appState.lastProvocationDoc) {
+        return { success: false, error: 'No provocation document to download' };
+    }
+
+    // Lazy-rebuild docx if only markdown is available (e.g. restored from history)
+    if (!appState.lastProvocationDoc.docxBuffer && appState.lastProvocationDoc.markdown) {
+        try {
+            loadHeavyModules();
+            const buf = await buildQualificationDocx(appState.lastProvocationDoc.markdown, 'Client', { pageBreakOnSections: true });
+            appState.lastProvocationDoc.docxBuffer = Buffer.from(buf);
+        } catch (err) {
+            return { success: false, error: 'Failed to rebuild document: ' + err.message };
+        }
+    }
+
+    if (!appState.lastProvocationDoc.docxBuffer) {
+        return { success: false, error: 'No provocation document to download' };
+    }
+
+    const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: appState.lastProvocationDoc.fileName,
+        filters: [{ name: 'Word Document', extensions: ['docx'] }]
+    });
+
+    if (result.canceled) return { success: false, canceled: true };
+
+    try {
+        fs.writeFileSync(result.filePath, appState.lastProvocationDoc.docxBuffer);
+        emitAiConsoleLog('system', `Provocation doc saved: ${path.basename(result.filePath)}`, 'success');
+        return { success: true, filePath: result.filePath };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
+// Download a specific provoke version by index
+ipcMain.handle('provocation:downloadVersion', async (event, { versionIndex }) => {
+    if (!appState.provokeVersions || !appState.provokeVersions[versionIndex]) {
+        return { success: false, error: 'Version not found' };
+    }
+
+    const version = appState.provokeVersions[versionIndex];
+    const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: version.fileName,
+        filters: [{ name: 'Word Document', extensions: ['docx'] }]
+    });
+
+    if (result.canceled) return { success: false, canceled: true };
+
+    try {
+        fs.writeFileSync(result.filePath, version.docxBuffer);
+        emitAiConsoleLog('system', `Provoke version saved: ${path.basename(result.filePath)}`, 'success');
+        return { success: true, filePath: result.filePath };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
+// Rewrite the provocation based on a review
+ipcMain.handle('provocation:rewrite', async (event, { clientName, reviewRole, selectedChanges }) => {
+    console.log(`[Provocation] Starting rewrite based on ${reviewRole} review (${(selectedChanges || []).length} selected changes)...`);
+    emitAiConsoleLog('system', `Rewriting provoke — applying ${(selectedChanges || []).length} ${reviewRole.toUpperCase()} edits...`, 'info');
+
+    const openaiCreds = credentialManager.getCredentials('openai');
+    if (!openaiCreds || !openaiCreds.apiKey) {
+        return { success: false, error: 'OpenAI API key not configured' };
+    }
+
+    const originalProvoke = appState.lastProvocationDoc?.markdown;
+
+    if (!originalProvoke) {
+        return { success: false, error: 'No provocation document found. Generate one first (Step 6).' };
+    }
+    if (!selectedChanges || selectedChanges.length === 0) {
+        return { success: false, error: 'No changes selected. Select at least one change from the review checklist.' };
+    }
+
+    const model = openaiCreds.model || 'gpt-5.2';
+    const roleLabel = reviewRole.toUpperCase();
+
+    // Build a numbered list of editorial instructions
+    const changesText = selectedChanges.map((c, i) =>
+        `${i + 1}. INSTRUCTION: "${c.title}"\n   DETAIL: ${c.detail}`
+    ).join('\n\n');
+
+    const systemPrompt = `You are an expert strategic consulting document editor. Your task is to apply a specific set of editorial changes to a provocation/origination narrative document.
+
+CRITICAL INSTRUCTIONS:
+1. Read the ORIGINAL PROVOKE DOCUMENT carefully.
+2. Read the EDITORIAL INSTRUCTIONS listed below. Each one describes a change the user wants made to the document. They were selected from a ${roleLabel} review.
+3. Each change has a TITLE and a DETAIL. These are INSTRUCTIONS telling you what to do — they are NOT text to copy into the document. For example, if a change says "Replace vague AI claim with auditable waterfall", you must find the relevant passage, remove or rewrite it, and produce a proper auditable value waterfall in its place. You must NEVER paste the instruction title or detail text literally into the output.
+4. Apply ONLY the listed changes — do not make other modifications, even if you notice other issues.
+5. For each instruction, use your expert editorial judgement to carry it out. If the instruction says to replace something, write new high-quality content that fulfils the intent. If it says to add or restructure something, do so with original professional prose that fits the document's voice.
+6. MAINTAIN the same overall structure, section organization, formatting conventions (headers, bullet points, tables), and professional tone as the original.
+7. The output must be a COMPLETE document — not a diff or partial edit. Reproduce the full narrative with the changes integrated seamlessly.
+8. Use Markdown formatting. Preserve all table structures using proper Markdown table syntax.
+9. Do NOT add meta-commentary about what you changed. Do NOT add a changelog or summary of edits. Do NOT echo the instruction titles anywhere. Just output the improved document.`;
+
+    const userMessage = `ORIGINAL PROVOKE DOCUMENT:
+
+${originalProvoke}
+
+---
+
+EDITORIAL INSTRUCTIONS TO APPLY (${selectedChanges.length} edits from ${roleLabel} review):
+
+${changesText}
+
+---
+
+REMINDER: The items above are editorial INSTRUCTIONS — descriptions of changes to make. Do NOT paste the instruction text into the document. Instead, interpret each instruction and write new, original content that fulfils it. Produce the full provoke document with all ${selectedChanges.length} instructions applied. Output ONLY the document content in Markdown.`;
+
+    mainWindow?.webContents?.send('review:progress', { stage: 'rewriting', pct: 15 });
+
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage }
+    ];
+
+    emitAiConsoleLog('system', `Sending to ${model} for provoke rewrite (${userMessage.length} chars)...`, 'thinking');
+
+    let markdown;
+    try {
+        markdown = await callOpenAI(openaiCreds.apiKey, model, messages, 16000);
+    } catch (err) {
+        console.error('[Provocation] Rewrite AI call failed:', err);
+        return { success: false, error: `AI rewrite failed: ${err.message}` };
+    }
+
+    if (!markdown) {
+        return { success: false, error: 'AI returned an empty response during rewrite. Try again.' };
+    }
+
+    // Strip code fences
+    markdown = markdown.trim();
+    if (markdown.startsWith('```')) {
+        markdown = markdown
+            .replace(/^```(?:markdown|md|python|javascript|text)?\s*\n?/i, '')
+            .replace(/\n?```\s*$/, '')
+            .trim();
+    }
+
+    emitAiConsoleLog('system', `Received ${markdown.length} chars of rewritten provoke content`, 'success');
+    mainWindow?.webContents?.send('review:progress', { stage: 'building_rewrite', pct: 70 });
+
+    // Build Word document
+    let docxBuffer;
+    try {
+        loadHeavyModules();
+        docxBuffer = await buildQualificationDocx(markdown, clientName, { pageBreakOnSections: true });
+    } catch (err) {
+        console.error('[Provocation] DOCX build on rewrite failed:', err);
+        return { success: false, error: `Word document creation failed: ${err.message}` };
+    }
+
+    // Store as a new version (do NOT overwrite original)
+    const sanitized = (clientName || 'Client').replace(/[^a-zA-Z0-9]/g, '_');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const versionNum = (appState.provokeVersions || []).length + 1;
+    const fileName = `${sanitized}_Narrative_Provoke_${roleLabel}_Edits_${ts}.docx`;
+
+    if (!appState.provokeVersions) appState.provokeVersions = [];
+    appState.provokeVersions.push({
+        label: `Narrative Provoke ${roleLabel} Edits`,
+        markdown,
+        docxBuffer: Buffer.from(docxBuffer),
+        fileName,
+        role: reviewRole,
+        timestamp: Date.now()
+    });
+
+    mainWindow?.webContents?.send('review:progress', { stage: 'done', pct: 100 });
+
+    auditLogger.log('PROVOCATION', 'DOC_REWRITTEN', {
+        clientName,
+        reviewRole,
+        versionNum,
+        markdownLength: markdown.length,
+        docxSize: docxBuffer.length
+    });
+
+    return {
+        success: true,
+        markdown,
+        fileName,
+        versionNum
+    };
+});
+
+// ============================================
+// Step 7: Review — Consistency & Accuracy Check
+// ============================================
+
+if (!appState.lastReviewDoc) {
+    appState.lastReviewDoc = null; // { markdown, docxBuffer, fileName }
+}
+
+// Get list of generated assets
+ipcMain.handle('review:getAssets', async () => {
+    // Estimate docx size from markdown when buffer isn't loaded yet (history restore)
+    const docSize = (doc) => doc.docxBuffer?.length || (doc.markdown ? Math.round(doc.markdown.length * 2.5) : 0);
+
+    const assets = [];
+    if (appState.lastQualificationDoc) {
+        assets.push({
+            type: 'qualification',
+            label: 'Qualification Assessment',
+            fileName: appState.lastQualificationDoc.fileName,
+            size: docSize(appState.lastQualificationDoc),
+            hasMarkdown: !!appState.lastQualificationDoc.markdown
+        });
+    }
+    if (appState.lastValueCaseDoc) {
+        assets.push({
+            type: 'valueCase',
+            label: 'Value Case',
+            fileName: appState.lastValueCaseDoc.fileName,
+            size: docSize(appState.lastValueCaseDoc),
+            hasMarkdown: !!appState.lastValueCaseDoc.markdown
+        });
+    }
+    if (appState.lastProvocationDoc) {
+        assets.push({
+            type: 'provocation',
+            label: 'Origination Engine (Provoke)',
+            fileName: appState.lastProvocationDoc.fileName,
+            size: docSize(appState.lastProvocationDoc),
+            hasMarkdown: !!appState.lastProvocationDoc.markdown
+        });
+    }
+    // Add rewritten provoke versions (skip index 0 which is the original)
+    if (appState.provokeVersions && appState.provokeVersions.length > 1) {
+        for (let i = 1; i < appState.provokeVersions.length; i++) {
+            const v = appState.provokeVersions[i];
+            assets.push({
+                type: 'provocation-rewrite',
+                label: v.label,
+                fileName: v.fileName,
+                size: docSize(v),
+                versionIndex: i,
+                hasMarkdown: !!v.markdown
+            });
+        }
+    }
+    // Reviews are now checklists of changes — no downloadable doc.
+    // The rewritten provoke versions above are the downloadable outputs.
+
+    return assets;
+});
+
+// Generate the review document
+ipcMain.handle('review:generate', async (event, { clientName, role, rolePrompt }) => {
+    const roleLabel = (role || 'analyst').toUpperCase();
+    console.log(`[Review] Starting ${roleLabel} consistency review...`);
+    emitAiConsoleLog('system', `Starting ${roleLabel} consistency & accuracy review...`, 'info');
+
+    const openaiCreds = credentialManager.getCredentials('openai');
+    if (!openaiCreds || !openaiCreds.apiKey) {
+        return { success: false, error: 'OpenAI API key not configured' };
+    }
+
+    const provokeMarkdown = appState.lastProvocationDoc?.markdown;
+
+    if (!provokeMarkdown) {
+        return { success: false, error: 'No provocation document to review. Generate the Origination Engine document (Step 6) first.' };
+    }
+
+    // Build the review input — provocation only
+    const documentsContext = `\n\n========== DOCUMENT: ORIGINATION ENGINE (PROVOKE) ==========\n\n${provokeMarkdown}\n`;
+
+    const model = openaiCreds.model || 'gpt-5.2';
+
+    // Build role persona instruction
+    let roleInstruction = '';
+    if (rolePrompt && rolePrompt.trim()) {
+        roleInstruction = `\n\nC-SUITE PERSONA — ${roleLabel}:\n${rolePrompt.trim()}\nYou MUST adopt this persona throughout your entire review. Frame every finding, recommendation, and assessment through this executive lens. Your review title should reflect this perspective (e.g., "${roleLabel} Review: ...").`;
+    }
+
+    const systemMessage = `You are an expert quality assurance analyst reviewing a strategic consulting document for a major professional services firm from the perspective of a C-suite executive.${roleInstruction}
+
+YOUR TASK:
+You must produce TWO outputs:
+
+A) CHANGES — Up to 10 SPECIFIC, ACTIONABLE changes to improve the Origination Engine (provocation) document. Each change must be a concrete recommendation — not a vague observation. Focus on changes that would make the biggest impact on document quality, strategic rigour, and boardroom credibility.
+
+B) QUESTIONS — Up to 10 pointed questions that this ${roleLabel} persona would realistically ask the Accenture account lead in a boardroom setting after reading this narrative. These should be tough, direct questions that test the substance behind the claims. They should be specific to the content of this document and reveal gaps, weak logic, or missing evidence.
+
+RULES:
+- Return ONLY a JSON object with two arrays: "changes" and "questions". No preamble, no explanation, no markdown.
+- Each change object has exactly two fields:
+  "title": a short label (5-12 words) summarising the change
+  "detail": 1-3 sentences explaining EXACTLY what to change — cite the specific section, data point, or sentence, and state what it should become
+- Each question is a plain string — the question itself as the ${roleLabel} would phrase it.
+- QUESTION STYLE: Write questions in plain, conversational executive English. Keep them short and blunt. Avoid excessive punctuation, em dashes, semicolons, and parenthetical asides. One question mark per question. No flowery or over-formal language. Think of how a real executive actually talks — direct, slightly impatient, cutting to the point.
+- Maximum 10 items in each array. Only include items that genuinely matter — do not pad the lists.
+- Order changes by impact (most important first). Order questions by how likely the ${roleLabel} would ask them first.
+- Focus areas for changes: factual errors, unsupported claims, missing analysis, strategic gaps, weak arguments, inconsistencies, tone issues.
+- Focus areas for questions: ROI substantiation, risk, implementation feasibility, competitive differentiation, timeline credibility, resource commitments, measurement.
+- Every item must be specific to THIS document and THIS client. No generic advice or boilerplate questions.
+
+RESPONSE FORMAT (strict JSON, no code fences):
+{
+  "changes": [
+    {"title": "Fix inconsistent revenue figure in Section 3", "detail": "Section 3 cites £12.4B revenue but the executive summary states £11.8B. Use the most recent annual report figure (£12.4B FY2025) consistently throughout."},
+    {"title": "Add competitive benchmarking to productivity analysis", "detail": "The productivity gap section (Framework 2) lacks peer comparison. Add Tesco and Walmart productivity metrics (revenue per employee, operating margin) to substantiate the 25% gap claim."}
+  ],
+  "questions": [
+    "Where does the 500M productivity number actually come from",
+    "What evidence do you have that AI automation gets us 25% efficiency in our environment given the legacy stack we are running"
+  ]
+}`;
+
+    const messages = [
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: `Review this Origination Engine document for client "${clientName || 'Unknown'}" and return your recommended changes and questions as a JSON object with "changes" and "questions" arrays.\n\n${documentsContext}` }
+    ];
+
+    emitAiConsoleLog('system', `Sending to ${model} for ${roleLabel} review (${messages[1].content.length} chars)...`, 'thinking');
+    mainWindow?.webContents?.send('review:progress', { stage: 'reviewing', pct: 25 });
+
+    let rawResponse;
+    try {
+        rawResponse = await callOpenAI(openaiCreds.apiKey, model, messages, 4000);
+    } catch (err) {
+        console.error('[Review] OpenAI call failed:', err);
+        return { success: false, error: `AI review failed: ${err.message}` };
+    }
+
+    if (!rawResponse) {
+        return { success: false, error: 'AI returned an empty response. Try again.' };
+    }
+
+    // Parse the JSON response
+    let changes = [];
+    let questions = [];
+    try {
+        let cleaned = rawResponse.trim();
+        // Strip code fences if AI wrapped the JSON
+        if (cleaned.startsWith('```')) {
+            cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/, '').trim();
+        }
+        const parsed = JSON.parse(cleaned);
+
+        // Handle both formats: { changes, questions } or bare array (backwards compat)
+        const rawChanges = Array.isArray(parsed) ? parsed : (parsed.changes || []);
+        const rawQuestions = Array.isArray(parsed) ? [] : (parsed.questions || []);
+
+        // Validate and cap changes at 10
+        changes = rawChanges.slice(0, 10).map((c, i) => ({
+            id: `${role}-${i}`,
+            title: String(c.title || `Change ${i + 1}`).slice(0, 200),
+            detail: String(c.detail || '').slice(0, 1000),
+            checked: false
+        }));
+
+        // Validate and cap questions at 10
+        questions = rawQuestions
+            .filter(q => typeof q === 'string' && q.trim().length > 0)
+            .slice(0, 10)
+            .map((q, i) => ({
+                id: `${role}-q${i}`,
+                text: String(q).slice(0, 500)
+            }));
+    } catch (parseErr) {
+        console.error('[Review] Failed to parse AI response as JSON:', parseErr.message);
+        console.error('[Review] Raw response:', rawResponse.slice(0, 500));
+        // Fallback: treat each line as a change
+        changes = rawResponse.split('\n')
+            .map(l => l.replace(/^[\d\-\.\*]+\s*/, '').trim())
+            .filter(l => l.length > 10)
+            .slice(0, 10)
+            .map((line, i) => ({
+                id: `${role}-${i}`,
+                title: line.slice(0, 120),
+                detail: line,
+                checked: false
+            }));
+    }
+
+    emitAiConsoleLog('system', `${roleLabel} review: ${changes.length} changes, ${questions.length} questions`, 'success');
+    mainWindow?.webContents?.send('review:progress', { stage: 'done', pct: 100 });
+
+    // Store result
+    appState.lastReviewDoc = {
+        changes,
+        questions,
+        role: role
+    };
+
+    // Also store per-role
+    if (!appState.reviewsByRole) appState.reviewsByRole = {};
+    appState.reviewsByRole[role] = {
+        changes,
+        questions,
+        role,
+        label: `${roleLabel} Review`,
+        timestamp: Date.now()
+    };
+
+    auditLogger.log('REVIEW', 'CHANGES_GENERATED', {
+        clientName,
+        role: roleLabel,
+        changeCount: changes.length,
+        questionCount: questions.length
+    });
+
+    return {
+        success: true,
+        changes,
+        questions,
+        role
+    };
+});
+
+// Download questions for a specific role as a Word document
+ipcMain.handle('review:downloadQuestions', async (event, { role }) => {
+    const reviewData = appState.reviewsByRole?.[role];
+    if (!reviewData || !reviewData.questions || reviewData.questions.length === 0) {
+        return { success: false, error: `No questions found for role: ${role}` };
+    }
+
+    const roleLabel = (role || 'analyst').toUpperCase();
+    const questions = reviewData.questions;
+
+    try {
+        loadHeavyModules();
+
+        const FONT_HEADING = 'Arial';
+        const FONT_BODY = 'Cambria';
+
+        const children = [];
+
+        // Title
+        children.push(new Paragraph({
+            children: [new TextRun({ text: `Likely ${roleLabel} Questions`, bold: true, size: 32, color: '1F2937', font: { name: FONT_HEADING } })],
+            heading: HeadingLevel.TITLE,
+            spacing: { after: 200 }
+        }));
+        children.push(new Paragraph({
+            children: [new TextRun({ text: `Generated ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`, italics: true, color: '6B7280', size: 20, font: { name: FONT_HEADING } })],
+            spacing: { after: 400 }
+        }));
+
+        // Each question as a numbered paragraph
+        questions.forEach((q, i) => {
+            const text = typeof q === 'string' ? q : (q.text || '');
+            children.push(new Paragraph({
+                children: [new TextRun({ text: `${i + 1}. ${text}`, size: 22, font: { name: FONT_BODY } })],
+                spacing: { after: 200 }
+            }));
+        });
+
+        const doc = new Document({ sections: [{ children }] });
+        const buffer = await Packer.toBuffer(doc);
+
+        const sanitized = (appState.selectedClient || 'Client').replace(/[^a-zA-Z0-9]/g, '_');
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const defaultName = `${sanitized}_${roleLabel}_Questions_${ts}.docx`;
+
+        const result = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: defaultName,
+            filters: [{ name: 'Word Document', extensions: ['docx'] }]
+        });
+
+        if (result.canceled) return { success: false, canceled: true };
+
+        fs.writeFileSync(result.filePath, buffer);
+        emitAiConsoleLog('system', `${roleLabel} questions saved: ${path.basename(result.filePath)}`, 'success');
+        return { success: true, filePath: result.filePath };
+    } catch (err) {
+        console.error('[Review] Questions DOCX build failed:', err);
+        return { success: false, error: err.message };
+    }
+});
+
+// Build a Word document from markdown content
+async function buildQualificationDocx(markdown, clientName, options = {}) {
+    const children = [];
+    const pageBreakOnSections = options.pageBreakOnSections || false;
+    let sectionCount = 0; // track headings so we skip page-break on the very first one
+
+    // Font constants
+    const FONT_HEADING = 'Arial';
+    const FONT_BODY = 'Cambria';
+
+    // Title
+    children.push(new Paragraph({
+        children: [new TextRun({ text: `Qualification Assessment: ${clientName || 'Client'}`, bold: true, size: 32, color: '1F2937', font: { name: FONT_HEADING } })],
+        heading: HeadingLevel.TITLE,
+        spacing: { after: 200 }
+    }));
+    children.push(new Paragraph({
+        children: [new TextRun({ text: `Generated ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`, italics: true, color: '6B7280', size: 20, font: { name: FONT_HEADING } })],
+        spacing: { after: 400 }
+    }));
+
+    const lines = markdown.split('\n');
+    let i = 0;
+    while (i < lines.length) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        // Skip empty lines
+        if (!trimmed) {
+            children.push(new Paragraph({ text: '' }));
+            i++;
+            continue;
+        }
+
+        // Markdown table detection
+        if (trimmed.includes('|') && trimmed.startsWith('|')) {
+            const tableLines = [];
+            while (i < lines.length && lines[i].trim().startsWith('|')) {
+                tableLines.push(lines[i].trim());
+                i++;
+            }
+            // Parse table
+            const tableChildren = parseMarkdownTable(tableLines);
+            if (tableChildren) {
+                children.push(tableChildren);
+                children.push(new Paragraph({ text: '', spacing: { after: 100 } }));
+            }
+            continue;
+        }
+
+        // Headings — Arial bold
+        if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
+            sectionCount++;
+            children.push(new Paragraph({
+                children: parseInlineFormatting(trimmed.replace(/^#\s+/, ''), FONT_HEADING, true),
+                heading: HeadingLevel.HEADING_1,
+                spacing: { before: 400, after: 200 },
+                pageBreakBefore: pageBreakOnSections && sectionCount > 1
+            }));
+        } else if (trimmed.startsWith('## ')) {
+            sectionCount++;
+            children.push(new Paragraph({
+                children: parseInlineFormatting(trimmed.replace(/^##\s+/, ''), FONT_HEADING, true),
+                heading: HeadingLevel.HEADING_1,
+                spacing: { before: 360, after: 160 },
+                pageBreakBefore: pageBreakOnSections && sectionCount > 1
+            }));
+        } else if (trimmed.startsWith('### ')) {
+            children.push(new Paragraph({
+                children: parseInlineFormatting(trimmed.replace(/^###\s+/, ''), FONT_HEADING, true),
+                heading: HeadingLevel.HEADING_2,
+                spacing: { before: 300, after: 120 }
+            }));
+        } else if (trimmed.startsWith('#### ')) {
+            children.push(new Paragraph({
+                children: parseInlineFormatting(trimmed.replace(/^####\s+/, ''), FONT_HEADING, true),
+                spacing: { before: 240, after: 100 }
+            }));
+        }
+        // Bold label with content (- **Key**: Value)
+        else if (trimmed.startsWith('- **') && trimmed.includes('**:')) {
+            const match = trimmed.match(/^-\s*\*\*(.+?)\*\*:(.*)$/);
+            if (match) {
+                children.push(new Paragraph({
+                    children: [
+                        new TextRun({ text: '\u2022 ' }),
+                        new TextRun({ text: match[1] + ': ', bold: true }),
+                        ...parseInlineFormatting(match[2].trim())
+                    ],
+                    spacing: { after: 80 },
+                    indent: { left: 360 }
+                }));
+            } else {
+                children.push(new Paragraph({
+                    children: parseInlineFormatting(trimmed),
+                    spacing: { after: 80 }
+                }));
+            }
+        }
+        // Bullet points
+        else if (/^[-*]\s+/.test(trimmed)) {
+            const text = trimmed.replace(/^[-*]\s+/, '');
+            children.push(new Paragraph({
+                children: parseInlineFormatting('\u2022 ' + text),
+                spacing: { after: 80 },
+                indent: { left: 360 }
+            }));
+        }
+        // Numbered list
+        else if (/^\d+[\.\)]\s+/.test(trimmed)) {
+            children.push(new Paragraph({
+                children: parseInlineFormatting(trimmed),
+                spacing: { after: 80 },
+                indent: { left: 360 }
+            }));
+        }
+        // Horizontal rule
+        else if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
+            children.push(new Paragraph({ text: '', spacing: { after: 200 } }));
+        }
+        // Regular paragraph
+        else {
+            children.push(new Paragraph({
+                children: parseInlineFormatting(trimmed),
+                spacing: { after: 100 }
+            }));
+        }
+        i++;
+    }
+
+    const doc = new Document({
+        styles: {
+            default: {
+                document: {
+                    run: {
+                        font: FONT_BODY,
+                        size: 22  // 11pt
+                    }
+                },
+                heading1: {
+                    run: {
+                        font: FONT_HEADING,
+                        bold: true,
+                        size: 28,
+                        color: '1a1a2e'
+                    }
+                },
+                heading2: {
+                    run: {
+                        font: FONT_HEADING,
+                        bold: true,
+                        size: 24,
+                        color: '2d2d44'
+                    }
+                },
+                title: {
+                    run: {
+                        font: FONT_HEADING,
+                        bold: true,
+                        size: 32,
+                        color: '1F2937'
+                    }
+                }
+            }
+        },
+        sections: [{
+            properties: {
+                page: {
+                    margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
+                }
+            },
+            children
+        }]
+    });
+
+    return await Packer.toBuffer(doc);
+}
+
+// Parse inline bold/italic in a line into TextRun array
+// fontOverride: explicit font name (e.g. 'Arial' for headings)
+// forceBold: force all runs bold (for heading lines)
+function parseInlineFormatting(text, fontOverride, forceBold) {
+    // Pre-clean: strip leading heading markers (## etc.) that leaked into inline text
+    let cleaned = text.replace(/^#{1,6}\s+/, '');
+    const runs = [];
+    const fontOpt = fontOverride ? { name: fontOverride } : undefined;
+    const parts = cleaned.split(/(\*\*[^*]+?\*\*|\*[^*]+?\*)/g);
+    for (const part of parts) {
+        if (part.startsWith('**') && part.endsWith('**')) {
+            runs.push(new TextRun({ text: part.slice(2, -2), bold: true, font: fontOpt }));
+        } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+            runs.push(new TextRun({ text: part.slice(1, -1), italics: true, bold: forceBold || false, font: fontOpt }));
+        } else if (part) {
+            // Strip any remaining unpaired ** or * artifacts
+            const clean = part.replace(/\*\*/g, '').replace(/(?<![\w])\*(?![\w])/g, '');
+            if (clean) runs.push(new TextRun({ text: clean, bold: forceBold || false, font: fontOpt }));
+        }
+    }
+    return runs.length > 0 ? runs : [new TextRun({ text: cleaned.replace(/\*\*/g, '').replace(/\*/g, ''), bold: forceBold || false, font: fontOpt })];
+}
+
+// Modern table styling constants
+const TABLE_HEADER_BG = '1a1a2e';    // Dark navy header
+const TABLE_HEADER_TEXT = 'FFFFFF';   // White header text
+const TABLE_ROW_EVEN = 'F8F9FA';     // Light grey alternating row
+const TABLE_ROW_ODD = 'FFFFFF';      // White alternating row
+const TABLE_BORDER_COLOR = 'DEE2E6'; // Subtle grey border
+const TABLE_ACCENT_LEFT = 'A855F7';  // Purple accent (left border on row hover)
+
+function makeTableBorders(color) {
+    const border = { style: BorderStyle.SINGLE, size: 1, color: color || TABLE_BORDER_COLOR };
+    return {
+        top: border,
+        bottom: border,
+        left: border,
+        right: border,
+        insideHorizontal: border,
+        insideVertical: border
+    };
+}
+
+// Parse a markdown table into a docx Table
+function parseMarkdownTable(tableLines) {
+    if (tableLines.length < 2) return null;
+
+    // Parse rows (skip separator line)
+    const rows = [];
+    for (let r = 0; r < tableLines.length; r++) {
+        const line = tableLines[r];
+        // Skip separator row (|---|---|) — test the raw line directly;
+        // the character class [\s\-:|] only matches pipes/dashes/colons/spaces,
+        // so data rows with letters or numbers will NOT match.
+        if (/^\|[\s\-:|]+\|$/.test(line)) continue;
+        const cells = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1).map(c => c.trim());
+        if (cells.length > 0) rows.push(cells);
+    }
+    if (rows.length < 1) return null;
+
+    const colCount = Math.max(...rows.map(r => r.length));
+
+    // Detect if this is a "# | Prompt & Response" style table (narrow first col)
+    const isPromptTable = colCount === 2 && rows.length > 1 &&
+        rows.slice(1).every(r => /^\d/.test((r[0] || '').trim()));
+    // Column widths: if prompt-table, give col1 ~8% and col2 ~92%
+    const colWidths = isPromptTable
+        ? [700, 8300]   // 700 + 8300 = 9000 DXA (~6.25 inches)
+        : Array(colCount).fill(Math.floor(9000 / colCount));
+
+    try {
+        const tableRows = rows.map((row, rowIdx) => {
+            const tableCells = [];
+            const isHeader = rowIdx === 0;
+            const isEvenRow = rowIdx % 2 === 0;
+            for (let c = 0; c < colCount; c++) {
+                const cellText = row[c] || '';
+                // Build cell paragraphs: split on <br> for multi-line cell content
+                const cellParagraphs = buildCellParagraphs(cellText, isHeader);
+
+                // Determine cell shading
+                let cellShading;
+                if (isHeader) {
+                    cellShading = { fill: TABLE_HEADER_BG, color: 'auto' };
+                } else if (isEvenRow) {
+                    cellShading = { fill: TABLE_ROW_EVEN, color: 'auto' };
+                }
+                // Odd data rows get no shading (white)
+
+                tableCells.push(new TableCell({
+                    children: cellParagraphs,
+                    width: { size: colWidths[c] || colWidths[0], type: WidthType.DXA },
+                    shading: cellShading,
+                    verticalAlign: c === 0 && isPromptTable ? 'top' : undefined,
+                    margins: {
+                        top: 60,
+                        bottom: 60,
+                        left: 120,
+                        right: 120
+                    }
+                }));
+            }
+            return new TableRow({ children: tableCells });
+        });
+
+        return new Table({
+            rows: tableRows,
+            width: { size: 9000, type: WidthType.DXA },
+            borders: makeTableBorders(TABLE_BORDER_COLOR)
+        });
+    } catch (e) {
+        console.warn('[Qualification] Table parse failed:', e.message);
+        return new Paragraph({ text: tableLines.join('\n'), spacing: { after: 100 } });
+    }
+}
+
+/**
+ * Build an array of Paragraph objects for a table cell.
+ * Handles <br> line breaks and inline formatting.
+ */
+function buildCellParagraphs(cellText, isHeader) {
+    // Split on <br> tags (with optional whitespace)
+    const segments = cellText.split(/<br\s*\/?>\s*/gi);
+    const paragraphs = [];
+    const cellFont = isHeader ? 'Arial' : 'Cambria';
+    const cellTextColor = isHeader ? TABLE_HEADER_TEXT : undefined;
+    const cellSize = isHeader ? 19 : 20; // 9.5pt header, 10pt body
+    for (const seg of segments) {
+        const trimmed = seg.trim();
+        if (!trimmed) {
+            // Empty segment = blank line (spacing). Add a small spacer.
+            paragraphs.push(new Paragraph({ text: '', spacing: { after: 40 } }));
+            continue;
+        }
+        // Detect bullet lines: starts with "- " or "• "
+        const isBullet = /^[-•]\s+/.test(trimmed);
+        const bulletText = isBullet ? trimmed.replace(/^[-•]\s+/, '') : trimmed;
+
+        let runs;
+        if (isHeader) {
+            // For header cells: Arial, bold, white text
+            runs = [new TextRun({ text: bulletText.replace(/\*\*/g, ''), bold: true, font: { name: cellFont }, color: cellTextColor, size: cellSize })];
+        } else {
+            // Body cells: Cambria, normal size — use parseInlineFormatting with font override
+            runs = parseInlineFormatting(bulletText, cellFont);
+        }
+
+        if (isBullet) {
+            paragraphs.push(new Paragraph({
+                children: [new TextRun({ text: '\u2022 ', font: { name: cellFont }, size: cellSize, color: cellTextColor }), ...runs],
+                spacing: { after: 30 },
+                indent: { left: 180 }
+            }));
+        } else {
+            paragraphs.push(new Paragraph({
+                children: runs,
+                spacing: { after: 40 }
+            }));
+        }
+    }
+    return paragraphs.length > 0 ? paragraphs : [new Paragraph({ text: '' })];
+}
+
 
 // ============================================
 // Template Management
@@ -2877,381 +4860,6 @@ ipcMain.handle('settings:saveSourcePrompts', async (event, prompts) => {
     
     return { success: true };
 });
-
-// ============================================
-// Learning System IPC Handlers
-// ============================================
-
-// Capture a behavioral signal
-ipcMain.handle('learnings:captureSignal', async (event, signal) => {
-    try {
-        const captured = captureSignal(signal);
-        return { success: true, signal: captured };
-    } catch (error) {
-        console.error('[Learnings] Error capturing signal:', error);
-        return { success: false, error: error.message };
-    }
-});
-
-// Get current learnings
-ipcMain.handle('learnings:get', async () => {
-    return appState.learnings;
-});
-
-// Run inference on recent signals to extract learnings
-ipcMain.handle('learnings:runInference', async () => {
-    try {
-        const result = await runLearningInference();
-        return { success: true, result };
-    } catch (error) {
-        console.error('[Learnings] Inference error:', error);
-        return { success: false, error: error.message };
-    }
-});
-
-// Get learnings formatted for prompt injection
-ipcMain.handle('learnings:getForPrompt', async (event, { client, industry }) => {
-    try {
-        const instructions = buildLearnedInstructions(appState.learnings, client, industry);
-        return { success: true, instructions };
-    } catch (error) {
-        console.error('[Learnings] Error building instructions:', error);
-        return { success: false, error: error.message };
-    }
-});
-
-// Clear all learnings (reset)
-ipcMain.handle('learnings:clear', async () => {
-    appState.learnings = getDefaultLearnings();
-    saveLearnings();
-    
-    auditLogger.log('ADMIN', 'LEARNINGS_CLEARED', {});
-    
-    return { success: true };
-});
-
-// Update a specific preference manually
-ipcMain.handle('learnings:updatePreference', async (event, { category, key, value }) => {
-    try {
-        if (appState.learnings.preferences[category]) {
-            appState.learnings.preferences[category][key] = value;
-            saveLearnings();
-            return { success: true };
-        }
-        return { success: false, error: 'Invalid category' };
-    } catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-
-// Get learning statistics
-ipcMain.handle('learnings:getStats', async () => {
-    return {
-        ...appState.learnings.stats,
-        lastUpdated: appState.learnings.lastUpdated,
-        lastInferenceRun: appState.learnings.lastInferenceRun,
-        evidenceCount: appState.learnings.evidenceLog.length,
-        preferences: {
-            toneConfidence: appState.learnings.preferences.tone.confidence,
-            structureConfidence: appState.learnings.preferences.structure.confidence,
-            contentConfidence: appState.learnings.preferences.content.confidence,
-            vocabularyConfidence: appState.learnings.preferences.vocabulary.confidence
-        }
-    };
-});
-
-/**
- * Run AI-powered inference on recent signals to extract learnings
- */
-async function runLearningInference() {
-    console.log('[Learnings] Running inference on recent signals...');
-    
-    // Get OpenAI credentials
-    const openaiCreds = await credentialManager.getCredentials('openai');
-    if (!openaiCreds || !openaiCreds.apiKey) {
-        throw new Error('OpenAI API key not configured');
-    }
-    
-    // Get recent signals (last 50)
-    const recentSignals = appState.learnings.evidenceLog.slice(-50);
-    
-    if (recentSignals.length < 3) {
-        console.log('[Learnings] Not enough signals for inference');
-        return { skipped: true, reason: 'Not enough signals (need at least 3)' };
-    }
-    
-    // Prepare signals for analysis (strip large content)
-    const signalsForAnalysis = recentSignals.map(s => ({
-        timestamp: s.timestamp,
-        type: s.type,
-        section: s.section,
-        userRequest: s.userRequest,
-        highlightedTextPreview: s.highlightedText?.substring(0, 200),
-        client: s.client?.name,
-        industry: s.industry,
-        iterationType: s.iterationType,
-        wasAccepted: s.wasAccepted
-    }));
-    
-    const inferencePrompt = `You are a learning system analyzing user behavior to understand their narrative writing preferences.
-
-CURRENT LEARNED PREFERENCES:
-${JSON.stringify(appState.learnings.preferences, null, 2)}
-
-RECENT USER SIGNALS (${signalsForAnalysis.length} signals):
-${JSON.stringify(signalsForAnalysis, null, 2)}
-
-Analyze these behavioral signals and extract learnings about the user's preferences. Consider:
-
-1. ITERATION SIGNALS: When users iterate on text, they're teaching what they DON'T want
-   - Highlighted text + rewrite requests reveal style/content issues
-   - Multiple iterations on same section = that section template needs improvement
-   
-2. ACCEPTANCE SIGNALS: When users accept without iteration, the output was good
-   - Low iteration count = good default generation
-   
-3. PATTERNS: Look for repeated behaviors across signals
-   - Consistent vocabulary corrections → learn preferred terms
-   - Always expanding certain sections → those need more depth by default
-   - Always shortening sections → those are too verbose
-
-Return a JSON object (no markdown code blocks) with this exact structure:
-{
-  "newLearnings": [
-    {
-      "category": "tone|structure|content|vocabulary",
-      "type": "preferred|avoid",
-      "value": "specific learning",
-      "confidence": 0.5,
-      "evidence": "which signals support this"
-    }
-  ],
-  "vocabularyReplacements": {
-    "old_term": "new_term"
-  },
-  "sectionInsights": {
-    "section_name": {
-      "avgIterations": 0,
-      "commonIssues": ["issue1"],
-      "recommendation": "how to improve"
-    }
-  },
-  "industryInsights": {
-    "industry_name": {
-      "emphasize": ["topic1"],
-      "tone": "measured|bold|technical"
-    }
-  },
-  "clientInsights": {
-    "client_name": {
-      "preferredThemes": ["theme1"],
-      "focusAreas": ["area1"]
-    }
-  },
-  "overallAssessment": "Brief summary of what we learned"
-}`;
-
-    const model = openaiCreds.model || 'gpt-4o';
-    const response = await callOpenAI(openaiCreds.apiKey, model, [
-        { role: 'system', content: 'You are an expert at inferring user preferences from behavioral signals. Return only valid JSON, no markdown formatting.' },
-        { role: 'user', content: inferencePrompt }
-    ], 3000);
-    
-    // Parse the response
-    let inferences;
-    try {
-        // Clean potential markdown code blocks
-        const cleanedResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        inferences = JSON.parse(cleanedResponse);
-    } catch (parseError) {
-        console.error('[Learnings] Failed to parse inference response:', parseError);
-        console.log('[Learnings] Raw response:', response);
-        throw new Error('Failed to parse learning inference results');
-    }
-    
-    // Apply the inferences to our learnings
-    applyInferences(inferences);
-    
-    // Update inference timestamp
-    appState.learnings.lastInferenceRun = new Date().toISOString();
-    saveLearnings();
-    
-    console.log('[Learnings] Inference complete:', inferences.overallAssessment);
-    
-    return inferences;
-}
-
-/**
- * Apply inferred learnings to the preference database
- */
-function applyInferences(inferences) {
-    // Apply new learnings
-    if (inferences.newLearnings) {
-        for (const learning of inferences.newLearnings) {
-            const category = learning.category;
-            if (!appState.learnings.preferences[category]) continue;
-            
-            const list = learning.type === 'preferred' ? 'preferred' : 'avoid';
-            
-            // Add if not already present
-            if (!appState.learnings.preferences[category][list].includes(learning.value)) {
-                appState.learnings.preferences[category][list].push(learning.value);
-            }
-            
-            // Update confidence (weighted average)
-            const oldConf = appState.learnings.preferences[category].confidence;
-            const oldCount = appState.learnings.preferences[category].evidenceCount;
-            const newConf = (oldConf * oldCount + learning.confidence) / (oldCount + 1);
-            appState.learnings.preferences[category].confidence = Math.min(0.95, newConf);
-            appState.learnings.preferences[category].evidenceCount++;
-        }
-    }
-    
-    // Apply vocabulary replacements
-    if (inferences.vocabularyReplacements) {
-        appState.learnings.preferences.vocabulary.replacements = {
-            ...appState.learnings.preferences.vocabulary.replacements,
-            ...inferences.vocabularyReplacements
-        };
-    }
-    
-    // Apply section insights
-    if (inferences.sectionInsights) {
-        for (const [section, insight] of Object.entries(inferences.sectionInsights)) {
-            appState.learnings.sectionPatterns[section] = {
-                ...appState.learnings.sectionPatterns[section],
-                ...insight,
-                lastUpdated: new Date().toISOString()
-            };
-        }
-    }
-    
-    // Apply industry insights
-    if (inferences.industryInsights) {
-        for (const [industry, insight] of Object.entries(inferences.industryInsights)) {
-            appState.learnings.contextual.byIndustry[industry] = {
-                ...appState.learnings.contextual.byIndustry[industry],
-                ...insight,
-                confidence: 0.7,
-                lastUpdated: new Date().toISOString()
-            };
-        }
-    }
-    
-    // Apply client insights
-    if (inferences.clientInsights) {
-        for (const [client, insight] of Object.entries(inferences.clientInsights)) {
-            appState.learnings.contextual.byClient[client] = {
-                ...appState.learnings.contextual.byClient[client],
-                ...insight,
-                lastUpdated: new Date().toISOString()
-            };
-        }
-    }
-}
-
-/**
- * Build learned instructions for injection into narrative generation prompts
- */
-function buildLearnedInstructions(learnings, client, industry) {
-    const instructions = [];
-    const minConfidence = 0.5; // Only include learnings we're somewhat confident about
-    
-    // Tone preferences
-    if (learnings.preferences.tone.confidence >= minConfidence) {
-        if (learnings.preferences.tone.preferred.length > 0) {
-            instructions.push(`TONE: Write in a ${learnings.preferences.tone.preferred.join(', ')} style.`);
-        }
-        if (learnings.preferences.tone.avoid.length > 0) {
-            instructions.push(`TONE - AVOID: Do not use ${learnings.preferences.tone.avoid.join(', ')} language.`);
-        }
-    }
-    
-    // Structure preferences
-    if (learnings.preferences.structure.confidence >= minConfidence) {
-        if (learnings.preferences.structure.preferredLength) {
-            instructions.push(`LENGTH: Target ${learnings.preferences.structure.preferredLength} length narratives.`);
-        }
-        if (learnings.preferences.structure.weakSections.length > 0) {
-            instructions.push(`SECTIONS NEEDING ATTENTION: Pay extra care to these sections which often need revision: ${learnings.preferences.structure.weakSections.join(', ')}`);
-        }
-    }
-    
-    // Content preferences
-    if (learnings.preferences.content.confidence >= minConfidence) {
-        if (learnings.preferences.content.emphasize.length > 0) {
-            instructions.push(`CONTENT EMPHASIS: Make sure to include ${learnings.preferences.content.emphasize.join(', ')}`);
-        }
-        if (learnings.preferences.content.avoid.length > 0) {
-            instructions.push(`CONTENT TO AVOID: Do not include ${learnings.preferences.content.avoid.join(', ')}`);
-        }
-    }
-    
-    // Vocabulary preferences
-    if (learnings.preferences.vocabulary.confidence >= minConfidence) {
-        if (learnings.preferences.vocabulary.preferred.length > 0) {
-            instructions.push(`PREFERRED VOCABULARY: Use words like: ${learnings.preferences.vocabulary.preferred.join(', ')}`);
-        }
-        if (learnings.preferences.vocabulary.avoid.length > 0) {
-            instructions.push(`VOCABULARY TO AVOID: Don't use: ${learnings.preferences.vocabulary.avoid.join(', ')}`);
-        }
-        const replacements = Object.entries(learnings.preferences.vocabulary.replacements);
-        if (replacements.length > 0) {
-            const replaceStr = replacements.map(([from, to]) => `"${from}" → "${to}"`).join(', ');
-            instructions.push(`WORD REPLACEMENTS: Use these substitutions: ${replaceStr}`);
-        }
-    }
-    
-    // Section-specific guidance
-    for (const [section, data] of Object.entries(learnings.sectionPatterns)) {
-        if (data.recommendation) {
-            instructions.push(`${section.toUpperCase()}: ${data.recommendation}`);
-        }
-        if (data.commonIssues && data.commonIssues.length > 0) {
-            instructions.push(`${section.toUpperCase()} - COMMON ISSUES: Avoid these: ${data.commonIssues.join(', ')}`);
-        }
-    }
-    
-    // Industry-specific learnings
-    const industryKey = industry || client?.industry;
-    if (industryKey) {
-        const industryLearnings = learnings.contextual.byIndustry[industryKey];
-        if (industryLearnings && industryLearnings.confidence >= minConfidence) {
-            if (industryLearnings.emphasize && industryLearnings.emphasize.length > 0) {
-                instructions.push(`INDUSTRY (${industryKey}): Emphasize ${industryLearnings.emphasize.join(', ')}`);
-            }
-            if (industryLearnings.tone) {
-                instructions.push(`INDUSTRY TONE (${industryKey}): Use a ${industryLearnings.tone} tone`);
-            }
-        }
-    }
-    
-    // Client-specific learnings
-    const clientName = typeof client === 'string' ? client : client?.name;
-    if (clientName) {
-        const clientLearnings = learnings.contextual.byClient[clientName];
-        if (clientLearnings) {
-            if (clientLearnings.preferredThemes && clientLearnings.preferredThemes.length > 0) {
-                instructions.push(`CLIENT (${clientName}): Focus on these themes: ${clientLearnings.preferredThemes.join(', ')}`);
-            }
-            if (clientLearnings.focusAreas && clientLearnings.focusAreas.length > 0) {
-                instructions.push(`CLIENT FOCUS AREAS: ${clientLearnings.focusAreas.join(', ')}`);
-            }
-        }
-    }
-    
-    if (instructions.length === 0) {
-        return ''; // No learnings yet
-    }
-    
-    return `=== LEARNED USER PREFERENCES ===
-The following preferences have been learned from past user behavior. Apply these to improve the narrative:
-
-${instructions.join('\n')}
-
-=== END LEARNED PREFERENCES ===`;
-}
-
 // ============================================
 // File Operations
 // ============================================
@@ -3491,7 +5099,7 @@ Remember: This is a CHEAT SHEET for busy consultants. Make it scannable, punchy,
         if (!openaiCreds || !openaiCreds.apiKey) {
             throw new Error('OpenAI API key not configured');
         }
-        const intelPackContent = await callOpenAI(openaiCreds.apiKey, 'gpt-4o', [
+        const intelPackContent = await callOpenAI(openaiCreds.apiKey, openaiCreds.model || 'gpt-5.2', [
             { role: 'system', content: 'You are an elite management consultant with 20+ years of experience advising C-suite executives. You excel at synthesizing complex information into actionable stakeholder intelligence. CRITICAL: You must ONLY use stakeholder names that are explicitly mentioned in the provided documents. NEVER invent or fabricate names like "John Smith" or "Jane Doe". If no real names are in the documents, use role-based analysis instead (e.g., "The CEO", "The CFO"). Be specific, cite the source material, and add value through your expertise.' },
             { role: 'user', content: intelPackPrompt }
         ], 4000);
@@ -3573,7 +5181,7 @@ Remember: This is a CHEAT SHEET for busy consultants. Make it scannable, punchy,
                     children.push(
                         new Paragraph({
                             children: [
-                                new TextRun({ text: '• ' }),
+                                new TextRun({ text: 'ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ' }),
                                 new TextRun({ text: match[1] + ': ', bold: true }),
                                 new TextRun({ text: match[2].trim() })
                             ],
@@ -3588,7 +5196,7 @@ Remember: This is a CHEAT SHEET for busy consultants. Make it scannable, punchy,
                 children.push(
                     new Paragraph({
                         children: [
-                            new TextRun({ text: '• ' + trimmedLine.substring(2) })
+                            new TextRun({ text: 'ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ' + trimmedLine.substring(2) })
                         ],
                         spacing: { after: 100 }
                     })
@@ -3910,19 +5518,19 @@ ipcMain.handle('workshop:generate', async (event, { client, strategicQuestion })
                         }),
                         new Paragraph({
                             children: [
-                                new TextRun({ text: '• ', size: 22 }),
+                                new TextRun({ text: 'ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ', size: 22 }),
                                 new TextRun({ text: 'Action item 1', size: 22, color: '666666' })
                             ]
                         }),
                         new Paragraph({
                             children: [
-                                new TextRun({ text: '• ', size: 22 }),
+                                new TextRun({ text: 'ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ', size: 22 }),
                                 new TextRun({ text: 'Action item 2', size: 22, color: '666666' })
                             ]
                         }),
                         new Paragraph({
                             children: [
-                                new TextRun({ text: '• ', size: 22 }),
+                                new TextRun({ text: 'ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ', size: 22 }),
                                 new TextRun({ text: 'Action item 3', size: 22, color: '666666' })
                             ]
                         })
@@ -4147,688 +5755,6 @@ ipcMain.handle('narratives:delete', async (event, { clientId, narrativeId }) => 
     
     return { success: true };
 });
-
-// ============================================
-// Video Generation (Runway ML)
-// ============================================
-
-ipcMain.handle('video:generate', async (event, options) => {
-    try {
-        const runwayCredentials = credentialManager.getCredentials('runway');
-        
-        if (!runwayCredentials?.apiKey) {
-            return { success: false, error: 'Runway ML API key not configured. Please add it in Admin settings.' };
-        }
-        
-        const { promptText, duration, ratio, audio } = options;
-        const model = runwayCredentials.model || 'veo3';
-        
-        console.log('[Video] Starting generation with model:', model);
-        console.log('[Video] Prompt:', promptText?.substring(0, 100) + '...');
-        
-        // Use the Runway SDK
-        const RunwayML = require('@runwayml/sdk').default;
-        const client = new RunwayML({ apiKey: runwayCredentials.apiKey });
-        
-        // Start the text-to-video task
-        console.log('[Video] Creating text-to-video task...');
-        const task = await client.textToVideo.create({
-            model: model,
-            promptText: promptText,
-            ratio: ratio || '1920:1080',
-            duration: duration || 8,
-            audio: audio !== false
-        });
-        
-        console.log('[Video] Task created, waiting for output. Task ID:', task.id);
-        
-        // Poll for task completion
-        const completedTask = await client.tasks.retrieve(task.id).waitForTaskOutput();
-        
-        console.log('[Video] Task completed:', completedTask.status);
-        
-        if (completedTask.status === 'SUCCEEDED' && completedTask.output && completedTask.output.length > 0) {
-            const videoUrl = completedTask.output[0];
-            console.log('[Video] Video URL:', videoUrl);
-            
-            return {
-                success: true,
-                videoUrl: videoUrl,
-                taskId: task.id
-            };
-        } else if (completedTask.status === 'FAILED') {
-            console.error('[Video] Task failed:', completedTask.failure);
-            return {
-                success: false,
-                error: completedTask.failure?.message || 'Video generation failed'
-            };
-        } else {
-            return {
-                success: false,
-                error: 'Unexpected task status: ' + completedTask.status
-            };
-        }
-    } catch (error) {
-        console.error('[Video] Generation error:', error);
-        return {
-            success: false,
-            error: error.message || 'Video generation failed'
-        };
-    }
-});
-
-// ============================================
-// Narration Generation (ElevenLabs)
-// ============================================
-
-ipcMain.handle('narration:generate', async (event, options) => {
-    try {
-        const elevenlabsCredentials = credentialManager.getCredentials('elevenlabs');
-        
-        if (!elevenlabsCredentials?.apiKey) {
-            return { success: false, error: 'ElevenLabs API key not configured. Please add it in Admin settings.' };
-        }
-        
-        const { text, voiceId, modelId } = options;
-        
-        if (!text || text.trim().length === 0) {
-            return { success: false, error: 'No text provided for narration.' };
-        }
-        
-        console.log('[Narration] Starting generation...');
-        console.log('[Narration] Text length:', text.length);
-        console.log('[Narration] Voice ID:', voiceId);
-        console.log('[Narration] Model:', modelId);
-        
-        // Call ElevenLabs API
-        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-            method: 'POST',
-            headers: {
-                'Accept': 'audio/mpeg',
-                'Content-Type': 'application/json',
-                'xi-api-key': elevenlabsCredentials.apiKey
-            },
-            body: JSON.stringify({
-                text: text,
-                model_id: modelId || 'eleven_multilingual_v2',
-                voice_settings: {
-                    stability: 0.5,
-                    similarity_boost: 0.75,
-                    style: 0.0,
-                    use_speaker_boost: true
-                }
-            })
-        });
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            console.error('[Narration] API error:', response.status, errorData);
-            return {
-                success: false,
-                error: errorData.detail?.message || `ElevenLabs API error: ${response.status}`
-            };
-        }
-        
-        // Get the audio data as a buffer
-        const audioBuffer = await response.arrayBuffer();
-        const audioBase64 = Buffer.from(audioBuffer).toString('base64');
-        
-        console.log('[Narration] Audio generated, size:', audioBuffer.byteLength, 'bytes');
-        
-        // Save to history
-        const narrationId = Date.now().toString();
-        const narrationHistory = credentialManager.loadAppData('narrationHistory') || [];
-        
-        const historyItem = {
-            id: narrationId,
-            text: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
-            fullText: text,
-            voiceId: voiceId,
-            modelId: modelId,
-            audioBase64: audioBase64,
-            createdAt: new Date().toISOString(),
-            size: audioBuffer.byteLength
-        };
-        
-        // Keep only last 10 narrations
-        narrationHistory.unshift(historyItem);
-        if (narrationHistory.length > 10) {
-            narrationHistory.pop();
-        }
-        
-        credentialManager.saveAppData('narrationHistory', narrationHistory);
-        
-        return {
-            success: true,
-            audioBase64: audioBase64,
-            narrationId: narrationId,
-            size: audioBuffer.byteLength
-        };
-    } catch (error) {
-        console.error('[Narration] Generation error:', error);
-        return {
-            success: false,
-            error: error.message || 'Narration generation failed'
-        };
-    }
-});
-
-ipcMain.handle('narration:getHistory', async () => {
-    const history = credentialManager.loadAppData('narrationHistory') || [];
-    // Return without the full audio data to keep response light
-    return history.map(item => ({
-        id: item.id,
-        text: item.text,
-        voiceId: item.voiceId,
-        modelId: item.modelId,
-        createdAt: item.createdAt,
-        size: item.size,
-        hasAudio: !!item.audioBase64
-    }));
-});
-
-ipcMain.handle('narration:clearHistory', async () => {
-    credentialManager.saveAppData('narrationHistory', []);
-    return { success: true };
-});
-
-ipcMain.handle('narration:deleteHistoryItem', async (event, id) => {
-    const history = credentialManager.loadAppData('narrationHistory') || [];
-    const filtered = history.filter(item => item.id !== id);
-    credentialManager.saveAppData('narrationHistory', filtered);
-    return { success: true };
-});
-
-// Get full narration audio by ID
-ipcMain.handle('narration:getAudio', async (event, id) => {
-    const history = credentialManager.loadAppData('narrationHistory') || [];
-    const item = history.find(h => h.id === id);
-    if (item && item.audioBase64) {
-        return { success: true, audioBase64: item.audioBase64 };
-    }
-    return { success: false, error: 'Audio not found' };
-});
-
-// Generate audio narration from narrative (OpenAI script generation + ElevenLabs TTS)
-ipcMain.handle('narration:generateFromNarrative', async (event, options) => {
-    try {
-        const openaiCredentials = credentialManager.getCredentials('openai');
-        const elevenlabsCredentials = credentialManager.getCredentials('elevenlabs');
-        
-        if (!openaiCredentials?.apiKey) {
-            return { success: false, error: 'OpenAI API key not configured. Please add it in Admin settings.' };
-        }
-        
-        if (!elevenlabsCredentials?.apiKey) {
-            return { success: false, error: 'ElevenLabs API key not configured. Please add it in Admin settings.' };
-        }
-        
-        const { narrativeContent, clientName, voiceId, tone } = options;
-        
-        if (!narrativeContent || narrativeContent.trim().length === 0) {
-            return { success: false, error: 'No narrative content provided.' };
-        }
-        
-        console.log('[NarrativeAudio] Starting generation...');
-        console.log('[NarrativeAudio] Client:', clientName);
-        console.log('[NarrativeAudio] Tone:', tone);
-        console.log('[NarrativeAudio] Narrative length:', narrativeContent.length);
-        
-        // Send progress update
-        event.sender.send('narrative-audio-progress', { stage: 'script', message: 'Crafting your executive script...' });
-        
-        // Step 1: Use OpenAI to generate an executive script from the narrative
-        const toneDescriptions = {
-            'inspiring': 'inspiring, visionary, and forward-looking. Paint a picture of possibility and potential.',
-            'confident': 'confident, authoritative, and decisive. Speak with certainty and conviction.',
-            'empathetic': 'empathetic, understanding, and human-centered.',
-            'urgent': 'urgent, action-oriented, and compelling.'
-        };
-        
-        const scriptPrompt = `You are an expert narrator converting written business documents into spoken narration. Your task is to take this narrative and rewrite it so it flows naturally when read aloud.
-
-The tone should be ${toneDescriptions[tone] || toneDescriptions['inspiring']}
-
-CRITICAL: Your output MUST be under 9,000 characters (approximately 1,500 words or 8-10 minutes of audio).
-
-Guidelines:
-- Preserve the key content and insights from the narrative
-- If the narrative is long, focus on the most important points and summarize less critical details
-- Rewrite sentences to flow naturally when spoken aloud
-- Break up long complex sentences into shorter, clearer ones
-- Remove bullet points and convert them into flowing prose
-- Remove markdown formatting (headers, bold, etc.) - write as plain flowing text
-- Add natural transitions between sections
-- Avoid awkward written constructs that don't work when spoken
-- Numbers and statistics should be written out in a way that's easy to speak
-
-Here is the narrative to convert to spoken narration:
-
-${narrativeContent}
-
----
-
-Rewrite the above as natural spoken narration. Keep it under 9,000 characters. Output ONLY the narration text, no headers or explanations.`;
-
-        const model = openaiCredentials.model || 'gpt-4o';
-        console.log('[NarrativeAudio] Using OpenAI model:', model);
-        
-        // Use the existing callOpenAI helper function - limit to ~2500 tokens for ~9000 chars
-        const generatedScript = await callOpenAI(openaiCredentials.apiKey, model, [
-            { role: 'user', content: scriptPrompt }
-        ], 2500);
-        
-        if (!generatedScript) {
-            return { success: false, error: 'Failed to generate script from narrative.' };
-        }
-        
-        console.log('[NarrativeAudio] Script generated, length:', generatedScript.length);
-        
-        // Send progress update
-        event.sender.send('narrative-audio-progress', { stage: 'audio', message: 'Converting script to speech...' });
-        
-        // Step 2: Convert script to audio using ElevenLabs
-        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId || 'pNInz6obpgDQGcFmaJgB'}`, {
-            method: 'POST',
-            headers: {
-                'Accept': 'audio/mpeg',
-                'Content-Type': 'application/json',
-                'xi-api-key': elevenlabsCredentials.apiKey
-            },
-            body: JSON.stringify({
-                text: generatedScript,
-                model_id: 'eleven_multilingual_v2',
-                voice_settings: {
-                    stability: 0.6,
-                    similarity_boost: 0.8,
-                    style: 0.3,
-                    use_speaker_boost: true
-                }
-            })
-        });
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            console.error('[NarrativeAudio] ElevenLabs API error:', response.status, errorData);
-            return {
-                success: false,
-                error: errorData.detail?.message || `ElevenLabs API error: ${response.status}`
-            };
-        }
-        
-        // Get the audio data as a buffer
-        const audioBuffer = await response.arrayBuffer();
-        const audioBase64 = Buffer.from(audioBuffer).toString('base64');
-        
-        console.log('[NarrativeAudio] Audio generated, size:', audioBuffer.byteLength, 'bytes');
-        
-        return {
-            success: true,
-            script: generatedScript,
-            audioBase64: audioBase64,
-            size: audioBuffer.byteLength
-        };
-    } catch (error) {
-        console.error('[NarrativeAudio] Generation error:', error);
-        return {
-            success: false,
-            error: error.message || 'Failed to generate narrative audio'
-        };
-    }
-});
-
-// ============================================
-// Video Narrative Generation (Script to Video Montage)
-// ============================================
-
-let videoNarrativeAborted = false;
-
-// Cancel video narrative generation
-ipcMain.handle('videoNarrative:cancel', async () => {
-    videoNarrativeAborted = true;
-    return { success: true };
-});
-
-// Generate video narrative from script
-ipcMain.handle('videoNarrative:generate', async (event, options) => {
-    try {
-        videoNarrativeAborted = false;
-        
-        const openaiCredentials = credentialManager.getCredentials('openai');
-        const runwayCredentials = credentialManager.getCredentials('runway');
-        
-        if (!openaiCredentials?.apiKey) {
-            return { success: false, error: 'OpenAI API key not configured. Please add it in Admin settings.' };
-        }
-        
-        if (!runwayCredentials?.apiKey) {
-            return { success: false, error: 'Runway ML API key not configured. Please add it in Admin settings.' };
-        }
-        
-        const { script, aspectRatio, visualStyle, clientName } = options;
-        
-        if (!script || script.trim().length === 0) {
-            return { success: false, error: 'No script provided.' };
-        }
-        
-        console.log('[VideoNarrative] Starting generation...');
-        console.log('[VideoNarrative] Script length:', script.length);
-        console.log('[VideoNarrative] Aspect ratio:', aspectRatio);
-        console.log('[VideoNarrative] Visual style:', visualStyle);
-        
-        // Step 1: Split script into segments (~7 seconds each, ~20 words)
-        const segments = splitScriptIntoSegments(script, 20);
-        console.log('[VideoNarrative] Split into', segments.length, 'segments');
-        
-        // Initialize segment tracking
-        const segmentStatus = segments.map((text, i) => ({
-            index: i,
-            text: text,
-            status: 'pending',
-            prompt: null,
-            videoPath: null,
-            error: null
-        }));
-        
-        // Send initial progress
-        event.sender.send('video-narrative-progress', {
-            stage: 'Splitting script...',
-            percent: 5,
-            segments: segmentStatus
-        });
-        
-        // Create temp directory for videos
-        const tempDir = path.join(app.getPath('temp'), 'narrative-videos-' + Date.now());
-        const fs = require('fs').promises;
-        await fs.mkdir(tempDir, { recursive: true });
-        console.log('[VideoNarrative] Temp directory:', tempDir);
-        
-        const videoPaths = [];
-        
-        // Step 2: For each segment, generate prompt and video
-        for (let i = 0; i < segments.length; i++) {
-            if (videoNarrativeAborted) {
-                return { success: false, error: 'Generation cancelled' };
-            }
-            
-            const segmentText = segments[i];
-            segmentStatus[i].status = 'generating-prompt';
-            
-            const percentPerSegment = 90 / segments.length;
-            const basePercent = 5 + (i * percentPerSegment);
-            
-            event.sender.send('video-narrative-progress', {
-                stage: `Segment ${i + 1}/${segments.length}: Creating cinematic prompt...`,
-                percent: basePercent,
-                segments: segmentStatus
-            });
-            
-            // Generate cinematic prompt from segment text
-            const cinematicPrompt = await generateCinematicPrompt(
-                openaiCredentials.apiKey,
-                segmentText,
-                visualStyle,
-                clientName
-            );
-            
-            if (!cinematicPrompt) {
-                segmentStatus[i].status = 'error';
-                segmentStatus[i].error = 'Failed to generate prompt';
-                console.error('[VideoNarrative] Failed to generate prompt for segment', i);
-                continue;
-            }
-            
-            segmentStatus[i].prompt = cinematicPrompt;
-            segmentStatus[i].status = 'generating-video';
-            
-            event.sender.send('video-narrative-progress', {
-                stage: `Segment ${i + 1}/${segments.length}: Generating video...`,
-                percent: basePercent + (percentPerSegment * 0.3),
-                segments: segmentStatus
-            });
-            
-            // Generate video using Runway ML
-            try {
-                const videoPath = await generateRunwayVideo(
-                    runwayCredentials.apiKey,
-                    cinematicPrompt,
-                    aspectRatio,
-                    tempDir,
-                    i
-                );
-                
-                if (videoPath) {
-                    segmentStatus[i].status = 'complete';
-                    segmentStatus[i].videoPath = videoPath;
-                    videoPaths.push(videoPath);
-                    console.log('[VideoNarrative] Video generated for segment', i, ':', videoPath);
-                } else {
-                    segmentStatus[i].status = 'error';
-                    segmentStatus[i].error = 'Video generation failed';
-                }
-            } catch (videoError) {
-                console.error('[VideoNarrative] Video generation error for segment', i, ':', videoError);
-                segmentStatus[i].status = 'error';
-                segmentStatus[i].error = videoError.message;
-            }
-            
-            event.sender.send('video-narrative-progress', {
-                stage: `Segment ${i + 1}/${segments.length}: ${segmentStatus[i].status === 'complete' ? 'Complete!' : 'Error'}`,
-                percent: basePercent + percentPerSegment,
-                segments: segmentStatus
-            });
-        }
-        
-        if (videoPaths.length === 0) {
-            return { success: false, error: 'No videos were generated successfully' };
-        }
-        
-        // Step 3: Combine videos (for now, just use the first one if we can't stitch)
-        // TODO: Add ffmpeg stitching when available
-        event.sender.send('video-narrative-progress', {
-            stage: 'Finalizing video...',
-            percent: 95,
-            segments: segmentStatus
-        });
-        
-        let finalVideoPath;
-        
-        if (videoPaths.length === 1) {
-            finalVideoPath = videoPaths[0];
-        } else {
-            // Try to concatenate videos
-            try {
-                finalVideoPath = await concatenateVideos(videoPaths, tempDir);
-            } catch (concatError) {
-                console.warn('[VideoNarrative] Could not concatenate videos:', concatError.message);
-                console.log('[VideoNarrative] Using first video as fallback');
-                finalVideoPath = videoPaths[0];
-            }
-        }
-        
-        event.sender.send('video-narrative-progress', {
-            stage: 'Complete!',
-            percent: 100,
-            segments: segmentStatus
-        });
-        
-        console.log('[VideoNarrative] Final video path:', finalVideoPath);
-        
-        return {
-            success: true,
-            videoPath: finalVideoPath,
-            segmentCount: segments.length,
-            successfulSegments: videoPaths.length
-        };
-        
-    } catch (error) {
-        console.error('[VideoNarrative] Generation error:', error);
-        return {
-            success: false,
-            error: error.message || 'Failed to generate video narrative'
-        };
-    }
-});
-
-// Helper: Split script into segments by word count
-function splitScriptIntoSegments(script, wordsPerSegment) {
-    const words = script.trim().split(/\s+/);
-    const segments = [];
-    
-    for (let i = 0; i < words.length; i += wordsPerSegment) {
-        const segmentWords = words.slice(i, i + wordsPerSegment);
-        segments.push(segmentWords.join(' '));
-    }
-    
-    return segments;
-}
-
-// Helper: Generate cinematic prompt from segment text
-async function generateCinematicPrompt(apiKey, segmentText, visualStyle, clientName) {
-    try {
-        const styleDescriptions = {
-            'cinematic': 'cinematic, dramatic lighting, shallow depth of field, professional film look, smooth camera movement',
-            'documentary': 'documentary style, natural lighting, authentic feel, observational camera work',
-            'corporate': 'clean corporate aesthetic, modern office environments, professional atmosphere, sleek design',
-            'abstract': 'abstract visuals, creative motion graphics, symbolic imagery, artistic interpretation',
-            'nature': 'stunning natural landscapes, aerial shots, golden hour lighting, majestic scenery'
-        };
-        
-        const styleDesc = styleDescriptions[visualStyle] || styleDescriptions['cinematic'];
-        
-        const prompt = `You are a video production expert converting narration into cinematic scene descriptions for AI video generation.
-
-Given this narration segment: "${segmentText}"
-
-And this visual style: ${styleDesc}
-
-Generate a concise but vivid video scene description (50-100 words) that visually represents the essence of this narration. The description should:
-- Describe what we SEE on screen (not what we hear)
-- Include camera movement suggestions (slow pan, tracking shot, etc.)
-- Describe lighting, mood, and atmosphere
-- Be specific about subjects, settings, and actions
-- Be suitable for a 7-second video clip
-- NOT include any text or dialogue in the scene
-- Focus on visual storytelling that complements spoken narration
-
-Context: This is for ${clientName || 'a business'} narrative video.
-
-Output ONLY the scene description, no explanations or headers.`;
-
-        const response = await callOpenAI(apiKey, 'gpt-4o', [
-            { role: 'user', content: prompt }
-        ], 200);
-        
-        return response?.trim() || null;
-    } catch (error) {
-        console.error('[VideoNarrative] Prompt generation error:', error);
-        return null;
-    }
-}
-
-// Helper: Generate video using Runway ML
-async function generateRunwayVideo(apiKey, prompt, aspectRatio, tempDir, segmentIndex) {
-    try {
-        const RunwayML = require('@runwayml/sdk').default;
-        const fs = require('fs');
-        const https = require('https');
-        
-        const client = new RunwayML({ apiKey });
-        
-        console.log('[VideoNarrative] Generating video for segment', segmentIndex);
-        console.log('[VideoNarrative] Prompt:', prompt.substring(0, 100) + '...');
-        
-        // Create a text-to-video task using veo3 model
-        const task = await client.textToVideo.create({
-            model: 'veo3',
-            promptText: prompt,
-            duration: 8, // veo3 requires exactly 8 seconds
-            ratio: aspectRatio === '1080:1920' ? '720:1280' : aspectRatio === '1080:1080' ? '1280:1280' : '1280:720'
-        });
-        
-        console.log('[VideoNarrative] Task created:', task.id);
-        
-        // Poll for completion
-        let result;
-        const maxAttempts = 60; // 5 minutes max
-        let attempts = 0;
-        
-        while (attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-            
-            result = await client.tasks.retrieve(task.id);
-            console.log('[VideoNarrative] Task status:', result.status);
-            
-            if (result.status === 'SUCCEEDED') {
-                break;
-            } else if (result.status === 'FAILED') {
-                throw new Error('Video generation failed: ' + (result.failure || 'Unknown error'));
-            }
-            
-            attempts++;
-        }
-        
-        if (!result || result.status !== 'SUCCEEDED') {
-            throw new Error('Video generation timed out');
-        }
-        
-        // Download the video
-        const videoUrl = result.output?.[0];
-        if (!videoUrl) {
-            throw new Error('No video URL in response');
-        }
-        
-        const videoPath = path.join(tempDir, `segment_${segmentIndex}.mp4`);
-        
-        await new Promise((resolve, reject) => {
-            const file = fs.createWriteStream(videoPath);
-            https.get(videoUrl, (response) => {
-                response.pipe(file);
-                file.on('finish', () => {
-                    file.close();
-                    resolve();
-                });
-            }).on('error', (err) => {
-                fs.unlink(videoPath, () => {});
-                reject(err);
-            });
-        });
-        
-        console.log('[VideoNarrative] Video downloaded:', videoPath);
-        return videoPath;
-        
-    } catch (error) {
-        console.error('[VideoNarrative] Runway video error:', error);
-        throw error;
-    }
-}
-
-// Helper: Concatenate videos (requires ffmpeg)
-async function concatenateVideos(videoPaths, tempDir) {
-    // For now, we'll create a simple file list and try to use ffmpeg if available
-    // In production, you'd bundle ffmpeg or use a Node.js native solution
-    const fs = require('fs').promises;
-    const { execSync } = require('child_process');
-    
-    // Create a file list for ffmpeg
-    const listPath = path.join(tempDir, 'videos.txt');
-    const listContent = videoPaths.map(p => `file '${p.replace(/\\/g, '/')}'`).join('\n');
-    await fs.writeFile(listPath, listContent);
-    
-    const outputPath = path.join(tempDir, 'final_narrative.mp4');
-    
-    try {
-        // Try to use ffmpeg
-        execSync(`ffmpeg -f concat -safe 0 -i "${listPath}" -c copy "${outputPath}"`, {
-            stdio: 'pipe'
-        });
-        
-        return outputPath;
-    } catch (ffmpegError) {
-        console.warn('[VideoNarrative] ffmpeg not available or failed:', ffmpegError.message);
-        throw new Error('ffmpeg not available for video concatenation');
-    }
-}
 
 // ============================================
 // Template Placeholders
@@ -5349,7 +6275,7 @@ async function processTemplateWithPlaceholders(templateBuffer, client, fileType)
             if (generationState.inProgress.has(placeholderName)) {
                 mainWindow.webContents.send('ai-console-log', {
                     agent: 'workshop',
-                    message: `⚠ Circular dependency detected for {{${placeholderName}}} - skipping`,
+                    message: `ÃƒÂ¢Ã…Â¡Ã‚Â  Circular dependency detected for {{${placeholderName}}} - skipping`,
                     type: 'warning'
                 });
                 console.log(`${indent}[Deps] Circular dependency for ${placeholderName}!`);
@@ -5453,7 +6379,7 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the formatted ite
                         
                         mainWindow.webContents.send('ai-console-log', {
                             agent: 'workshop',
-                            message: `✓ Generated ${items.length} title/body items for {{${placeholderName}}}`,
+                            message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Generated ${items.length} title/body items for {{${placeholderName}}}`,
                             type: 'success'
                         });
                         
@@ -5513,7 +6439,7 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
                         
                         mainWindow.webContents.send('ai-console-log', {
                             agent: 'workshop',
-                            message: `✓ Generated ${items.length} list items for {{${placeholderName}}}`,
+                            message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Generated ${items.length} list items for {{${placeholderName}}}`,
                             type: 'success'
                         });
                         
@@ -5527,7 +6453,7 @@ Do NOT include any preamble, explanation, or conclusion - ONLY the numbered list
                     } else {
                         mainWindow.webContents.send('ai-console-log', {
                             agent: 'workshop',
-                            message: `⚠ AI error for list {{${placeholderName}}}: ${aiContent}`,
+                            message: `ÃƒÂ¢Ã…Â¡Ã‚Â  AI error for list {{${placeholderName}}}: ${aiContent}`,
                             type: 'error'
                         });
                         listPlaceholderData[placeholderName] = Array(placeholder.listCount).fill(`[Error generating ${placeholderName}]`);
@@ -5576,7 +6502,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                         
                         mainWindow.webContents.send('ai-console-log', {
                             agent: 'workshop',
-                            message: `✓ Generated title/body for {{${placeholderName}}}`,
+                            message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Generated title/body for {{${placeholderName}}}`,
                             type: 'success'
                         });
                         mainWindow.webContents.send('ai-console-log', {
@@ -5625,14 +6551,14 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                         data[placeholderName] = aiContent;
                         mainWindow.webContents.send('ai-console-log', {
                             agent: 'workshop',
-                            message: `⚠ AI error for {{${placeholderName}}}: ${aiContent}`,
+                            message: `ÃƒÂ¢Ã…Â¡Ã‚Â  AI error for {{${placeholderName}}}: ${aiContent}`,
                             type: 'error'
                         });
                     } else {
                         data[placeholderName] = aiContent || `[No content generated for ${placeholderName}]`;
                         mainWindow.webContents.send('ai-console-log', {
                             agent: 'workshop',
-                            message: `✓ Generated ${aiContent?.length || 0} chars for {{${placeholderName}}}`,
+                            message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Generated ${aiContent?.length || 0} chars for {{${placeholderName}}}`,
                             type: 'success'
                         });
                     }
@@ -5931,7 +6857,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                                 modified = true;
                                 mainWindow.webContents.send('ai-console-log', {
                                     agent: 'workshop',
-                                    message: `✓ Replaced ${pattern} in ${path.basename(xmlFile)}`,
+                                    message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced ${pattern} in ${path.basename(xmlFile)}`,
                                     type: 'success'
                                 });
                             }
@@ -5951,7 +6877,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                                 modified = true;
                                 mainWindow.webContents.send('ai-console-log', {
                                     agent: 'workshop',
-                                    message: `✓ Replaced ${pattern} in ${path.basename(xmlFile)}`,
+                                    message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced ${pattern} in ${path.basename(xmlFile)}`,
                                     type: 'success'
                                 });
                             }
@@ -5982,7 +6908,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                             modified = true;
                             mainWindow.webContents.send('ai-console-log', {
                                 agent: 'workshop',
-                                message: `✓ Replaced {{${listName}[${i + 1}]}} in ${path.basename(xmlFile)}`,
+                                message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced {{${listName}[${i + 1}]}} in ${path.basename(xmlFile)}`,
                                 type: 'success'
                             });
                         }
@@ -5992,7 +6918,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                             modified = true;
                             mainWindow.webContents.send('ai-console-log', {
                                 agent: 'workshop',
-                                message: `✓ Replaced {{${listName} [${i + 1}]}} in ${path.basename(xmlFile)}`,
+                                message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced {{${listName} [${i + 1}]}} in ${path.basename(xmlFile)}`,
                                 type: 'success'
                             });
                         }
@@ -6020,7 +6946,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                     
                     mainWindow.webContents.send('ai-console-log', {
                         agent: 'workshop',
-                        message: `✓ Replaced {{${listName}}} #${itemIndex + 1} with "${previewText}..." in ${path.basename(xmlFile)}`,
+                        message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced {{${listName}}} #${itemIndex + 1} with "${previewText}..." in ${path.basename(xmlFile)}`,
                         type: 'success'
                     });
                     
@@ -6033,7 +6959,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                     modified = true;
                     mainWindow.webContents.send('ai-console-log', {
                         agent: 'workshop',
-                        message: `⚠ Extra {{${listName}}} placeholder - no more items available`,
+                        message: `ÃƒÂ¢Ã…Â¡Ã‚Â  Extra {{${listName}}} placeholder - no more items available`,
                         type: 'warning'
                     });
                 }
@@ -6057,7 +6983,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                             
                             mainWindow.webContents.send('ai-console-log', {
                                 agent: 'workshop',
-                                message: `✓ Replaced {{${listName}[title]}} #${titleIndex + 1} with "${item.title.substring(0, 30)}..." in ${path.basename(xmlFile)}`,
+                                message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced {{${listName}[title]}} #${titleIndex + 1} with "${item.title.substring(0, 30)}..." in ${path.basename(xmlFile)}`,
                                 type: 'success'
                             });
                             
@@ -6090,7 +7016,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                             
                             mainWindow.webContents.send('ai-console-log', {
                                 agent: 'workshop',
-                                message: `✓ Replaced {{${listName}[body]}} #${bodyIndex + 1} in ${path.basename(xmlFile)}`,
+                                message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced {{${listName}[body]}} #${bodyIndex + 1} in ${path.basename(xmlFile)}`,
                                 type: 'success'
                             });
                             
@@ -6125,7 +7051,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                         modified = true;
                         mainWindow.webContents.send('ai-console-log', {
                             agent: 'workshop',
-                            message: `✓ Replaced ${pattern} in ${path.basename(xmlFile)}`,
+                            message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced ${pattern} in ${path.basename(xmlFile)}`,
                             type: 'success'
                         });
                     }
@@ -6143,7 +7069,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                         modified = true;
                         mainWindow.webContents.send('ai-console-log', {
                             agent: 'workshop',
-                            message: `✓ Replaced ${pattern} in ${path.basename(xmlFile)}`,
+                            message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced ${pattern} in ${path.basename(xmlFile)}`,
                             type: 'success'
                         });
                     }
@@ -6157,7 +7083,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                     modified = true;
                     mainWindow.webContents.send('ai-console-log', {
                         agent: 'workshop',
-                        message: `✓ Replaced {{${tbName}}} (combined title/body) in ${path.basename(xmlFile)}`,
+                        message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced {{${tbName}}} (combined title/body) in ${path.basename(xmlFile)}`,
                         type: 'success'
                     });
                 }
@@ -6175,7 +7101,7 @@ Do NOT include any preamble or explanation - ONLY the TITLE and BODY lines.`;
                     
                     mainWindow.webContents.send('ai-console-log', {
                         agent: 'workshop',
-                        message: `✓ Replaced {{${key}}} in ${path.basename(xmlFile)}`,
+                        message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Replaced {{${key}}} in ${path.basename(xmlFile)}`,
                         type: 'success'
                     });
                 }
@@ -6372,7 +7298,7 @@ AGES:
 LOCATIONS:
 - Use DIVERSE global cities, not just Berlin or major capitals
 - Match locations to the client's actual geographic footprint and markets
-- Include tier-2 cities, not just London/NYC/Berlin (e.g., Lyon, Osaka, Austin, Mumbai, Cape Town, São Paulo, Melbourne, Rotterdam)
+- Include tier-2 cities, not just London/NYC/Berlin (e.g., Lyon, Osaka, Austin, Mumbai, Cape Town, SÃƒÆ’Ã‚Â£o Paulo, Melbourne, Rotterdam)
 - Vary across regions: Europe, Americas, Asia-Pacific, Middle East, Africa
 - NEVER repeat the same city within a set of personas
 
@@ -6435,7 +7361,7 @@ When generating content:
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('ai-console-log', {
                     agent: 'workshop',
-                    message: `🔍 Researching online: "${prompt.substring(0, 80)}..."`,
+                    message: `ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â Researching online: "${prompt.substring(0, 80)}..."`,
                     type: 'info'
                 });
             }
@@ -6468,7 +7394,7 @@ ${webResults}
                     if (mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.webContents.send('ai-console-log', {
                             agent: 'workshop',
-                            message: `✓ Web research completed - found current information`,
+                            message: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Web research completed - found current information`,
                             type: 'success'
                         });
                     }
@@ -6480,7 +7406,7 @@ ${webResults}
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('ai-console-log', {
                         agent: 'workshop',
-                        message: `⚠ Web research unavailable, using source pack only`,
+                        message: `ÃƒÂ¢Ã…Â¡Ã‚Â  Web research unavailable, using source pack only`,
                         type: 'warning'
                     });
                 }
@@ -6492,9 +7418,9 @@ ${webResults}
 SOURCE PACK CONTENT:
 ${truncatedSourcePack || 'No source pack content available.'}
 
-═══════════════════════════════════════════════════════════════════════════════
+ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 IMPORTANT: MINE THE SOURCE PACK FOR SPECIFICS
-═══════════════════════════════════════════════════════════════════════════════
+ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 Before generating content, scan the source pack above and extract:
 1. Specific brand/product names (use them by name, not generically)
 2. Actual data points (market share %, revenue figures, growth rates)
@@ -6504,7 +7430,7 @@ Before generating content, scan the source pack above and extract:
 
 Your response MUST include these specific details - not generic placeholders.
 If the source pack mentions "Product X achieved 23% growth", say that - don't say "strong growth".
-═══════════════════════════════════════════════════════════════════════════════
+ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 
 Generate the content now. Be direct and concise - this will be inserted into a template.`;
 
@@ -6574,7 +7500,7 @@ Generate the content now. Be direct and concise - this will be inserted into a t
                     if (mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.webContents.send('ai-console-log', {
                             agent: 'workshop',
-                            message: `⚠ Network issue, retrying (${attempt}/${maxRetries})...`,
+                            message: `ÃƒÂ¢Ã…Â¡Ã‚Â  Network issue, retrying (${attempt}/${maxRetries})...`,
                             type: 'warning'
                         });
                     }
@@ -6617,7 +7543,7 @@ Generate the content now. Be direct and concise - this will be inserted into a t
  * Agent 1: ANALYST - Extracts key insights from ALL source documents
  */
 async function runAnalystAgent(documents, client, openaiCreds, emitLog) {
-    emitLog('analyst', '🔍 Analyst Agent: Beginning comprehensive source analysis...', 'thinking');
+    emitLog('analyst', 'ÃƒÂ°Ã…Â¸Ã¢â‚¬ÂÃ‚Â Analyst Agent: Beginning comprehensive source analysis...', 'thinking');
     
     // Build full document content (no categorization - analyst sees everything)
     let allContent = '';
@@ -6666,7 +7592,7 @@ async function runAnalystAgent(documents, client, openaiCreds, emitLog) {
     
     // Check if we have any content
     if (allContent.trim().length < 100) {
-        emitLog('analyst', '⚠️ Warning: Very little content found in source pack!', 'warning');
+        emitLog('analyst', 'ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Warning: Very little content found in source pack!', 'warning');
         return `No substantive content found in source pack. Documents checked: ${Object.keys(documents).join(', ')}. All were either placeholders or empty.`;
     }
     
@@ -6677,25 +7603,25 @@ async function runAnalystAgent(documents, client, openaiCreds, emitLog) {
 CLIENT: ${client?.name || 'Unknown'}
 INDUSTRY: ${client?.industry || 'Unknown'}
 
-═══════════════════════════════════════════════════════════════════════════════
+ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 CRITICAL FIRST STEP: STAKEHOLDER ANALYSIS
-═══════════════════════════════════════════════════════════════════════════════
+ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 
 FIRST, look for any Point of Contact (POC) information in the documents.
 Search for files containing "poc", "point_of_contact", "stakeholder", or from folder "3.0".
 If found, extract:
-• Stakeholder names, titles, and roles
-• Seniority levels and decision-making authority  
-• Known priorities, interests, and communication preferences
-• Any stated concerns or strategic focus areas
+ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Stakeholder names, titles, and roles
+ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Seniority levels and decision-making authority  
+ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Known priorities, interests, and communication preferences
+ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Any stated concerns or strategic focus areas
 
 This audience analysis is CRITICAL for tailoring the narrative.
 
-═══════════════════════════════════════════════════════════════════════════════
+ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 SOURCE DOCUMENTS
-═══════════════════════════════════════════════════════════════════════════════
+ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 ${allContent}
-═══════════════════════════════════════════════════════════════════════════════
+ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 
 Perform a comprehensive extraction across ALL documents. For EACH category below, extract ALL relevant information found ANYWHERE in the documents:
 
@@ -6768,15 +7694,15 @@ Be exhaustive. Extract EVERYTHING of value. Note which document each insight cam
         console.log(`[Analyst] OpenAI returned: ${analysis?.length || 0} chars`);
         
         if (!analysis || analysis.length < 100) {
-            emitLog('analyst', `⚠️ Warning: Analysis returned minimal content (${analysis?.length || 0} chars)`, 'warning');
+            emitLog('analyst', `ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Warning: Analysis returned minimal content (${analysis?.length || 0} chars)`, 'warning');
         } else {
-            emitLog('analyst', `✓ Analysis complete - ${analysis.length} chars of insights extracted`, 'success');
+            emitLog('analyst', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Analysis complete - ${analysis.length} chars of insights extracted`, 'success');
         }
         
         return analysis || 'Analysis returned empty - documents may not have contained extractable content.';
     } catch (err) {
         console.error('[Analyst] OpenAI call failed:', err);
-        emitLog('analyst', `❌ Error calling OpenAI: ${err.message}`, 'error');
+        emitLog('analyst', `ÃƒÂ¢Ã‚ÂÃ…â€™ Error calling OpenAI: ${err.message}`, 'error');
         return `Analysis failed: ${err.message}. The source documents were: ${docList.join(', ')}`;
     }
 }
@@ -6785,7 +7711,7 @@ Be exhaustive. Extract EVERYTHING of value. Note which document each insight cam
  * Agent 2: STRATEGIST - Maps insights to narrative structure  
  */
 async function runStrategistAgent(analysisOutput, agentPrompt, client, openaiCreds, emitLog) {
-    emitLog('strategist', '📊 Strategist Agent: Mapping insights to narrative architecture...', 'thinking');
+    emitLog('strategist', 'ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â  Strategist Agent: Mapping insights to narrative architecture...', 'thinking');
     
     const strategyPrompt = `You are a senior strategy consultant. You have received a comprehensive analysis of source materials. Your job is to organize these insights into a strategic narrative structure.
 
@@ -6858,15 +7784,15 @@ Provide 3-4 specific recommendations for how to make this narrative maximally co
         console.log(`[Strategist] OpenAI returned: ${strategy?.length || 0} chars`);
         
         if (!strategy || strategy.length < 100) {
-            emitLog('strategist', `⚠️ Warning: Strategy returned minimal content (${strategy?.length || 0} chars)`, 'warning');
+            emitLog('strategist', `ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Warning: Strategy returned minimal content (${strategy?.length || 0} chars)`, 'warning');
         } else {
-            emitLog('strategist', `✓ Strategic mapping complete - ${strategy.length} chars`, 'success');
+            emitLog('strategist', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Strategic mapping complete - ${strategy.length} chars`, 'success');
         }
         
         return strategy || 'Strategy mapping returned empty.';
     } catch (err) {
         console.error('[Strategist] OpenAI call failed:', err);
-        emitLog('strategist', `❌ Error calling OpenAI: ${err.message}`, 'error');
+        emitLog('strategist', `ÃƒÂ¢Ã‚ÂÃ…â€™ Error calling OpenAI: ${err.message}`, 'error');
         return `Strategy mapping failed: ${err.message}`;
     }
 }
@@ -6875,7 +7801,7 @@ Provide 3-4 specific recommendations for how to make this narrative maximally co
  * Agent 3: NARRATOR - Writes the final executive narrative
  */
 async function runNarratorAgent(analysisOutput, strategyOutput, agentPrompt, client, context, openaiCreds, emitLog) {
-    emitLog('narrator', '✍️ Narrator Agent: Crafting executive narrative...', 'thinking');
+    emitLog('narrator', 'ÃƒÂ¢Ã…â€œÃ‚ÂÃƒÂ¯Ã‚Â¸Ã‚Â Narrator Agent: Crafting executive narrative...', 'thinking');
     
     // Handle missing or null inputs
     const safeAnalysis = analysisOutput || 'No analysis available - the source pack may not have contained substantive content.';
@@ -6883,12 +7809,6 @@ async function runNarratorAgent(analysisOutput, strategyOutput, agentPrompt, cli
     
     // Log what we received
     console.log(`[Narrator] Analysis length: ${safeAnalysis?.length || 0}, Strategy length: ${safeStrategy?.length || 0}`);
-    
-    // Get learned preferences from user's iteration history
-    const learnedPreferences = buildLearnedInstructions(appState.learnings, client, client?.industry);
-    if (learnedPreferences) {
-        console.log('[Narrator] Applying learned preferences to narrative generation');
-    }
     
     // Extract length constraints from the user's prompt and calculate word limit
     const lengthConstraint = extractLengthConstraint(agentPrompt);
@@ -6900,22 +7820,22 @@ async function runNarratorAgent(analysisOutput, strategyOutput, agentPrompt, cli
     const sectionBudget = Math.floor(wordLimit / 4);
     
     const narrativePrompt = `
-╔══════════════════════════════════════════════════════════════════════════════╗
-║  ⚠️  MANDATORY LENGTH CONSTRAINT - READ FIRST  ⚠️                            ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  MAXIMUM: ${wordLimit} WORDS (${Math.ceil(wordLimit / 500)} pages A4 at ${lengthConstraint.fontSize}pt)                                    ║
-║                                                                              ║
-║  This is a HARD LIMIT from the user's brief. You MUST:                       ║
-║  • Write COMPLETE sentences and sections (never cut off mid-thought)         ║
-║  • Stay UNDER ${wordLimit} words total                                              ║
-║  • Budget roughly ${sectionBudget} words per major section                            ║
-║  • Use TABLES to compress data (tables are more concise than prose)          ║
-║  • Be ruthlessly concise - every word must earn its place                    ║
-║                                                                              ║
-║  Exceeding ${wordLimit} words makes the output UNACCEPTABLE to the user.            ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬â€
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ  ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â  MANDATORY LENGTH CONSTRAINT - READ FIRST  ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â                            ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â£
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ                                                                              ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ  MAXIMUM: ${wordLimit} WORDS (${Math.ceil(wordLimit / 500)} pages A4 at ${lengthConstraint.fontSize}pt)                                    ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ                                                                              ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ  This is a HARD LIMIT from the user's brief. You MUST:                       ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ  ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Write COMPLETE sentences and sections (never cut off mid-thought)         ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ  ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Stay UNDER ${wordLimit} words total                                              ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ  ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Budget roughly ${sectionBudget} words per major section                            ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ  ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Use TABLES to compress data (tables are more concise than prose)          ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ  ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Be ruthlessly concise - every word must earn its place                    ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ                                                                              ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ  Exceeding ${wordLimit} words makes the output UNACCEPTABLE to the user.            ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ                                                                              ÃƒÂ¢Ã¢â‚¬Â¢Ã¢â‚¬Ëœ
+ÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¡ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 
 CLIENT: ${client?.name || 'Unknown'}
 INDUSTRY: ${client?.industry || 'Unknown'}
@@ -6932,20 +7852,15 @@ ${safeAnalysis}
 === STRATEGIST'S NARRATIVE ARCHITECTURE ===
 ${safeStrategy}
 === END OF ARCHITECTURE ===
-${learnedPreferences ? `
-=== LEARNED USER PREFERENCES ===
-${learnedPreferences}
-=== END OF LEARNED PREFERENCES ===
-` : ''}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚Â
 
 NOW WRITE THE NARRATIVE.
 
 Remember:
-• MAXIMUM ${wordLimit} words - this is from the user's brief, not negotiable
-• Complete every section fully - never stop mid-sentence
-• Use markdown tables for data (they're more concise than prose)
-• If running long, cut CONTENT not STRUCTURE
+ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ MAXIMUM ${wordLimit} words - this is from the user's brief, not negotiable
+ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Complete every section fully - never stop mid-sentence
+ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Use markdown tables for data (they're more concise than prose)
+ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ If running long, cut CONTENT not STRUCTURE
 
 Begin writing:`;
 
@@ -7009,10 +7924,10 @@ You always complete the full narrative. Never stop mid-section.` },
     console.log(`[Narrator] Generated narrative: ${actualWordCount} words (target: ${wordLimit})`);
     
     if (actualWordCount > wordLimit * 1.2) {
-        emitLog('narrator', `📝 Narrative is ${actualWordCount} words (target: ${wordLimit}) - consider iterating to condense`, 'info');
+        emitLog('narrator', `ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â Narrative is ${actualWordCount} words (target: ${wordLimit}) - consider iterating to condense`, 'info');
     }
     
-    emitLog('narrator', '✓ Executive narrative complete', 'success');
+    emitLog('narrator', 'ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Executive narrative complete', 'success');
     return narrative;
 }
 
@@ -7073,7 +7988,7 @@ function extractLengthConstraint(prompt) {
 }
 
 // ============================================
-// Narrative Builder - Step 5 Guided Prompt Creation
+// Narrative Builder - Step 6 Guided Prompt Creation
 // ============================================
 
 ipcMain.handle('sourceChat:sendMessage', async (event, { message }) => {
@@ -7187,7 +8102,7 @@ You need to gather information about the user's narrative preferences through na
    - Tone preferences (bold, measured, visionary, pragmatic)
 
 CONVERSATION STYLE:
-- Start by sharing 2-3 interesting insights you found in the source documents (use bullet points • for listing insights)
+- Start by sharing 2-3 interesting insights you found in the source documents (use bullet points ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ for listing insights)
 - Use these insights to naturally lead into questions about their preferences
 - Be conversational and helpful, not robotic
 - Ask ONE question at a time - never multiple questions in the same message
@@ -7195,7 +8110,7 @@ CONVERSATION STYLE:
 - Reference specific content from the sources when relevant
 
 FORMATTING RULES:
-- For listing insights or observations: use bullet points (• or -)
+- For listing insights or observations: use bullet points (ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ or -)
 - For question OPTIONS that the user should choose from: use bold lowercase letters **a)** **b)** **c)** **d)** etc. (as many as appropriate)
 - ALWAYS put each option on its own line for readability
 - NEVER put options in a paragraph or on the same line
@@ -7237,7 +8152,7 @@ The prompt between the markers will be extracted and used as the narrative gener
         ];
         
         // Call OpenAI
-        const model = openaiCreds.model || 'gpt-4o';
+        const model = openaiCreds.model || 'gpt-5.2';
         const response = await callOpenAI(openaiCreds.apiKey, model, messages, 3000);
         
         // Add assistant response to history
@@ -7315,13 +8230,13 @@ ${sampleContent}
 
 Generate an opening message that:
 1. Warmly greets the user and explains you'll help them craft a narrative
-2. Mentions 2-3 interesting insights or themes you spotted in their source documents (use bullet points • for these)
+2. Mentions 2-3 interesting insights or themes you spotted in their source documents (use bullet points ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ for these)
 3. Asks ONE opening question about what kind of narrative angle interests them
 
 Be conversational and engaging. Don't be robotic. Make the user excited about the narrative possibilities.
 
 CRITICAL FORMATTING:
-- Use bullet points (• or -) for listing insights/observations
+- Use bullet points (ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ or -) for listing insights/observations
 - Use bold letters **a)** **b)** **c)** ONLY for the question options the user should choose from
 - Put EACH option on its own line for readability (never in a paragraph)
 - Ask only ONE question, don't combine multiple questions
@@ -7329,7 +8244,7 @@ CRITICAL FORMATTING:
 
         const messages = [{ role: 'system', content: systemPrompt }];
         
-        const model = openaiCreds.model || 'gpt-4o';
+        const model = openaiCreds.model || 'gpt-5.2';
         const response = await callOpenAI(openaiCreds.apiKey, model, messages, 1500);
         
         // Add to history as the first assistant message
@@ -7346,7 +8261,7 @@ CRITICAL FORMATTING:
 });
 
 // ============================================
-// Narrative Chat - Step 6 Q&A with Sources + Narrative
+// Narrative Chat - Step 7 Q&A with Sources + Narrative
 // ============================================
 
 let narrativeChatHistory = [];
@@ -7497,7 +8412,7 @@ When answering:
     }
     
     // Call OpenAI
-    const model = openaiCreds.model || 'gpt-4o';
+    const model = openaiCreds.model || 'gpt-5.2';
     const response = await callOpenAI(openaiCreds.apiKey, model, messages, 2000);
     
     // Add assistant response to history
@@ -7571,7 +8486,7 @@ FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
     }
     
     // Call OpenAI with higher token limit for narrative output
-    const model = openaiCreds.model || 'gpt-4o';
+    const model = openaiCreds.model || 'gpt-5.2';
     const response = await callOpenAI(openaiCreds.apiKey, model, [
         { role: 'system', content: systemPrompt }
     ], 8000);
@@ -7650,8 +8565,8 @@ ipcMain.handle('narrative:generate', async (event, { templateId, agentPrompt, so
     // Reset cancellation flag
     appState.narrativeCancelled = false;
     
-    emitLog('system', `🚀 Starting multi-agent narrative generation for ${client?.name || 'Unknown'}...`, 'info');
-    emitLog('system', 'Pipeline: Analyst → Strategist → Narrator', 'info');
+    emitLog('system', `ÃƒÂ°Ã…Â¸Ã…Â¡Ã¢â€šÂ¬ Starting multi-agent narrative generation for ${client?.name || 'Unknown'}...`, 'info');
+    emitLog('system', 'Pipeline: Analyst ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Strategist ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Narrator', 'info');
     
     auditLogger.log('RETRIEVAL', 'NARRATIVE_GENERATION_STARTED', { 
         requestId, 
@@ -7675,7 +8590,7 @@ ipcMain.handle('narrative:generate', async (event, { templateId, agentPrompt, so
         console.log('[Narrative] lastSourcePack:', appState.lastSourcePack ? 'exists' : 'null');
         
         if (!sourcePack) {
-            emitLog('system', '❌ No source pack found! Generate a source pack first.', 'error');
+            emitLog('system', 'ÃƒÂ¢Ã‚ÂÃ…â€™ No source pack found! Generate a source pack first.', 'error');
             return { 
                 success: false, 
                 error: 'No source pack found. Please generate a source pack first.' 
@@ -7683,7 +8598,7 @@ ipcMain.handle('narrative:generate', async (event, { templateId, agentPrompt, so
         }
         
         if (!sourcePack.documents) {
-            emitLog('system', '❌ Source pack has no documents object!', 'error');
+            emitLog('system', 'ÃƒÂ¢Ã‚ÂÃ…â€™ Source pack has no documents object!', 'error');
             console.log('[Narrative] sourcePack keys:', Object.keys(sourcePack));
             return { 
                 success: false, 
@@ -7702,15 +8617,15 @@ ipcMain.handle('narrative:generate', async (event, { templateId, agentPrompt, so
             console.log(`[Narrative] Doc: ${key} = ${size} chars`);
         }
         
-        emitLog('system', `📦 Found source pack with ${docCount} documents`, 'success');
+        emitLog('system', `ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¦ Found source pack with ${docCount} documents`, 'success');
         emitLog('system', `Documents: ${docKeys.slice(0, 5).join(', ')}${docKeys.length > 5 ? '...' : ''}`, 'info');
         
         // ========== AGENT 1: ANALYST ==========
         if (appState.narrativeCancelled) {
-            emitLog('system', '⚠️ Generation cancelled', 'warning');
+            emitLog('system', 'ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Generation cancelled', 'warning');
             return { success: false, canceled: true };
         }
-        emitLog('system', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+        emitLog('system', 'ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚Â', 'info');
         emitLog('system', 'PHASE 1/3: Deep Analysis', 'info');
         const analysisOutput = await runAnalystAgent(
             sourcePack.documents, 
@@ -7721,10 +8636,10 @@ ipcMain.handle('narrative:generate', async (event, { templateId, agentPrompt, so
         
         // ========== AGENT 2: STRATEGIST ==========
         if (appState.narrativeCancelled) {
-            emitLog('system', '⚠️ Generation cancelled after analysis', 'warning');
+            emitLog('system', 'ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Generation cancelled after analysis', 'warning');
             return { success: false, canceled: true };
         }
-        emitLog('system', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+        emitLog('system', 'ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚Â', 'info');
         emitLog('system', 'PHASE 2/3: Strategic Mapping', 'info');
         const strategyOutput = await runStrategistAgent(
             analysisOutput, 
@@ -7736,10 +8651,10 @@ ipcMain.handle('narrative:generate', async (event, { templateId, agentPrompt, so
         
         // ========== AGENT 3: NARRATOR ==========
         if (appState.narrativeCancelled) {
-            emitLog('system', '⚠️ Generation cancelled after strategy', 'warning');
+            emitLog('system', 'ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Generation cancelled after strategy', 'warning');
             return { success: false, canceled: true };
         }
-        emitLog('system', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+        emitLog('system', 'ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚Â', 'info');
         emitLog('system', 'PHASE 3/3: Narrative Synthesis', 'info');
         const narrativeContent = await runNarratorAgent(
             analysisOutput,
@@ -7755,8 +8670,8 @@ ipcMain.handle('narrative:generate', async (event, { templateId, agentPrompt, so
             return { success: false, error: 'Failed to generate narrative content' };
         }
         
-        emitLog('system', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
-        emitLog('system', '✅ All agents complete - preparing document...', 'success');
+        emitLog('system', 'ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬ÂÃ‚Â', 'info');
+        emitLog('system', 'ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ All agents complete - preparing document...', 'success');
         
         if (!narrativeContent) {
             return { success: false, error: 'Failed to generate narrative content' };
@@ -7841,10 +8756,10 @@ ipcMain.handle('narrative:generate', async (event, { templateId, agentPrompt, so
                     heading: HeadingLevel.TITLE,
                     spacing: { before: 400, after: 200 }
                 }));
-            } else if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('• ')) {
+            } else if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ')) {
                 // Bullet point
                 docChildren.push(new Paragraph({
-                    text: trimmedLine.replace(/^[-•]\s*/, ''),
+                    text: trimmedLine.replace(/^[-ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢]\s*/, ''),
                     bullet: { level: 0 },
                     spacing: { after: 100 }
                 }));
@@ -7930,7 +8845,7 @@ ipcMain.handle('narrative:cancel', async () => {
     
     mainWindow.webContents.send('ai-console-log', {
         agent: 'system',
-        message: '⚠️ Cancellation requested - stopping generation...',
+        message: 'ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Cancellation requested - stopping generation...',
         type: 'warning'
     });
     
@@ -8025,7 +8940,7 @@ async function runDeepResearch(section, client, context, openaiCreds) {
     const fastMode = context.fastGenerate === true;
     
     // Use the cheapest model in fast mode, otherwise use configured model
-    const model = fastMode ? 'gpt-4o-mini' : (openaiCreds.model || 'gpt-4o');
+    const model = openaiCreds.model || 'gpt-5.2';
     
     console.log(`[DeepResearch Agent] Starting ${section} analysis for ${client.name}`);
     console.log(`[DeepResearch Agent] Using model: ${model}${fastMode ? ' (FAST MODE)' : ''}`);
@@ -8139,7 +9054,7 @@ Quantify opportunities where possible (%, $, timeframes). Be specific and action
         }
         
         console.log(`[DeepResearch Agent] Step 1 complete: ${comprehensiveAnalysis.length} chars`);
-        emitAiConsoleLog('analyst', `✓ ${section} research complete (${comprehensiveAnalysis.length} chars)`, 'success');
+        emitAiConsoleLog('analyst', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ ${section} research complete (${comprehensiveAnalysis.length} chars)`, 'success');
         
         // Step 2: Polish into executive narrative
         console.log(`[DeepResearch Agent] Step 2: Creating executive narrative...`);
@@ -8168,13 +9083,13 @@ Format as a complete report with Executive Summary and detailed sections.`
         
         if (executiveNarrative) {
             console.log(`[DeepResearch Agent] Step 2 complete: ${executiveNarrative.length} chars`);
-            emitAiConsoleLog('narrator', `✓ Executive narrative complete (${executiveNarrative.length} chars)`, 'success');
+            emitAiConsoleLog('narrator', `ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ Executive narrative complete (${executiveNarrative.length} chars)`, 'success');
         } else {
             emitAiConsoleLog('system', `Using research directly (narrative polish skipped)`, 'info');
         }
         
         emitAiConsoleLog('system', `${section} Deep Research complete! Total: 2 steps executed`, 'success');
-        emitAiConsoleLog('system', `───────────────────────────────────────────`, 'info');
+        emitAiConsoleLog('system', `ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬`, 'info');
         
         // Compile final report
         const now = new Date().toISOString();
@@ -8211,7 +9126,7 @@ ${finalContent}
     } catch (error) {
         console.error(`[DeepResearch Agent] Error:`, error);
         emitAiConsoleLog('system', `Error: ${error.message}`, 'error');
-        return generateFallbackReport(section, client, context, openaiCreds.model || 'gpt-4o');
+        return generateFallbackReport(section, client, context, openaiCreds.model || 'gpt-5.2');
     }
 }
 
@@ -8356,26 +9271,14 @@ const openAIRateLimiter = {
     }
 };
 
-// Fallback model if primary model fails
-const FALLBACK_MODEL = 'gpt-4o';
-
-// Helper function to make OpenAI API calls with rate limiting, retry, and model fallback
+// Helper function to make OpenAI API calls with rate limiting and retry.
+// NO fallback to older models - all generation must use GPT-5 series.
 async function callOpenAI(apiKey, model, messages, maxTokens = 2000) {
-    // First try with the requested model
     const result = await openAIRateLimiter.enqueue(() => callOpenAIWithRetry(apiKey, model, messages, maxTokens));
     
-    // If the result is null and we're not already using the fallback model, try fallback
-    if (result === null && model !== FALLBACK_MODEL) {
-        console.log(`[OpenAI] Primary model ${model} returned empty. Trying fallback model ${FALLBACK_MODEL}...`);
-        emitAiConsoleLog('system', `Model ${model} returned empty. Trying fallback model ${FALLBACK_MODEL}...`, 'warning');
-        
-        const fallbackResult = await openAIRateLimiter.enqueue(() => callOpenAIWithRetry(apiKey, FALLBACK_MODEL, messages, maxTokens));
-        
-        if (fallbackResult) {
-            console.log(`[OpenAI] Fallback model succeeded!`);
-            emitAiConsoleLog('system', `✓ Fallback model ${FALLBACK_MODEL} succeeded`, 'success');
-            return fallbackResult;
-        }
+    if (result === null) {
+        console.error(`[OpenAI] Model ${model} returned empty/failed. No fallback - returning null.`);
+        emitAiConsoleLog('system', `GPT-5 model (${model}) is currently unavailable. Please try again.`, 'error');
     }
     
     return result;
@@ -8388,31 +9291,43 @@ async function callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCoun
     // Determine if this model uses the new Responses API (gpt-5.x models)
     const useResponsesAPI = model.startsWith('gpt-5');
     
+    // GPT-5 with large context needs much more time than 3 minutes.
+    // Scale timeout based on payload size AND model family.
+    const BASE_TIMEOUT_MS = useResponsesAPI ? 480000 : 180000; // 8 min for GPT-5, 3 min for others
+    
     return new Promise((resolve, reject) => {
+        // Settled guard — prevents the timeout→destroy→error double-fire from
+        // spawning zombie retry chains that run for minutes in the background.
+        let settled = false;
+        function settle(value) {
+            if (settled) return;
+            settled = true;
+            resolve(value);
+        }
+
         let requestBody;
         let apiPath;
         
         if (useResponsesAPI) {
             // Use the Responses API for GPT-5.x models
-            // Convert chat messages to a single input string
-            const systemMessage = messages.find(m => m.role === 'system')?.content || '';
-            const userMessages = messages.filter(m => m.role !== 'system')
-                .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+            // Use the dedicated 'instructions' field for system messages so they
+            // retain their authority; 'input' carries only the user content.
+            const sysMsg = messages.find(m => m.role === 'system')?.content || '';
+            const userContent = messages.filter(m => m.role !== 'system')
+                .map(m => m.content)
                 .join('\n\n');
             
-            const inputText = systemMessage 
-                ? `System Instructions:\n${systemMessage}\n\n${userMessages}`
-                : userMessages;
-            
-            requestBody = JSON.stringify({
+            const body = {
                 model: model,
-                input: inputText,
+                input: userContent,
                 max_output_tokens: maxTokens,
-                // instructions: systemMessage  // Alternative way to pass system prompt
-            });
+            };
+            if (sysMsg) body.instructions = sysMsg;
+            
+            requestBody = JSON.stringify(body);
             apiPath = '/v1/responses';
             
-            console.log(`[OpenAI] Using Responses API for ${model}`);
+            console.log(`[OpenAI] Using Responses API for ${model} (instructions: ${sysMsg.length} chars, input: ${userContent.length} chars, timeout: ${BASE_TIMEOUT_MS / 1000}s)`);
         } else {
             // Use Chat Completions API for other models (gpt-4o, o1, o3, etc.)
             const useNewTokenParam = model.startsWith('o3') || model.startsWith('o1');
@@ -8440,7 +9355,7 @@ async function callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCoun
                 'Authorization': `Bearer ${apiKey}`,
                 'Content-Length': Buffer.byteLength(requestBody)
             },
-            timeout: 180000  // 3 minute timeout for o1 (it thinks longer)
+            timeout: BASE_TIMEOUT_MS
         };
 
         const req = https.request(options, (res) => {
@@ -8451,6 +9366,7 @@ async function callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCoun
             });
             
             res.on('end', async () => {
+                if (settled) return; // guard against late delivery after timeout
                 try {
                     const response = JSON.parse(data);
                     
@@ -8485,9 +9401,26 @@ async function callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCoun
                             // Retry the call
                             try {
                                 const retryResult = await callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCount + 1);
-                                resolve(retryResult);
+                                settle(retryResult);
                             } catch (retryError) {
-                                resolve(null);
+                                settle(null);
+                            }
+                            return;
+                        }
+                        
+                        // Check if it's a server error (5xx) — retryable
+                        const isServerError = res.statusCode >= 500 && res.statusCode < 600;
+                        if (isServerError && retryCount < openAIRateLimiter.maxRetries) {
+                            const waitTime = openAIRateLimiter.retryDelayMs * Math.pow(2, retryCount);
+                            console.log(`[OpenAI] Server error ${res.statusCode}. Retry ${retryCount + 1}/${openAIRateLimiter.maxRetries} in ${waitTime}ms...`);
+                            emitAiConsoleLog('system', `Server error (${res.statusCode}). Retrying in ${Math.round(waitTime/1000)}s...`, 'warning');
+                            
+                            await new Promise(r => setTimeout(r, waitTime));
+                            try {
+                                const retryResult = await callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCount + 1);
+                                settle(retryResult);
+                            } catch (retryError) {
+                                settle(null);
                             }
                             return;
                         }
@@ -8504,7 +9437,7 @@ async function callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCoun
                             emitAiConsoleLog('system', `OpenAI Error: ${errorMsg}`, 'error');
                         }
                         
-                        resolve(null);
+                        settle(null);
                         return;
                     }
                     
@@ -8567,7 +9500,7 @@ async function callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCoun
                         console.error(`[OpenAI] No content in response. Status: ${res.statusCode}`);
                         console.error(`[OpenAI] Full response:`, JSON.stringify(response).substring(0, 2000));
                         emitAiConsoleLog('system', `OpenAI returned empty response (status ${res.statusCode})`, 'error');
-                        resolve(null);
+                        settle(null);
                         return;
                     }
                     
@@ -8575,20 +9508,24 @@ async function callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCoun
                     const tokensUsed = response.usage?.total_tokens || 'unknown';
                     console.log(`[OpenAI] Success. Model: ${model}, Tokens: ${tokensUsed}`);
                     
-                    resolve(content);
+                    settle(content);
                 } catch (parseError) {
                     console.error(`[OpenAI] Parse error:`, parseError);
                     console.error(`[OpenAI] Raw data:`, data.substring(0, 500));
                     emitAiConsoleLog('system', `OpenAI response parse error: ${parseError.message}`, 'error');
-                    resolve(null);
+                    settle(null);
                 }
             });
         });
 
         req.on('error', async (error) => {
-            console.error(`[OpenAI] Request error:`, error);
+            // If already settled (e.g. by timeout handler), do nothing.
+            // This prevents zombie retry chains spawned by req.destroy().
+            if (settled) return;
             
-            // Retry on network errors
+            console.error(`[OpenAI] Request error:`, error.message);
+            
+            // Retry on genuine network errors (not destroy-triggered)
             if (retryCount < openAIRateLimiter.maxRetries) {
                 const waitTime = openAIRateLimiter.retryDelayMs * Math.pow(2, retryCount);
                 console.log(`[OpenAI] Network error. Retry ${retryCount + 1}/${openAIRateLimiter.maxRetries} in ${waitTime}ms...`);
@@ -8598,22 +9535,23 @@ async function callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCoun
                 
                 try {
                     const retryResult = await callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCount + 1);
-                    resolve(retryResult);
+                    settle(retryResult);
                 } catch (retryError) {
-                    resolve(null);
+                    settle(null);
                 }
                 return;
             }
             
             emitAiConsoleLog('system', `OpenAI request error: ${error.message}`, 'error');
-            resolve(null);
+            settle(null);
         });
 
-        req.setTimeout(180000, () => {
-            console.error(`[OpenAI] Request timed out after 3 minutes`);
-            emitAiConsoleLog('system', `OpenAI request timed out after 3 minutes`, 'error');
+        const timeoutMinutes = Math.round(BASE_TIMEOUT_MS / 60000);
+        req.setTimeout(BASE_TIMEOUT_MS, () => {
+            console.error(`[OpenAI] Request timed out after ${timeoutMinutes} minutes (model: ${model})`);
+            emitAiConsoleLog('system', `OpenAI request timed out after ${timeoutMinutes} minutes`, 'error');
+            settle(null);  // settle FIRST so the error handler from destroy is a no-op
             req.destroy();
-            resolve(null);
         });
 
         req.write(requestBody);
@@ -8624,6 +9562,100 @@ async function callOpenAIWithRetry(apiKey, model, messages, maxTokens, retryCoun
 // Audit logs
 ipcMain.handle('audit:getLogs', async (event, { limit = 100, category } = {}) => {
     return auditLogger.getLogs({ limit, category });
+});
+
+// Restore document state from history (markdown only — docx rebuilt lazily on download)
+ipcMain.handle('session:restoreDocState', async (event, { qualificationMarkdown, valueCaseMarkdown, provocationMarkdown, reviewMarkdown, reviewsByRole, provokeRewriteVersions, clientName }) => {
+    const sanitized = (clientName || 'Client').replace(/[^a-zA-Z0-9]/g, '_');
+
+    if (qualificationMarkdown) {
+        appState.lastQualificationDoc = {
+            markdown: qualificationMarkdown,
+            docxBuffer: null,
+            fileName: `${sanitized}_Qualification.docx`
+        };
+    } else {
+        appState.lastQualificationDoc = null;
+    }
+
+    if (valueCaseMarkdown) {
+        appState.lastValueCaseDoc = {
+            markdown: valueCaseMarkdown,
+            docxBuffer: null,
+            fileName: `${sanitized}_Value_Case.docx`
+        };
+    } else {
+        appState.lastValueCaseDoc = null;
+    }
+
+    if (provocationMarkdown) {
+        appState.lastProvocationDoc = {
+            markdown: provocationMarkdown,
+            docxBuffer: null,
+            fileName: `${sanitized}_Origination_Engine.docx`
+        };
+        appState.provokeVersions = [{
+            label: 'Original Provoke',
+            markdown: provocationMarkdown,
+            docxBuffer: null,
+            fileName: `${sanitized}_Origination_Engine.docx`,
+            role: null,
+            timestamp: Date.now()
+        }];
+    } else {
+        appState.lastProvocationDoc = null;
+        appState.provokeVersions = [];
+    }
+
+    if (reviewMarkdown) {
+        appState.lastReviewDoc = {
+            markdown: reviewMarkdown,
+            docxBuffer: null,
+            fileName: `${sanitized}_Review.docx`
+        };
+    } else {
+        appState.lastReviewDoc = null;
+    }
+
+    // Restore per-role reviews
+    appState.reviewsByRole = {};
+    if (reviewsByRole && typeof reviewsByRole === 'object') {
+        for (const [role, md] of Object.entries(reviewsByRole)) {
+            if (!md) continue;
+            appState.reviewsByRole[role] = {
+                markdown: md,
+                docxBuffer: null,
+                fileName: `${sanitized}_${role.toUpperCase()}_Review.docx`,
+                role,
+                label: `${role.toUpperCase()} Review`,
+                timestamp: Date.now()
+            };
+        }
+        // Set lastReviewDoc to the most recent if we have any
+        const roles = Object.keys(appState.reviewsByRole);
+        if (roles.length > 0) {
+            const lastRole = roles[roles.length - 1];
+            appState.lastReviewDoc = appState.reviewsByRole[lastRole];
+        }
+    }
+
+    // Restore provoke rewrite versions
+    if (provokeRewriteVersions && Array.isArray(provokeRewriteVersions)) {
+        for (const v of provokeRewriteVersions) {
+            if (!v.markdown) continue;
+            appState.provokeVersions.push({
+                label: v.label || `Provoke v${appState.provokeVersions.length + 1}`,
+                markdown: v.markdown,
+                docxBuffer: null,
+                fileName: v.fileName || `${sanitized}_Origination_Engine_v${appState.provokeVersions.length + 1}.docx`,
+                role: v.role || null,
+                timestamp: Date.now()
+            });
+        }
+    }
+
+    console.log('[Session] Restored doc state from history for', clientName);
+    return { success: true };
 });
 
 // Persist generated packs history
@@ -8683,7 +9715,7 @@ ${sourcePack.company_profile.strategic_priorities.map(p => `- ${p}`).join('\n')}
 ${sourcePack.alphasense_consensus.themes.map(t => `- **${t.theme}** (Confidence: ${t.confidence}%): ${t.summary}`).join('\n')}
 
 ### Key Quotes
-${sourcePack.alphasense_consensus.key_quotes.map(q => `> "${q.quote}" — *${q.source}*`).join('\n\n')}
+${sourcePack.alphasense_consensus.key_quotes.map(q => `> "${q.quote}" ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â *${q.source}*`).join('\n\n')}
 
 ### Sentiment Overview
 - Overall: ${sourcePack.alphasense_consensus.sentiment.overall}
@@ -8756,7 +9788,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
     // Save any pending data before quitting
-    saveLearningsImmediate();
     credentialManager.flushAppDataImmediate();
     
     if (process.platform !== 'darwin') {

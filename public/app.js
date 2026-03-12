@@ -19,9 +19,40 @@ const state = {
     isGenerating: false,
     generationStartTime: null,
     isElectron: typeof window.electronAPI !== 'undefined',
+    // Workflow navigation
+    highestStepReached: 1,    // tracks highest step user has reached (enables back-nav),
     // Step 2: Client Point of Contact file
     pocFile: null,
-    // Step 4: Additional documents
+    // Step 3: Supporting Documents
+    supportingDocFiles: [],   // mirrored from backend: {id, fileName, size, ext, status, chunkCount?, error?}
+    supportingDocsCorpus: null, // lightweight summary from backend
+    // Step 4: Qualification Criteria
+    qualificationGenerating: false,
+    qualificationMarkdown: null,
+    qualDefaultPrompt: null,
+    qualGenerationStartTime: null,
+    // Step 5: Value Case
+    valueCaseGenerating: false,
+    valueCaseMarkdown: null,
+    valueCaseDefaultPrompt: null,
+    valueCaseGenerationStartTime: null,
+    valueCaseAssumptions: null,
+    // Step 6: Provoke — Origination Engine
+    provocationGenerating: false,
+    provocationMarkdown: null,
+    provokeDefaultPrompt: null,
+    provokeGenerationStartTime: null,
+    provokeVersions: [],          // Array of { markdown, fileName, label, role, timestamp }
+    // Step 7: Review — Consistency & Accuracy Check
+    reviewGenerating: false,
+    reviewMarkdown: null,
+    reviewGenerationStartTime: null,
+    reviewSelectedRole: null,
+    rewritePending: false,        // Flag: confirmation dialog is for rewrite (not review)
+    pendingConfirmAction: null,   // Function: action to execute when confirmation Yes is clicked
+    reviewsByRole: {},            // { ceo: markdown, cfo: markdown, ... } — tracks which roles have reviews
+    csuitePrompts: {},
+    // Step 4 (old): Additional documents
     additionalFiles: [],
     // Step 4: Placeholder sections that need replacement
     placeholderSections: [],
@@ -30,12 +61,12 @@ const state = {
     failedSources: [],
     pendingGenerationResult: null,
     pendingGenerationContext: null,
-    // Step 5: Narrative Builder generated prompt
+    // Step 6: Narrative Builder generated prompt
     narrativeBuilderPrompt: null,
     // Narrative storage
     clientNarratives: [],
     currentDisplayedNarrative: null,
-    // Step 6: Researched contacts (current and exited)
+    // Step 7: Researched contacts (current and exited)
     researchedContacts: {
         current: [],
         exited: []
@@ -91,13 +122,101 @@ const elements = {
     selectedClientMeta: document.getElementById('selectedClientMeta'),
     changeClientBtn: document.getElementById('changeClientBtn'),
     backToStep1: document.getElementById('backToStep1'),
+    proceedToStep3: document.getElementById('proceedToStep3'),
     proceedToGenerate: document.getElementById('proceedToGenerate'),
+    
+    // Step 3: Supporting Documents
+    docUploadZone: document.getElementById('docUploadZone'),
+    browseDocsBtn: document.getElementById('browseDocsBtn'),
+    docFileList: document.getElementById('docFileList'),
+    docProcessBar: document.getElementById('docProcessBar'),
+    docProcessLabel: document.getElementById('docProcessLabel'),
+    docProcessCount: document.getElementById('docProcessCount'),
+    docProgressFill: document.getElementById('docProgressFill'),
+    docCorpusSummary: document.getElementById('docCorpusSummary'),
+    corpusDocCount: document.getElementById('corpusDocCount'),
+    corpusChunkCount: document.getElementById('corpusChunkCount'),
+    corpusSuccessCount: document.getElementById('corpusSuccessCount'),
+    corpusErrorStat: document.getElementById('corpusErrorStat'),
+    corpusErrorCount: document.getElementById('corpusErrorCount'),
+    processDocsBtn: document.getElementById('processDocsBtn'),
+    backToStep2: document.getElementById('backToStep2'),
+    proceedToStep4: document.getElementById('proceedToStep4'),
     progressStages: document.getElementById('progressStages'),
     progressMessage: document.getElementById('progressMessage'),
     elapsedTime: document.getElementById('elapsedTime'),
     reviewContainer: document.getElementById('reviewContainer'),
     
-    // Add Documents (Step 4)
+    // Step 4: Qualification Criteria
+    qualPromptEditor: document.getElementById('qualPromptEditor'),
+    resetQualPromptBtn: document.getElementById('resetQualPromptBtn'),
+    generateQualBtn: document.getElementById('generateQualBtn'),
+    qualProgress: document.getElementById('qualProgress'),
+    qualProgressLabel: document.getElementById('qualProgressLabel'),
+    qualProgressElapsed: document.getElementById('qualProgressElapsed'),
+    qualProgressFill: document.getElementById('qualProgressFill'),
+    qualPreview: document.getElementById('qualPreview'),
+    qualPreviewContent: document.getElementById('qualPreviewContent'),
+    downloadQualDocBtn: document.getElementById('downloadQualDocBtn'),
+    regenerateQualBtn: document.getElementById('regenerateQualBtn'),
+    backToStep3: document.getElementById('backToStep3'),
+    proceedToStep5: document.getElementById('proceedToStep5'),
+    
+    // Step 5: Value Case
+    valueCasePromptEditor: document.getElementById('valueCasePromptEditor'),
+    resetValueCasePromptBtn: document.getElementById('resetValueCasePromptBtn'),
+    generateValueCaseBtn: document.getElementById('generateValueCaseBtn'),
+    valueCaseProgress: document.getElementById('valueCaseProgress'),
+    valueCaseProgressLabel: document.getElementById('valueCaseProgressLabel'),
+    valueCaseProgressElapsed: document.getElementById('valueCaseProgressElapsed'),
+    valueCaseProgressFill: document.getElementById('valueCaseProgressFill'),
+    valueCasePreview: document.getElementById('valueCasePreview'),
+    valueCasePreviewContent: document.getElementById('valueCasePreviewContent'),
+    downloadValueCaseDocBtn: document.getElementById('downloadValueCaseDocBtn'),
+    regenerateValueCaseBtn: document.getElementById('regenerateValueCaseBtn'),
+    assumptionsTableContainer: document.getElementById('assumptionsTableContainer'),
+    assumptionsTableBody: document.getElementById('assumptionsTableBody'),
+    assumptionsLoading: document.getElementById('assumptionsLoading'),
+    backToStep4VC: document.getElementById('backToStep4'),
+    proceedToStep6: document.getElementById('proceedToStep6'),
+    
+    // Step 6: Provoke — Origination Engine
+    provokePromptEditor: document.getElementById('provokePromptEditor'),
+    resetProvokePromptBtn: document.getElementById('resetProvokePromptBtn'),
+    generateProvokeBtn: document.getElementById('generateProvokeBtn'),
+    provokeProgress: document.getElementById('provokeProgress'),
+    provokeProgressLabel: document.getElementById('provokeProgressLabel'),
+    provokeProgressElapsed: document.getElementById('provokeProgressElapsed'),
+    provokeProgressFill: document.getElementById('provokeProgressFill'),
+    provokePreview: document.getElementById('provokePreview'),
+    provokePreviewContent: document.getElementById('provokePreviewContent'),
+    downloadProvokeDocBtn: document.getElementById('downloadProvokeDocBtn'),
+    regenerateProvokeBtn: document.getElementById('regenerateProvokeBtn'),
+    backToStep5: document.getElementById('backToStep5'),
+    proceedToStep7: document.getElementById('proceedToStep7'),
+    
+    // Step 7: Review — Consistency & Accuracy Check
+    reviewAssetsGrid: document.getElementById('reviewAssetsGrid'),
+    reviewProgress: document.getElementById('reviewProgress'),
+    reviewProgressLabel: document.getElementById('reviewProgressLabel'),
+    reviewProgressElapsed: document.getElementById('reviewProgressElapsed'),
+    reviewProgressFill: document.getElementById('reviewProgressFill'),
+    reviewChecklistsContainer: document.getElementById('reviewChecklistsContainer'),
+    backToStep6: document.getElementById('backToStep6'),
+    csuiteTilesGrid: document.getElementById('csuiteTilesGrid'),
+    csuitePromptEditor: document.getElementById('csuitePromptEditor'),
+    csuitePromptEditorTitle: document.getElementById('csuitePromptEditorTitle'),
+    csuitePromptTextarea: document.getElementById('csuitePromptTextarea'),
+    saveCsuitePromptBtn: document.getElementById('saveCsuitePromptBtn'),
+    closeCsuitePromptBtn: document.getElementById('closeCsuitePromptBtn'),
+    csuiteConfirmOverlay: document.getElementById('csuiteConfirmOverlay'),
+    csuiteConfirmIcon: document.getElementById('csuiteConfirmIcon'),
+    csuiteConfirmTitle: document.getElementById('csuiteConfirmTitle'),
+    csuiteConfirmDesc: document.getElementById('csuiteConfirmDesc'),
+    csuiteConfirmYes: document.getElementById('csuiteConfirmYes'),
+    csuiteConfirmNo: document.getElementById('csuiteConfirmNo'),
+    
+    // Add Documents (utility)
     documentDropZone: document.getElementById('documentDropZone'),
     browseFilesBtn: document.getElementById('browseFilesBtn'),
     addedFilesSection: document.getElementById('addedFilesSection'),
@@ -140,12 +259,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const savedPacks = await window.electronAPI.appData.loadGeneratedPacks();
             if (savedPacks && Array.isArray(savedPacks)) {
-                // Migrate old entries to new client-session model
-                const migrated = migrateHistoryEntries(savedPacks);
-                state.generatedPacks = migrated;
-                console.log(`[History] Loaded ${migrated.length} history entries`);
-                // Persist migrated data
-                window.electronAPI.appData.saveGeneratedPacks(migrated);
+                // Clear legacy entries that lack currentStep (old format)
+                state.generatedPacks = savedPacks.filter(p => p.type === 'client-session' && typeof p.currentStep === 'number');
+                console.log(`[History] Loaded ${state.generatedPacks.length} session entries`);
+                // Persist cleaned data
+                window.electronAPI.appData.saveGeneratedPacks(state.generatedPacks);
             }
         } catch (e) {
             console.warn('Could not load saved packs:', e);
@@ -157,28 +275,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Setup event listeners
     setupEventListeners();
+
+    // Step indicator click-to-navigate — completed/visited steps are clickable
+    document.querySelectorAll('.step-indicator .step').forEach(stepEl => {
+        stepEl.addEventListener('click', () => {
+            const stepNum = parseInt(stepEl.dataset.step);
+            if (!stepNum) return;
+            // Only allow navigation to steps the user has already reached
+            if (stepNum <= state.highestStepReached) {
+                goToStep(stepNum);
+            }
+        });
+    });
     
     // Setup POC Upload listeners (Step 2)
     setupPocUploadListeners();
     
-    // Setup Add Documents step listeners
-    setupAddDocumentsListeners();
-    
+    // Setup Supporting Docs upload (Step 3)
+    setupSupportingDocsListeners();
+    // Setup Qualification Criteria (Step 4)
+    setupQualificationListeners();
+    // Setup Value Case (Step 5)
+    setupValueCaseListeners();
+    // Setup Provocation / Origination Engine (Step 6)
+    setupProvocationListeners();
+    // Setup Review — Consistency & Accuracy Check (Step 7)
+    setupReviewListeners();
     // Setup Narrative step listeners
-    setupNarrativeListeners();
-    
     // Setup Video Generation
-    setupVideoGeneration();
-    
     // Setup Narration Generation
-    setupNarrationGeneration();
-    
-    // Setup Narrative Audio Generation (Step 6)
-    setupNarrativeAudioGeneration();
-    
-    // Setup Video Narrative Generation (Step 6)
-    setupVideoNarrativeGeneration();
-    
+    // Setup Narrative Audio Generation (Step 7)
+    // Setup Video Narrative Generation (Step 7)
     // Setup Template Management (Admin)
     setupTemplateManagement();
     
@@ -320,8 +447,8 @@ async function showMainApp() {
         try {
             const savedPacks = await window.electronAPI.appData.loadGeneratedPacks();
             if (savedPacks && Array.isArray(savedPacks)) {
-                state.generatedPacks = migrateHistoryEntries(savedPacks);
-                console.log(`[History] Loaded ${state.generatedPacks.length} entries on re-login`);
+                state.generatedPacks = savedPacks.filter(p => p.type === 'client-session' && typeof p.currentStep === 'number');
+                console.log(`[History] Loaded ${state.generatedPacks.length} session entries on re-login`);
             }
         } catch (e) {
             console.warn('Could not load saved packs:', e);
@@ -383,7 +510,7 @@ function switchView(viewName) {
     });
     
     // Update views
-    const views = ['dashboard', 'generate', 'video', 'history', 'admin'];
+    const views = ['dashboard', 'generate', 'history', 'admin'];
     views.forEach(view => {
         const el = document.getElementById(`${view}View`);
         if (el) {
@@ -568,7 +695,7 @@ function selectClient(clientId) {
         resetPocUploadUI();
         
         // Save to history immediately on client selection
-        saveClientHistory('client-created');
+        saveSessionProgress(2);
         
         // Move to step 2
         goToStep(2);
@@ -702,14 +829,23 @@ async function createClientWithAI() {
 // Step Navigation
 // ============================================
 function goToStep(stepNumber) {
+    // Track high-water mark (highest step the user has reached)
+    if (stepNumber > state.highestStepReached) {
+        state.highestStepReached = stepNumber;
+    }
+
     // Update step indicators
     document.querySelectorAll('.step').forEach((step, idx) => {
         const stepNum = idx + 1;
-        step.classList.remove('active', 'completed');
+        step.classList.remove('active', 'completed', 'clickable');
         if (stepNum < stepNumber) {
             step.classList.add('completed');
         } else if (stepNum === stepNumber) {
             step.classList.add('active');
+        }
+        // Mark all steps up to highestStepReached as clickable (except current)
+        if (stepNum <= state.highestStepReached && stepNum !== stepNumber) {
+            step.classList.add('clickable');
         }
     });
     
@@ -722,14 +858,33 @@ function goToStep(stepNumber) {
     if (stepNumber === 2 && state.selectedClient) {
         elements.selectedClientName.textContent = state.selectedClient.name;
         elements.selectedClientMeta.textContent = 
-            `${state.selectedClient.commonName ? 'Known as: ' + state.selectedClient.commonName + ' • ' : ''}${state.selectedClient.industry} • ${state.selectedClient.geography}`;
+            `${state.selectedClient.commonName ? 'Known as: ' + state.selectedClient.commonName + ' â€¢ ' : ''}${state.selectedClient.industry} â€¢ ${state.selectedClient.geography}`;
     }
     
-    // Trigger C-suite web research when entering step 3 (generation starts)
-    // This runs in background so results are ready by the time user reaches Step 6
-    if (stepNumber === 3 && state.selectedClient) {
-        // Pass full client context and POC file (if available) for contact extraction
-        researchClientContacts(state.selectedClient, state.pocFile);
+    // Load qualification prompt when entering Step 4
+    if (stepNumber === 4) {
+        loadQualificationPrompt();
+    }
+    
+    // Load value case prompt when entering Step 5
+    if (stepNumber === 5) {
+        loadValueCasePrompt();
+    }
+    
+    // Load provocation prompt when entering Step 6
+    if (stepNumber === 6) {
+        loadProvocationPrompt();
+    }
+    
+    // Load review when entering Step 7
+    if (stepNumber === 7) {
+        renderReviewAssetSummary();
+        loadCsuitePrompts();
+    }
+
+    // Save progress to history on every step transition (step 2+)
+    if (stepNumber >= 2 && state.selectedClient) {
+        saveSessionProgress(stepNumber);
     }
 }
 
@@ -913,6 +1068,22 @@ function resetWizard() {
     state.pendingGenerationResult = null;
     state.pendingGenerationContext = null;
     state.generationStartTime = null;
+    state.highestStepReached = 1; // reset navigation high-water mark
+    
+    // Reset supporting docs (Step 3)
+    resetSupportingDocsUI();
+    
+    // Reset qualification criteria (Step 4)
+    resetQualificationUI();
+    
+    // Reset value case (Step 5)
+    resetValueCaseUI();
+    
+    // Reset provocation / Origination Engine (Step 6)
+    resetProvocationUI();
+    
+    // Reset review (Step 7)
+    resetReviewUI();
     
     // Reset UI elements
     const clientSearch = document.getElementById('clientSearch');
@@ -933,7 +1104,7 @@ function resetWizard() {
     if (pocEmpty) pocEmpty.classList.remove('hidden');
     if (pocFileInfo) pocFileInfo.classList.add('hidden');
     
-    // Reset contact grids (now in Step 6)
+    // Reset contact grids (now in Step 7)
     const currentContactsGrid = document.getElementById('currentContactsGrid');
     const exitedContactsGrid = document.getElementById('exitedContactsGrid');
     resetContactGrid(currentContactsGrid, 'Searching...');
@@ -977,549 +1148,6 @@ function resetWizard() {
 }
 
 // ============================================
-// Source Pack Generation
-// ============================================
-async function startGeneration() {
-    if (!state.selectedClient) {
-        showToast('Please select a client first', 'error');
-        return;
-    }
-    
-    state.isGenerating = true;
-    state.generationStartTime = Date.now();
-    
-    // Go to step 3
-    goToStep(3);
-    
-    // Reset progress stages
-    document.querySelectorAll('.progress-stage .stage-indicator').forEach(indicator => {
-        indicator.className = 'stage-indicator pending';
-    });
-    document.querySelectorAll('.progress-stage .stage-status').forEach(status => {
-        status.textContent = '';
-    });
-    
-    // Start timer
-    const timerInterval = setInterval(() => {
-        if (!state.isGenerating) {
-            clearInterval(timerInterval);
-            return;
-        }
-        const elapsed = Math.floor((Date.now() - state.generationStartTime) / 1000);
-        const minutes = Math.floor(elapsed / 60);
-        const seconds = elapsed % 60;
-        elements.elapsedTime.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    }, 1000);
-    
-    // Listen for progress updates from main process
-    if (state.isElectron && window.electronAPI.onGenerationProgress) {
-        window.electronAPI.onGenerationProgress((data) => {
-            elements.progressMessage.textContent = data.message;
-            // Update progress bar visually
-            const progressFill = document.querySelector('.progress-bar-fill');
-            if (progressFill) {
-                progressFill.style.width = `${data.percent}%`;
-            }
-            // Update stage based on type with progress
-            if (data.stage === 'alphasense') {
-                // Check if message indicates real API usage or placeholder
-                const isPlaceholder = data.message && data.message.includes('PLACEHOLDER');
-                updateStageStatus('alphasense', isPlaceholder ? 'placeholder' : 'in-progress', data.stageProgress || 50);
-            } else if (data.stage === 'arc') {
-                updateStageStatus('arc', 'placeholder', 50);
-            } else if (data.stage === 'deepresearch') {
-                updateStageStatus('internet', 'in-progress', data.stageProgress || 0);
-            } else if (data.stage === 'normalize') {
-                updateStageStatus('normalize', 'in-progress', data.stageProgress || 0);
-            } else if (data.stage === 'additional') {
-                updateStageStatus('normalize', 'complete', 100);
-                updateStageStatus('complete', 'in-progress', data.stageProgress || 0);
-            } else if (data.stage === 'complete') {
-                updateStageStatus('complete', 'complete', 100);
-            }
-        });
-    }
-    
-    try {
-        // Get form data
-        const formData = new FormData(elements.contextForm);
-        const context = {
-            industry: formData.get('industry') || state.selectedClient.industry,
-            subSector: state.selectedClient.sector,
-            geography: formData.get('geography') || state.selectedClient.geography,
-            timeHorizon: parseInt(formData.get('timeHorizon')) || 90,
-            outputIntent: formData.get('outputIntent') || 'CEO Narrative',
-            fastGenerate: document.getElementById('fastGenerateCheckbox')?.checked || false
-        };
-        
-        // Log fast generate mode
-        if (context.fastGenerate) {
-            console.log('[Generation] Fast Generate mode enabled - using cheaper models');
-        }
-        
-        // Show initial stages with progress animation
-        updateStageStatus('auth', 'in-progress', 0);
-        elements.progressMessage.textContent = 'Authenticating to data sources...';
-        await sleep(200);
-        updateStageProgress('auth', 50);
-        await sleep(300);
-        updateStageStatus('auth', 'complete', 100);
-        
-        // AlphaSense - Check if configured (progress updates will show actual status)
-        updateStageStatus('alphasense', 'in-progress', 0);
-        elements.progressMessage.textContent = 'Initialising AlphaSense...';
-        await sleep(150);
-        
-        updateStageStatus('arc', 'in-progress', 0);
-        elements.progressMessage.textContent = 'ARC Database [PLACEHOLDER - API not configured]';
-        await sleep(150);
-        updateStageStatus('arc', 'placeholder', 50);
-        
-        // Make IPC call to generate ZIP source pack
-        let result;
-        
-        if (state.isElectron) {
-            updateStageStatus('internet', 'in-progress', 0);
-            elements.progressMessage.textContent = 'Compiling deep research report...';
-            
-            result = await window.electronAPI.sourcePack.generateZip(
-                state.selectedClient.id,
-                context
-            );
-        } else {
-            // Fallback simulation
-            result = await simulateSourcePackGeneration(context);
-        }
-        
-        if (result.success) {
-            updateStageStatus('internet', 'complete', 100);
-            updateStageStatus('normalize', 'complete', 100);
-            updateStageStatus('complete', 'complete', 100);
-            
-            // Store pending generation info
-            state.pendingGenerationResult = result;
-            state.pendingGenerationContext = context;
-            
-            // Store placeholder sections for manual replacement
-            state.placeholderSections = result.placeholderSections || [];
-            
-            // Store source results for Step 4 status display
-            state.sourceResults = result.sourceResults || {};
-            state.failedSources = result.failedSources || [];
-            
-            // Add POC file to source pack if one was uploaded in Step 2
-            if (state.pocFile && state.isElectron) {
-                try {
-                    const pocResult = await window.electronAPI.sourcePack.addPocFile({
-                        name: state.pocFile.name,
-                        content: state.pocFile.content
-                    });
-                    if (pocResult.success) {
-                        console.log('[SourcePack] POC file added:', pocResult.fileName);
-                    } else {
-                        console.error('[SourcePack] Failed to add POC file:', pocResult.error);
-                    }
-                } catch (pocError) {
-                    console.error('[SourcePack] Error adding POC file:', pocError);
-                }
-            }
-            
-            // Move to Step 4 (Add Documents)
-            goToStep(4);
-            resetAddDocumentsStep();
-            
-            // Save source pack progress to history
-            saveClientHistory('source-pack');
-            
-            showToast('Research complete! Add any additional documents or continue.', 'success');
-        } else if (result.canceled) {
-            showToast('Generation cancelled', 'info');
-            goToStep(2);
-        } else {
-            throw new Error(result.error || 'Generation failed');
-        }
-        
-    } catch (error) {
-        console.error('Generation failed:', error);
-        showToast('Generation failed: ' + error.message, 'error');
-        goToStep(2);
-    } finally {
-        state.isGenerating = false;
-        clearInterval(timerInterval);
-    }
-}
-
-// ============================================
-// Step 4: Add Documents
-// ============================================
-function resetAddDocumentsStep() {
-    state.additionalFiles = [];
-    updateAddedFilesList();
-    updateProceedButtonText();
-    
-    // Reset drop zone state
-    if (elements.documentDropZone) {
-        elements.documentDropZone.classList.remove('drag-over');
-    }
-    
-    // Render source status cards
-    renderSourceStatusGrid();
-    
-    // Render placeholder sections that need replacement
-    renderPlaceholderItems();
-}
-
-// Render the source status grid showing which sources succeeded/failed
-function renderSourceStatusGrid() {
-    const sourceStatusGrid = document.getElementById('sourceStatusGrid');
-    if (!sourceStatusGrid) return;
-    
-    // Get source results from state (set during generation)
-    const sourceResults = state.sourceResults || {};
-    const hasPoc = !!state.pocFile;
-    
-    // Define the 4 expected sources
-    const sources = [
-        { 
-            id: 'chatgpt', 
-            name: 'ChatGPT Research', 
-            icon: 'sparkles',
-            result: sourceResults.chatgpt 
-        },
-        { 
-            id: 'arc', 
-            name: 'ARC Assets', 
-            icon: 'cube',
-            result: sourceResults.arc 
-        },
-        { 
-            id: 'alphasense', 
-            name: 'AlphaSense Market', 
-            icon: 'chart',
-            result: sourceResults.alphasense 
-        },
-        { 
-            id: 'poc', 
-            name: 'Client PoC Document', 
-            icon: 'user',
-            result: { success: hasPoc, error: hasPoc ? null : 'Not uploaded' }
-        }
-    ];
-    
-    sourceStatusGrid.innerHTML = sources.map(source => {
-        const isSuccess = source.result?.success;
-        const statusClass = isSuccess ? 'success' : 'warning';
-        const statusIcon = isSuccess ? 
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>' :
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v2m0 4h.01"></path></svg>';
-        const statusText = isSuccess ? 'Generated' : (source.result?.error || 'Failed');
-        
-        // Source-specific icons
-        const icons = {
-            sparkles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/></svg>',
-            cube: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>',
-            chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18M7 12v5M12 8v9M17 14v3"/></svg>',
-            user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>'
-        };
-        
-        return `
-            <div class="source-status-card ${statusClass}">
-                <div class="source-status-icon">
-                    ${icons[source.icon]}
-                </div>
-                <div class="source-status-info">
-                    <span class="source-status-name">${source.name}</span>
-                    <span class="source-status-result ${statusClass}">
-                        ${statusIcon}
-                        ${statusText}
-                    </span>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-function renderPlaceholderItems() {
-    const placeholderSection = document.getElementById('placeholderReplacementSection');
-    const placeholderList = document.getElementById('placeholderItemsList');
-    
-    if (!placeholderSection || !placeholderList) return;
-    
-    // Hide section if no placeholders
-    if (!state.placeholderSections || state.placeholderSections.length === 0) {
-        placeholderSection.classList.add('hidden');
-        return;
-    }
-    
-    // Show section and populate items
-    placeholderSection.classList.remove('hidden');
-    placeholderList.innerHTML = '';
-    
-    state.placeholderSections.forEach(placeholder => {
-        const item = document.createElement('div');
-        item.className = 'placeholder-item';
-        item.dataset.placeholderId = placeholder.id;
-        item.dataset.fileName = placeholder.fileName;
-        
-        // Get error reason if available
-        const errorReason = placeholder.error || 'Not generated';
-        
-        item.innerHTML = `
-            <div class="placeholder-info">
-                <div class="placeholder-name">${placeholder.name}</div>
-                <div class="placeholder-error">${errorReason}</div>
-                <div class="placeholder-filename">${placeholder.fileName}</div>
-            </div>
-            <div class="placeholder-actions">
-                <input type="file" class="placeholder-file-input" id="placeholder-file-${placeholder.id}" style="display: none;">
-                <button class="placeholder-upload-btn" data-placeholder-id="${placeholder.id}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                    Upload Replacement
-                </button>
-            </div>
-        `;
-        
-        placeholderList.appendChild(item);
-        
-        // Add event listeners
-        const fileInput = item.querySelector('.placeholder-file-input');
-        const uploadBtn = item.querySelector('.placeholder-upload-btn');
-        
-        uploadBtn.addEventListener('click', () => {
-            fileInput.click();
-        });
-        
-        fileInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            try {
-                // Read file content as ArrayBuffer for binary files
-                const content = await readFileAsArrayBuffer(file);
-                
-                // Replace placeholder via IPC - pass the ORIGINAL filename for proper extraction
-                const result = await window.electronAPI.sourcePack.replacePlaceholder(
-                    placeholder.id,
-                    file.name,  // Use actual uploaded filename for proper extraction
-                    content
-                );
-                
-                if (result.success) {
-                    // Update UI to show replaced state
-                    item.classList.add('replaced');
-                    item.querySelector('.placeholder-actions').innerHTML = `
-                        <div class="placeholder-replaced-status">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                            Replaced with: ${file.name}
-                        </div>
-                    `;
-                    
-                    // Update the placeholder in state to mark as replaced
-                    const idx = state.placeholderSections.findIndex(p => p.id === placeholder.id);
-                    if (idx !== -1) {
-                        state.placeholderSections[idx].replaced = true;
-                        state.placeholderSections[idx].replacedWith = file.name;
-                    }
-                    
-                    showToast(`Replaced ${placeholder.source} with ${file.name}`, 'success');
-                } else {
-                    showToast(`Failed to replace: ${result.error}`, 'error');
-                }
-            } catch (error) {
-                console.error('Error replacing placeholder:', error);
-                showToast(`Error: ${error.message}`, 'error');
-            }
-        });
-    });
-}
-
-// Helper function to read file as text
-function readFileAsText(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = (e) => reject(new Error('Failed to read file'));
-        reader.readAsText(file);
-    });
-}
-
-function readFileAsArrayBuffer(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = (e) => reject(new Error('Failed to read file'));
-        reader.readAsArrayBuffer(file);
-    });
-}
-
-function updateAddedFilesList() {
-    if (!elements.addedFilesList || !elements.addedFilesSection || !elements.addedFileCount) return;
-    
-    if (state.additionalFiles.length === 0) {
-        elements.addedFilesSection.classList.add('hidden');
-        return;
-    }
-    
-    elements.addedFilesSection.classList.remove('hidden');
-    elements.addedFileCount.textContent = `${state.additionalFiles.length} file${state.additionalFiles.length !== 1 ? 's' : ''}`;
-    
-    elements.addedFilesList.innerHTML = state.additionalFiles.map((file, index) => `
-        <div class="added-file-item" data-index="${index}">
-            <div class="added-file-info">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                </svg>
-                <span class="added-file-name">${file.name}</span>
-                <span class="added-file-size">${formatFileSize(file.size)}</span>
-            </div>
-            <div class="added-file-actions">
-                <button type="button" class="replace-file-btn" data-index="${index}" title="Replace file">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                </button>
-                <button type="button" class="remove-file-btn" data-index="${index}" title="Remove file">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
-        </div>
-    `).join('');
-    
-    // Add remove handlers
-    elements.addedFilesList.querySelectorAll('.remove-file-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const index = parseInt(e.currentTarget.dataset.index);
-            state.additionalFiles.splice(index, 1);
-            updateAddedFilesList();
-            updateProceedButtonText();
-            showToast('File removed', 'info');
-        });
-    });
-    
-    // Add replace handlers
-    elements.addedFilesList.querySelectorAll('.replace-file-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const index = parseInt(e.currentTarget.dataset.index);
-            const oldFileName = state.additionalFiles[index]?.name;
-            
-            try {
-                const result = await window.electronAPI.sourcePack.addFiles();
-                
-                if (result.success && result.addedFiles && result.addedFiles.length > 0) {
-                    // Replace the file at this index with the first selected file
-                    state.additionalFiles[index] = result.addedFiles[0];
-                    
-                    // If user selected multiple files, add the rest
-                    if (result.addedFiles.length > 1) {
-                        for (let i = 1; i < result.addedFiles.length; i++) {
-                            state.additionalFiles.push(result.addedFiles[i]);
-                        }
-                    }
-                    
-                    updateAddedFilesList();
-                    updateProceedButtonText();
-                    showToast(`Replaced "${oldFileName}" with "${result.addedFiles[0].name}"`, 'success');
-                }
-            } catch (error) {
-                console.error('Error replacing file:', error);
-                showToast('Error replacing file', 'error');
-            }
-        });
-    });
-}
-
-function updateProceedButtonText() {
-    if (!elements.proceedWithDocsText) return;
-    
-    if (state.additionalFiles.length > 0) {
-        elements.proceedWithDocsText.textContent = `Continue with ${state.additionalFiles.length} Selected Document${state.additionalFiles.length !== 1 ? 's' : ''}`;
-    } else {
-        elements.proceedWithDocsText.textContent = 'Continue Without Additional Documents';
-    }
-}
-
-function formatFileSize(bytes) {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-}
-
-async function browseAndAddFiles() {
-    if (!state.isElectron) {
-        showToast('File selection requires Electron', 'warning');
-        return;
-    }
-    
-    try {
-        const result = await window.electronAPI.sourcePack.addFiles();
-        
-        if (result.success && result.addedFiles) {
-            // Add to local state
-            result.addedFiles.forEach(file => {
-                state.additionalFiles.push(file);
-            });
-            
-            updateAddedFilesList();
-            updateProceedButtonText();
-            
-            showToast(`Added ${result.addedFiles.length} file${result.addedFiles.length !== 1 ? 's' : ''}`, 'success');
-        } else if (result.canceled) {
-            // User cancelled, do nothing
-        } else if (result.error) {
-            showToast('Failed to add files: ' + result.error, 'error');
-        }
-    } catch (error) {
-        console.error('Error adding files:', error);
-        showToast('Error adding files: ' + error.message, 'error');
-    }
-}
-
-async function finalizeSourcePack() {
-    if (!state.isElectron) {
-        showToast('Finalization requires Electron', 'warning');
-        return;
-    }
-    
-    try {
-        showToast('Creating ZIP file...', 'info');
-        
-        const result = await window.electronAPI.sourcePack.finalizeZip();
-        
-        if (result.success) {
-            // Store result info for narrative generation
-            state.sourcePackResult = result;
-            
-            // Also store the source pack content for later use
-            state.currentSourcePack = result.sourcePack;
-            
-            // Update the client's history entry with the exported source pack
-            saveClientHistory('source-pack');
-            
-            // Add to activity
-            const docText = result.additionalFilesCount > 0 
-                ? `${result.documentCount} documents including ${result.additionalFilesCount} additional`
-                : `${result.documentCount} documents`;
-            addActivity(`Exported Source Pack ZIP for ${state.selectedClient.name} (${docText})`, 'success');
-            updateDashboardStats();
-            updateHistoryView();
-            
-            // Clear additional files from state (they're now in the ZIP)
-            state.additionalFiles = [];
-            
-            showToast('Source Pack exported to: ' + result.filePath, 'success');
-        } else if (result.canceled) {
-            showToast('Export cancelled', 'info');
-        } else {
-            throw new Error(result.error || 'Export failed');
-        }
-    } catch (error) {
-        console.error('Error exporting source pack:', error);
-        showToast('Error creating ZIP: ' + error.message, 'error');
-    }
-}
-
 // Set up POC Upload listeners (Step 2)
 function setupPocUploadListeners() {
     const browsePocBtn = document.getElementById('browsePocBtn');
@@ -1570,10 +1198,13 @@ function setupPocUploadListeners() {
                     // Update UI - show original name with rename indicator
                     if (pocEmpty) pocEmpty.classList.add('hidden');
                     if (pocFileInfo) pocFileInfo.classList.remove('hidden');
-                    if (pocFileName) pocFileName.textContent = `${originalFileName} → ${renamedFileName}`;
+                    if (pocFileName) pocFileName.textContent = `${originalFileName} â†’ ${renamedFileName}`;
                     if (pocFileSize) pocFileSize.textContent = formatFileSize(state.pocFile.size);
                     
                     showToast('POC file added', 'success');
+                    
+                    // Save POC to history
+                    saveSessionProgress(2);
                 }
             } catch (error) {
                 console.error('Error adding POC file:', error);
@@ -1620,1834 +1251,1715 @@ function resetPocUploadUI() {
     if (pocFileSize) pocFileSize.textContent = '';
 }
 
-// Set up Step 4 event listeners
-function setupAddDocumentsListeners() {
-    // Browse files button
-    if (elements.browseFilesBtn) {
-        elements.browseFilesBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent drop zone click from also firing
-            browseAndAddFiles();
+// ============================================
+// Step 3: Supporting Document Upload & Processing
+// ============================================
+
+function setupSupportingDocsListeners() {
+    const zone = elements.docUploadZone;
+    const browseBtn = elements.browseDocsBtn;
+
+    // Browse button
+    if (browseBtn) {
+        browseBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await uploadSupportingDocs();
         });
     }
-    
-    // Drop zone click (but not on the button)
-    if (elements.documentDropZone) {
-        elements.documentDropZone.addEventListener('click', (e) => {
-            // Only trigger if clicking the drop zone itself, not the button
-            if (e.target.closest('#browseFilesBtn')) return;
-            if (e.target === elements.documentDropZone || e.target.closest('.drop-zone-content')) {
-                browseAndAddFiles();
-            }
+
+    // Click on drop zone
+    if (zone) {
+        zone.addEventListener('click', async () => {
+            await uploadSupportingDocs();
         });
-        
-        // Drag and drop handlers
-        elements.documentDropZone.addEventListener('dragover', (e) => {
+
+        // Drag & drop
+        zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+        zone.addEventListener('dragleave', () => { zone.classList.remove('drag-over'); });
+        zone.addEventListener('drop', (e) => {
             e.preventDefault();
-            elements.documentDropZone.classList.add('drag-over');
-        });
-        
-        elements.documentDropZone.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            elements.documentDropZone.classList.remove('drag-over');
-        });
-        
-        elements.documentDropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            elements.documentDropZone.classList.remove('drag-over');
-            // Note: Direct file drop requires more complex handling in Electron
-            // For now, prompt user to use the browse button
-            showToast('Please use the Browse Files button to add documents', 'info');
+            zone.classList.remove('drag-over');
+            // Electron doesn't support reading dropped files directly in renderer – use browse instead
+            showToast('Use the browse button to select files', 'info');
         });
     }
-    
-    // Proceed button - just moves to review, doesn't finalize/download
-    if (elements.proceedWithDocs) {
-        elements.proceedWithDocs.addEventListener('click', proceedToSourceChat);
-    }
-}
 
-// Move from step 4 to step 5 (Narrative)
-function proceedToSourceChat() {
-    // Move to Step 5 (Narrative) - skipping the old builder step
-    goToStep(5);
-    
-    // Populate the narrative step
-    populateNarrativeStep();
-}
+    // Back to Step 2
+    if (elements.backToStep2) {
+        elements.backToStep2.addEventListener('click', () => goToStep(2));
+    }
 
-// Save current source pack to history (placeholder for source-pack-level checkpoint)
-// NOTE: History is managed by saveClientHistory() and addNarrativeToHistory().
-function saveToHistory() {
-    // No-op — history is saved after narrative generation completes.
-    // Keeping function stub so any callers don't break.
-    console.log('[History] saveToHistory() called — history will be saved after narrative generation.');
-}
-
-// ============================================
-// Step 5: Narrative Builder - Guided Prompt Creation
-// ============================================
-
-// Narrative Builder state
-const sourceChat = {
-    messages: [],
-    isProcessing: false,
-    initialized: false,
-    generatedPrompt: null  // Will hold the final generated prompt
-};
-
-// Initialize Narrative Builder for Step 5
-function initializeSourceChat() {
-    console.log('[NarrativeBuilder] Initializing...');
-    
-    // Update context display
-    const sourceCountEl = document.getElementById('chatSourceCount');
-    const clientNameEl = document.getElementById('chatClientName');
-    
-    // Count sources
-    let sourceCount = 0;
-    if (state.sourceResults?.chatgpt?.success) sourceCount++;
-    if (state.sourceResults?.arc?.success) sourceCount++;
-    if (state.sourceResults?.alphasense?.success) sourceCount++;
-    if (state.pocFile) sourceCount++;
-    sourceCount += state.additionalFiles?.length || 0;
-    
-    if (sourceCountEl) {
-        sourceCountEl.textContent = `${sourceCount} source${sourceCount !== 1 ? 's' : ''} loaded`;
-    }
-    
-    if (clientNameEl) {
-        clientNameEl.textContent = state.selectedClient?.name || '--';
-    }
-    
-    // Store doc count for later
-    state.sourcePackDocCount = `${sourceCount} documents`;
-    state.sourcePackGenDate = new Date().toLocaleString();
-    
-    // Setup event listeners (only once)
-    if (!sourceChat.initialized) {
-        setupSourceChatListeners();
-        sourceChat.initialized = true;
-    }
-    
-    // Reset and start the guided conversation
-    resetChatMessages();
-    startNarrativeBuilderConversation();
-}
-
-// Setup Narrative Builder event listeners
-function setupSourceChatListeners() {
-    const sendBtn = document.getElementById('sourceChatSendBtn');
-    const input = document.getElementById('sourceChatInput');
-    const backBtn = document.getElementById('backToAddDocsBtn');
-    const exportBtn = document.getElementById('exportSourcePackBtn');
-    const skipBtn = document.getElementById('skipBuilderBtn');
-    const usePromptBtn = document.getElementById('usePromptBtn');
-    const editPromptBtn = document.getElementById('editPromptBtn');
-    
-    if (sendBtn) {
-        sendBtn.addEventListener('click', sendSourceChatMessage);
-    }
-    
-    if (input) {
-        // Enter to send, Shift+Enter for new line
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendSourceChatMessage();
-            }
-        });
-        
-        // Auto-resize textarea
-        input.addEventListener('input', () => {
-            input.style.height = 'auto';
-            input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-        });
-    }
-    
-    if (backBtn) {
-        backBtn.addEventListener('click', () => goToStep(4));
-    }
-    
-    if (exportBtn) {
-        exportBtn.addEventListener('click', finalizeSourcePack);
-    }
-    
-    if (skipBtn) {
-        skipBtn.addEventListener('click', () => {
-            goToStep(5);
-            populateNarrativeStep();
-        });
-    }
-    
-    if (usePromptBtn) {
-        usePromptBtn.addEventListener('click', () => {
-            if (sourceChat.generatedPrompt) {
-                // Store the generated prompt to inject into Step 5
-                state.narrativeBuilderPrompt = sourceChat.generatedPrompt;
-                goToStep(5);
-                populateNarrativeStep();
-            }
-        });
-    }
-    
-    if (editPromptBtn) {
-        editPromptBtn.addEventListener('click', () => {
-            if (sourceChat.generatedPrompt) {
-                state.narrativeBuilderPrompt = sourceChat.generatedPrompt;
-                goToStep(5);
-                populateNarrativeStep();
-            }
+    // Listen for processing progress from main process
+    if (state.isElectron && window.electronAPI.supportingDocs?.onProgress) {
+        window.electronAPI.supportingDocs.onProgress((data) => {
+            updateDocProcessProgress(data.current, data.total, data.fileName);
         });
     }
 }
 
-// Reset chat messages to initial state (shows loading while we get AI opening)
-function resetChatMessages() {
-    const messagesContainer = document.getElementById('sourceChatMessages');
-    if (!messagesContainer) return;
-    
-    sourceChat.messages = [];
-    sourceChat.generatedPrompt = null;
-    
-    // Hide the prompt preview if visible
-    const promptPreview = document.getElementById('generatedPromptPreview');
-    if (promptPreview) {
-        promptPreview.classList.add('hidden');
-    }
-    
-    // Show loading state while we get the AI's opening message
-    messagesContainer.innerHTML = `
-        <div class="chat-message assistant">
-            <div class="chat-avatar">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
-                </svg>
-            </div>
-            <div class="chat-content">
-                <div class="chat-bubble">
-                    <span class="typing-dot"></span>
-                    <span class="typing-dot"></span>
-                    <span class="typing-dot"></span>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// Start the guided conversation with an AI-generated opening
-async function startNarrativeBuilderConversation() {
-    const messagesContainer = document.getElementById('sourceChatMessages');
-    if (!messagesContainer) return;
-    
-    try {
-        let response;
-        
-        if (state.isElectron && window.electronAPI?.sourceChat?.startConversation) {
-            response = await window.electronAPI.sourceChat.startConversation();
-        } else {
-            // Fallback for non-Electron
-            await sleep(1000);
-            response = {
-                success: true,
-                message: `Hello! I've analyzed your source documents for **${state.selectedClient?.name || 'your client'}** and I'm excited to help you craft the perfect narrative.\n\nI noticed some interesting themes in your sources that we could explore. Before we dive in, I'd love to understand what kind of narrative angle would resonate most with your audience:\n\n• **Value Driver** - Focus on specific business value and growth opportunities\n• **Divergent Scenario** - Explore alternative futures and strategic pivots\n• **Human/C-suite Dynamics** - Center on leadership challenges and organizational dynamics\n\nWhich of these directions interests you most?`
-            };
-        }
-        
-        // Clear the loading state
-        messagesContainer.innerHTML = '';
-        
-        if (response.success) {
-            addChatMessage('assistant', response.message);
-        } else {
-            addChatMessage('assistant', `I'm ready to help you build your narrative prompt. Let's start with the basics - what kind of narrative would you like to create?\n\n• **Value Driver** - Focus on business value and growth\n• **Divergent Scenario** - Explore alternative futures\n• **Human/C-suite Dynamics** - Leadership and organizational focus`);
-        }
-        
-    } catch (error) {
-        console.error('[NarrativeBuilder] Error starting conversation:', error);
-        messagesContainer.innerHTML = '';
-        addChatMessage('assistant', `Let's build your narrative prompt together! What kind of narrative angle interests you most?\n\n• **Value Driver** - Business value and growth opportunities\n• **Divergent Scenario** - Alternative futures and strategic pivots\n• **Human/C-suite Dynamics** - Leadership and organizational dynamics`);
-    }
-}
-
-// Send a message in the Narrative Builder chat
-async function sendSourceChatMessage() {
-    const input = document.getElementById('sourceChatInput');
-    const messagesContainer = document.getElementById('sourceChatMessages');
-    
-    if (!input || !messagesContainer) return;
-    
-    const message = input.value.trim();
-    if (!message || sourceChat.isProcessing) return;
-    
-    sourceChat.isProcessing = true;
-    
-    // Clear input
-    input.value = '';
-    input.style.height = 'auto';
-    
-    // Add user message to UI
-    addChatMessage('user', message);
-    
-    // Add typing indicator
-    const typingEl = addTypingIndicator();
-    
-    try {
-        let response;
-        
-        if (state.isElectron && window.electronAPI?.sourceChat) {
-            response = await window.electronAPI.sourceChat.sendMessage(message);
-        } else {
-            // Fallback simulation
-            await sleep(1500);
-            response = {
-                success: true,
-                message: "I'm sorry, the Narrative Builder requires the Electron backend to be connected."
-            };
-        }
-        
-        // Remove typing indicator
-        typingEl?.remove();
-        
-        if (response.success) {
-            // Check if response contains a generated prompt
-            if (response.generatedPrompt) {
-                sourceChat.generatedPrompt = response.generatedPrompt;
-                
-                // Clean the message by removing the prompt markers for display
-                const cleanMessage = response.message
-                    .replace(/===NARRATIVE_PROMPT_START===[\s\S]*?===NARRATIVE_PROMPT_END===/, '')
-                    .trim();
-                
-                if (cleanMessage) {
-                    addChatMessage('assistant', cleanMessage);
-                }
-                
-                // Show the generated prompt preview
-                showGeneratedPromptPreview(response.generatedPrompt);
-            } else {
-                addChatMessage('assistant', response.message);
-            }
-        } else {
-            addChatMessage('assistant', `Sorry, I encountered an error: ${response.error || 'Unknown error'}`);
-        }
-        
-    } catch (error) {
-        console.error('[NarrativeBuilder] Error:', error);
-        typingEl?.remove();
-        addChatMessage('assistant', `Sorry, I encountered an error: ${error.message}`);
-    } finally {
-        sourceChat.isProcessing = false;
-    }
-}
-
-// Show the generated prompt preview panel
-function showGeneratedPromptPreview(prompt) {
-    const previewContainer = document.getElementById('generatedPromptPreview');
-    const promptContent = document.getElementById('generatedPromptContent');
-    
-    if (!previewContainer || !promptContent) return;
-    
-    // Format the prompt for display (convert markdown-like to HTML)
-    const formattedPrompt = prompt
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/\n/g, '<br>');
-    
-    promptContent.innerHTML = formattedPrompt;
-    previewContainer.classList.remove('hidden');
-    
-    // Scroll the preview into view
-    previewContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    
-    showToast('Narrative prompt generated! Review and use it below.', 'success');
-}
-
-// Add a chat message to the UI
-function addChatMessage(role, content) {
-    const messagesContainer = document.getElementById('sourceChatMessages');
-    if (!messagesContainer) return;
-    
-    const messageEl = document.createElement('div');
-    messageEl.className = `chat-message ${role}`;
-    
-    const avatarIcon = role === 'assistant' 
-        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>'
-        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>';
-    
-    // Convert markdown-like formatting to HTML
-    const formattedContent = formatChatContent(content);
-    
-    messageEl.innerHTML = `
-        <div class="chat-avatar">${avatarIcon}</div>
-        <div class="chat-content">
-            <div class="chat-bubble">${formattedContent}</div>
-        </div>
-    `;
-    
-    messagesContainer.appendChild(messageEl);
-    
-    // Scroll to bottom
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    
-    // Store in messages array
-    sourceChat.messages.push({ role, content });
-}
-
-// Format chat content (basic markdown support)
-function formatChatContent(content) {
-    if (!content) return '';
-    
-    return content
-        // Escape HTML
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        // Bold
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        // Italic
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        // Line breaks
-        .replace(/\n/g, '<br>');
-}
-
-// Add typing indicator
-function addTypingIndicator() {
-    const messagesContainer = document.getElementById('sourceChatMessages');
-    if (!messagesContainer) return null;
-    
-    const typingEl = document.createElement('div');
-    typingEl.className = 'chat-message assistant typing';
-    typingEl.id = 'typingIndicator';
-    typingEl.innerHTML = `
-        <div class="chat-avatar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
-            </svg>
-        </div>
-        <div class="chat-content">
-            <div class="chat-bubble">
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
-            </div>
-        </div>
-    `;
-    
-    messagesContainer.appendChild(typingEl);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    
-    return typingEl;
-}
-
-// ============================================
-// Step 6: Narrative Generation
-// ============================================
-
-// Initialize narrative step
-let narrativeListenersSetup = false;  // Prevent duplicate listeners
-
-function setupNarrativeListeners() {
-    // Prevent adding duplicate listeners
-    if (narrativeListenersSetup) {
-        console.log('[Narrative] Listeners already set up, skipping');
+async function uploadSupportingDocs() {
+    if (!state.isElectron) {
+        showToast('File upload requires the Electron app', 'error');
         return;
     }
-    narrativeListenersSetup = true;
-    console.log('[Narrative] Setting up listeners...');
-    
-    // Back button - go back to step 4 (Add Additional Docs)
-    const backBtn = document.getElementById('backToReviewBtn');
-    if (backBtn) {
-        backBtn.addEventListener('click', () => goToStep(4));
-    }
-    
-    // Generate narrative button
-    const generateBtn = document.getElementById('generateNarrativeBtn');
-    if (generateBtn) {
-        console.log('[Narrative] Found generate button, adding click listener');
-        generateBtn.addEventListener('click', () => {
-            console.log('[Narrative] Button clicked!');
-            generateNarrative();
-        });
-    } else {
-        console.warn('[Narrative] Generate button not found!');
-    }
-    
-    // Cancel narrative button
-    const cancelNarrativeBtn = document.getElementById('cancelNarrativeBtn');
-    if (cancelNarrativeBtn) {
-        cancelNarrativeBtn.addEventListener('click', () => {
-            console.log('[Narrative] Cancel clicked!');
-            cancelNarrativeGeneration();
-        });
-    }
-    
-    // Download workshop materials button
-    const workshopBtn = document.getElementById('downloadWorkshopBtn');
-    if (workshopBtn) {
-        console.log('[Workshop] Found workshop button, adding click listener');
-        workshopBtn.addEventListener('click', () => {
-            console.log('[Workshop] Button clicked!');
-            downloadWorkshopMaterials();
-        });
-    } else {
-        console.warn('[Workshop] Workshop button not found!');
-    }
-    
-    // Copy narrative button
-    const copyBtn = document.getElementById('copyNarrativeBtn');
-    if (copyBtn) {
-        copyBtn.addEventListener('click', copyNarrativeToClipboard);
-    }
-    
-    // Download narrative as Word button
-    const downloadBtn = document.getElementById('downloadNarrativeBtn');
-    if (downloadBtn) {
-        downloadBtn.addEventListener('click', () => {
-            // The narrative was already saved as a Word doc during generation
-            // This button can trigger a re-download or just notify
-            showToast('Use "Generate Narrative" to create a new Word document', 'info');
-        });
-    }
-    
-    // Export Source Pack button on Step 6
-    const exportBtn = document.getElementById('exportSourcePackBtnStep6');
-    if (exportBtn) {
-        exportBtn.addEventListener('click', exportSourcePackFromStep6);
-    }
-    
-    // Generate Client Intel Pack button
-    const intelPackBtn = document.getElementById('generateIntelPackBtn');
-    if (intelPackBtn) {
-        console.log('[Intel Pack] Found button, adding click listener');
-        intelPackBtn.addEventListener('click', () => {
-            console.log('[Intel Pack] Button clicked!');
-            generateClientIntelPack();
-        });
-    }
-}
-
-// Populate narrative step with current source pack info
-async function populateNarrativeStep() {
-    // Compute source pack summary from actual state
-    let sourceCount = 0;
-    
-    // Use the document count from the generation result if available
-    if (state.pendingGenerationResult?.documentCount) {
-        sourceCount = state.pendingGenerationResult.documentCount;
-    } else {
-        // Fall back to counting individual sources
-        if (state.sourceResults?.chatgpt?.success) sourceCount++;
-        if (state.sourceResults?.arc?.success) sourceCount++;
-        if (state.sourceResults?.alphasense?.success) sourceCount++;
-    }
-    
-    // Add user-provided documents
-    if (state.pocFile) sourceCount++;
-    sourceCount += state.additionalFiles?.length || 0;
-    
-    const docCountText = sourceCount > 0 ? `${sourceCount} document${sourceCount !== 1 ? 's' : ''}` : '--';
-    
-    // Update source pack summary
-    document.getElementById('narrativeClientName').textContent = state.selectedClient?.commonName || state.selectedClient?.name || '--';
-    document.getElementById('narrativeDocCount').textContent = docCountText;
-    document.getElementById('narrativeGenDate').textContent = state.pendingGenerationResult ? new Date().toLocaleString() : '--';
-    
-    const promptTextarea = document.getElementById('narrativeAgentPrompt');
-    
-    // Check if we have a prompt from the Narrative Builder
-    if (promptTextarea && state.narrativeBuilderPrompt) {
-        promptTextarea.value = state.narrativeBuilderPrompt;
-        // Clear the stored prompt so it doesn't persist across sessions
-        state.narrativeBuilderPrompt = null;
-        showToast('Narrative prompt loaded from builder', 'success');
-    } 
-    // Otherwise, pre-populate with default from admin settings
-    else if (promptTextarea && state.isElectron && window.electronAPI.settings) {
-        try {
-            const defaultPrompt = await window.electronAPI.settings.getDefaultPrompt();
-            if (defaultPrompt) {
-                promptTextarea.value = defaultPrompt;
-            }
-        } catch (error) {
-            console.error('Error loading default prompt:', error);
-        }
-    }
-    
-    // Load narratives for this client
-    if (state.selectedClient?.id) {
-        await loadClientNarratives(state.selectedClient.id);
-    } else {
-        hideNarrativeDisplay();
-    }
-    
-    // Setup listeners if not already done
-    setupNarrativeListeners();
-}
-
-// (Template functions removed - narrative is now driven by agent prompt only)
-
-// Track if narrative generation should be cancelled
-let narrativeGenerationCancelled = false;
-let narrativeAbortController = null;
-
-// Cancel narrative generation
-function cancelNarrativeGeneration() {
-    narrativeGenerationCancelled = true;
-    if (narrativeAbortController) {
-        narrativeAbortController.abort();
-    }
-    
-    // Notify backend to cancel
-    if (state.isElectron && window.electronAPI?.narrative?.cancel) {
-        window.electronAPI.narrative.cancel();
-    }
-    
-    // Reset UI
-    const btn = document.getElementById('generateNarrativeBtn');
-    const btnText = document.getElementById('generateNarrativeText');
-    const cancelBtn = document.getElementById('cancelNarrativeBtn');
-    
-    if (btn) btn.disabled = false;
-    if (btnText) btnText.textContent = 'Generate Narrative';
-    if (cancelBtn) cancelBtn.classList.add('hidden');
-    
-    showToast('Narrative generation cancelled', 'info');
-}
-
-// Generate narrative document
-async function generateNarrative() {
-    console.log('[Narrative] Generate button clicked');
-    
-    // Reset cancellation flag
-    narrativeGenerationCancelled = false;
-    narrativeAbortController = new AbortController();
-    
-    const strategicQuestion = document.getElementById('strategicQuestion')?.value?.trim() || '';
-    const narrativeInstructions = document.getElementById('narrativeAgentPrompt')?.value || '';
-    
-    // Combine strategic question with narrative instructions if present
-    let agentPrompt = narrativeInstructions;
-    if (strategicQuestion) {
-        agentPrompt = `────────────────────────────────
-STRATEGIC QUESTION (this frames everything below)
-────────────────────────────────
-
-${strategicQuestion}
-
-────────────────────────────────
-
-${narrativeInstructions}`;
-    }
-    
-    console.log('[Narrative] Agent prompt length:', agentPrompt?.length || 0);
-    console.log('[Narrative] Strategic question provided:', !!strategicQuestion);
-    
-    if (!narrativeInstructions || narrativeInstructions.trim().length < 10) {
-        showToast('Please enter narrative instructions', 'warning');
-        return;
-    }
-    
-    const btn = document.getElementById('generateNarrativeBtn');
-    const btnText = document.getElementById('generateNarrativeText');
-    const cancelBtn = document.getElementById('cancelNarrativeBtn');
-    
-    // Immediately show generating state
-    if (btn) btn.disabled = true;
-    if (btnText) btnText.textContent = 'Generating...';
-    if (cancelBtn) cancelBtn.classList.remove('hidden');
-    showToast('Starting narrative generation...', 'info');
-    
-    console.log('[Narrative] State check - isElectron:', state.isElectron);
-    console.log('[Narrative] State check - electronAPI.narrative:', !!window.electronAPI?.narrative);
-    console.log('[Narrative] Selected client:', state.selectedClient?.name);
-    console.log('[Narrative] Current context:', state.currentContext);
-    
     try {
-        if (state.isElectron && window.electronAPI?.narrative) {
-            console.log('[Narrative] Calling electronAPI.narrative.generate...');
-            const result = await window.electronAPI.narrative.generate({
-                agentPrompt,
-                sourcePackPath: state.sourcePackResult?.filePath,
-                client: state.selectedClient,
-                context: state.currentContext
-            });
-            
-            console.log('[Narrative] Result:', result);
-            
-            if (result.success) {
-                showToast('Narrative document generated successfully!', 'success');
-                
-                // Store the source pack from the result for chat functionality
-                if (result.sourcePack) {
-                    state.currentSourcePack = result.sourcePack;
-                    console.log('[Narrative] Source pack stored from generation result');
-                }
-                
-                // Get the agent prompt that was used for this generation
-                const usedAgentPrompt = document.getElementById('narrativeAgentPrompt')?.value || '';
-                
-                // Save the narrative for this client
-                if (result.content) {
-                    const newNarrative = {
-                        id: 'narr_' + Date.now(),
-                        content: result.content,
-                        timestamp: new Date().toISOString(),
-                        outputIntent: result.outputIntent,
-                        wordCount: result.content?.split(/\s+/).length || 0,
-                        agentPrompt: usedAgentPrompt  // Save the instructions used
-                    };
-                    
-                    // Save to overall history FIRST (most important — always runs)
-                    addNarrativeToHistory(newNarrative);
-                    
-                    // Then save per-client narrative (secondary)
-                    if (state.selectedClient?.id) {
-                        try {
-                            await saveNarrative(state.selectedClient.id, {
-                                content: result.content,
-                                outputIntent: result.outputIntent
-                            });
-                        } catch (saveErr) {
-                            console.error('[Narrative] Per-client save failed (history still saved):', saveErr);
-                        }
-                    }
-                    
-                    // Capture generation signal for learning
-                    captureGenerationSignal(result.content);
-                    
-                    // Reload narrative history (but don't auto-display)
-                    if (state.selectedClient?.id) {
-                        await loadClientNarratives(state.selectedClient.id);
-                    }
-                    
-                    // Now display the newly generated narrative
-                    // Pass the history entry ID so chat messages get saved correctly
-                    const histEntry = state.generatedPacks.find(p => p.clientId === state.selectedClient?.id);
-                    displayNarrative(newNarrative, null, null, histEntry?.id || null);
-                }
-            } else if (result.canceled) {
-                showToast('Narrative generation canceled', 'info');
-            } else {
-                showToast(result.error || 'Failed to generate narrative', 'error');
-            }
-        } else {
-            console.log('[Narrative] Running in demo mode');
-            // Demo mode
-            await sleep(2000);
-            showToast('Narrative document generated (Demo Mode)', 'success');
-        }
-    } catch (error) {
-        console.error('[Narrative] Error generating narrative:', error);
-        if (!narrativeGenerationCancelled) {
-            showToast('Failed to generate narrative: ' + error.message, 'error');
-        }
-    } finally {
-        const cancelBtn = document.getElementById('cancelNarrativeBtn');
-        if (btn) btn.disabled = false;
-        if (btnText) btnText.textContent = 'Generate Narrative';
-        if (cancelBtn) cancelBtn.classList.add('hidden');
-        narrativeGenerationCancelled = false;
-        narrativeAbortController = null;
-    }
-}
-
-// ============================================
-// Narrative Display & History
-// ============================================
-
-// Save narrative to persistent storage
-async function saveNarrative(clientId, narrative) {
-    if (!state.isElectron || !window.electronAPI?.narratives) {
-        console.log('[Narrative] Demo mode - not saving');
-        return;
-    }
-    
-    try {
-        const result = await window.electronAPI.narratives.save(clientId, narrative);
-        console.log('[Narrative] Saved:', result);
-        return result;
-    } catch (error) {
-        console.error('[Narrative] Error saving:', error);
-    }
-}
-
-// Export Source Pack from Step 6 (reuses the same logic as Step 5)
-async function exportSourcePackFromStep6() {
-    if (!state.isElectron || !window.electronAPI?.sourcePack) {
-        showToast('Export only available in desktop app', 'info');
-        return;
-    }
-    
-    const btn = document.getElementById('exportSourcePackBtnStep6');
-    const originalText = btn?.querySelector('span')?.textContent;
-    
-    try {
-        if (btn) {
-            btn.disabled = true;
-            btn.querySelector('span').textContent = 'Exporting...';
-        }
-        
-        // Additional files are already included in the source pack from Step 4
-        // Just finalize and export the zip
-        const result = await window.electronAPI.sourcePack.finalizeZip();
-        
-        if (result.success) {
-            state.sourcePackResult = result;
-            showToast('Source Pack exported to: ' + result.filePath, 'success');
-        } else if (result.canceled) {
-            showToast('Export cancelled', 'info');
-        } else {
-            throw new Error(result.error || 'Export failed');
-        }
-    } catch (error) {
-        console.error('[Export] Error:', error);
-        showToast('Export failed: ' + error.message, 'error');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.querySelector('span').textContent = originalText || 'Export Source Pack';
-        }
-    }
-}
-
-// Load narratives for a client
-async function loadClientNarratives(clientId) {
-    if (!state.isElectron || !window.electronAPI?.narratives) {
-        return [];
-    }
-    
-    try {
-        const narratives = await window.electronAPI.narratives.getForClient(clientId);
-        console.log('[Narrative] Loaded', narratives?.length || 0, 'narratives for client');
-        
-        // Store in state
-        state.clientNarratives = narratives || [];
-        
-        // Render the history list
-        renderNarrativeHistory(narratives);
-        
-        // Don't auto-display latest narrative - leave blank until user generates or clicks one
-        // Only show history section
-        hideNarrativeDisplay();
-        
-        return narratives;
-    } catch (error) {
-        console.error('[Narrative] Error loading narratives:', error);
-        return [];
-    }
-}
-
-// Display a narrative in the display section
-function displayNarrative(narrative, sourcePack = null, chatHistory = null, historyEntryId = null) {
-    const section = document.getElementById('narrativeDisplaySection');
-    const contentDiv = document.getElementById('narrativeDisplayContent');
-    const timestampSpan = document.getElementById('narrativeTimestamp');
-    const audioSection = document.getElementById('narrativeAudioSection');
-    const videoSection = document.getElementById('narrativeVideoSection');
-    const intelPackSection = document.getElementById('clientIntelPackSection');
-    
-    if (!section || !contentDiv) return;
-    
-    // Show the section
-    section.style.display = 'block';
-    
-    // Show the audio generation section
-    if (audioSection) {
-        audioSection.style.display = 'block';
-        // Reset audio section state
-        resetNarrativeAudioSection();
-    }
-    
-    // Show the video narrative generation section
-    if (videoSection) {
-        videoSection.style.display = 'block';
-        // Reset video section state
-        resetVideoNarrativeSection();
-    }
-    
-    // Show the Client Intel Pack section
-    if (intelPackSection) {
-        intelPackSection.style.display = 'block';
-        // Reset intel pack section state
-        resetIntelPackSection();
-    }
-    
-    // Format timestamp
-    if (timestampSpan && narrative.timestamp) {
-        const date = new Date(narrative.timestamp);
-        timestampSpan.textContent = date.toLocaleString();
-    }
-    
-    // Render markdown content as HTML
-    const htmlContent = renderMarkdownToHtml(narrative.content || '');
-    contentDiv.innerHTML = htmlContent;
-    
-    // Store current narrative
-    state.currentDisplayedNarrative = narrative;
-    
-    // Update active state in history list
-    updateNarrativeHistoryActiveState(narrative.id);
-    
-    // Initialize narrative chat with source pack and chat history
-    const sourcePackToUse = sourcePack || state.currentSourcePack;
-    const entryId = historyEntryId || narrative.id;
-    initializeNarrativeChat(narrative.content, sourcePackToUse, chatHistory, entryId);
-}
-
-// ============================================
-// Narrative Chat - Q&A with Sources + Narrative
-// ============================================
-
-const narrativeChat = {
-    messages: [],
-    isProcessing: false,
-    initialized: false,
-    currentNarrativeContent: null,
-    currentSourcePack: null,  // Store the source pack for this chat session
-    currentHistoryEntryId: null,  // Track which history entry this chat belongs to
-    currentNarrativeId: null,     // Track which narrative version within the entry
-    highlightedText: null,  // Store user-highlighted text from narrative
-    currentMode: 'ask',  // 'ask' or 'iterate'
-    abortController: null,  // For cancelling requests
-    awaitingConfirmation: false,  // For full rewrite confirmation
-    pendingIterateRequest: null  // Store pending iterate request during confirmation
-};
-
-// Initialize narrative chat for the displayed narrative
-function initializeNarrativeChat(narrativeContent, sourcePack = null, chatHistory = null, historyEntryId = null) {
-    console.log('[NarrativeChat] Initializing...');
-    
-    narrativeChat.currentNarrativeContent = narrativeContent;
-    narrativeChat.currentSourcePack = sourcePack || state.currentSourcePack;
-    narrativeChat.currentHistoryEntryId = historyEntryId;
-    narrativeChat.highlightedText = null;
-    narrativeChat.currentMode = 'ask';
-    narrativeChat.awaitingConfirmation = false;
-    narrativeChat.pendingIterateRequest = null;
-    
-    // Reset mode dropdown
-    const modeDropdown = document.getElementById('narrativeChatMode');
-    if (modeDropdown) {
-        modeDropdown.value = 'ask';
-        modeDropdown.classList.remove('iterate-mode');
-    }
-    
-    console.log('[NarrativeChat] Source pack available:', !!narrativeChat.currentSourcePack);
-    console.log('[NarrativeChat] History entry ID:', historyEntryId);
-    console.log('[NarrativeChat] Restoring chat history:', chatHistory?.length || 0, 'messages');
-    
-    // Clear highlighted context box
-    clearHighlightedContext();
-    
-    // Setup event listeners (only once)
-    if (!narrativeChat.initialized) {
-        setupNarrativeChatListeners();
-        setupNarrativeTextSelectionListener();
-        narrativeChat.initialized = true;
-    }
-    
-    // Reset or restore chat messages
-    if (chatHistory && chatHistory.length > 0) {
-        // Restore previous chat history
-        restoreNarrativeChatMessages(chatHistory);
-    } else {
-        // Start fresh
-        resetNarrativeChatMessages();
-    }
-    
-    // Reset backend history (will be repopulated as user sends new messages)
-    if (state.isElectron && window.electronAPI?.narrativeChat?.reset) {
-        window.electronAPI.narrativeChat.reset();
-    }
-}
-
-// Restore chat messages from history
-function restoreNarrativeChatMessages(chatHistory) {
-    const messagesContainer = document.getElementById('narrativeChatMessages');
-    if (!messagesContainer) return;
-    
-    // Clear existing messages
-    narrativeChat.messages = [];
-    
-    // Start with the welcome message
-    messagesContainer.innerHTML = `
-        <div class="chat-message assistant">
-            <div class="chat-avatar">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
-                </svg>
-            </div>
-            <div class="chat-content">
-                <div class="chat-bubble">
-                    <p>I can answer questions about the narrative and source documents. Ask me anything!</p>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Restore each message from history
-    for (const msg of chatHistory) {
-        const messageEl = document.createElement('div');
-        messageEl.className = `chat-message ${msg.role}`;
-        
-        const avatarIcon = msg.role === 'assistant' 
-            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>'
-            : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>';
-        
-        // Format content
-        const formattedContent = msg.content
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.+?)\*/g, '<em>$1</em>')
-            .replace(/\n/g, '<br>');
-        
-        messageEl.innerHTML = `
-            <div class="chat-avatar">${avatarIcon}</div>
-            <div class="chat-content">
-                <div class="chat-bubble">${formattedContent}</div>
-            </div>
-        `;
-        
-        messagesContainer.appendChild(messageEl);
-        narrativeChat.messages.push({ role: msg.role, content: msg.content });
-    }
-    
-    // Scroll to bottom
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
-
-// Setup listener for text selection in the narrative display
-function setupNarrativeTextSelectionListener() {
-    const narrativeContent = document.getElementById('narrativeDisplayContent');
-    const contextBox = document.getElementById('highlightedContextBox');
-    const contextContent = document.getElementById('highlightedContextContent');
-    const clearBtn = document.getElementById('clearHighlightedContext');
-    
-    if (!narrativeContent) return;
-    
-    // Listen for mouseup to capture text selection
-    narrativeContent.addEventListener('mouseup', () => {
-        const selection = window.getSelection();
-        const selectedText = selection.toString().trim();
-        
-        if (selectedText && selectedText.length > 0) {
-            // Store the highlighted text
-            narrativeChat.highlightedText = selectedText;
-            
-            // Show in the context box
-            if (contextBox && contextContent) {
-                // Truncate display if too long (but keep full text for context)
-                const displayText = selectedText.length > 300 
-                    ? selectedText.substring(0, 300) + '...' 
-                    : selectedText;
-                contextContent.textContent = displayText;
-                contextBox.style.display = 'block';
-            }
-            
-            console.log('[NarrativeChat] Text highlighted:', selectedText.substring(0, 50) + '...');
-        }
-    });
-    
-    // Clear button handler
-    if (clearBtn) {
-        clearBtn.addEventListener('click', clearHighlightedContext);
-    }
-}
-
-// Clear the highlighted text context
-function clearHighlightedContext() {
-    const contextBox = document.getElementById('highlightedContextBox');
-    const contextContent = document.getElementById('highlightedContextContent');
-    
-    narrativeChat.highlightedText = null;
-    
-    if (contextBox) {
-        contextBox.style.display = 'none';
-    }
-    if (contextContent) {
-        contextContent.textContent = '';
-    }
-    
-    // Also clear the text selection
-    window.getSelection()?.removeAllRanges();
-}
-
-// Setup narrative chat event listeners
-function setupNarrativeChatListeners() {
-    const sendBtn = document.getElementById('narrativeChatSendBtn');
-    const input = document.getElementById('narrativeChatInput');
-    const modeDropdown = document.getElementById('narrativeChatMode');
-    
-    if (sendBtn) {
-        sendBtn.addEventListener('click', handleSendOrStop);
-    }
-    
-    if (input) {
-        // Enter to send, Shift+Enter for new line
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendOrStop();
-            }
-        });
-        
-        // Auto-resize textarea
-        input.addEventListener('input', () => {
-            input.style.height = 'auto';
-            input.style.height = Math.min(input.scrollHeight, 80) + 'px';
-        });
-    }
-    
-    // Mode dropdown handler
-    if (modeDropdown) {
-        modeDropdown.addEventListener('change', (e) => {
-            narrativeChat.currentMode = e.target.value;
-            const inputEl = document.getElementById('narrativeChatInput');
-            
-            if (e.target.value === 'iterate') {
-                e.target.classList.add('iterate-mode');
-                if (inputEl) inputEl.placeholder = 'Describe the changes you want to make...';
-            } else {
-                e.target.classList.remove('iterate-mode');
-                if (inputEl) inputEl.placeholder = 'Ask about the narrative or sources...';
-            }
-        });
-    }
-}
-
-// Handle send button click - either send message or stop processing
-function handleSendOrStop() {
-    if (narrativeChat.isProcessing) {
-        // Stop/cancel the current request
-        cancelNarrativeChatRequest();
-    } else {
-        // Send the message
-        sendNarrativeChatMessage();
-    }
-}
-
-// Cancel the current chat request
-function cancelNarrativeChatRequest() {
-    console.log('[NarrativeChat] Cancelling request...');
-    
-    if (narrativeChat.abortController) {
-        narrativeChat.abortController.abort();
-        narrativeChat.abortController = null;
-    }
-    
-    // Also tell the backend to cancel
-    if (state.isElectron && window.electronAPI?.narrativeChat?.cancel) {
-        window.electronAPI.narrativeChat.cancel();
-    }
-    
-    // Remove typing indicator
-    const typingEl = document.getElementById('narrativeChatTypingIndicator');
-    if (typingEl) typingEl.remove();
-    
-    // Reset processing state
-    setProcessingState(false);
-    
-    addNarrativeChatMessage('assistant', '🛑 Request cancelled.');
-}
-
-// Set the processing state and update UI
-function setProcessingState(isProcessing) {
-    narrativeChat.isProcessing = isProcessing;
-    
-    const sendBtn = document.getElementById('narrativeChatSendBtn');
-    if (sendBtn) {
-        if (isProcessing) {
-            sendBtn.classList.add('is-processing');
-            sendBtn.title = 'Stop';
-        } else {
-            sendBtn.classList.remove('is-processing');
-            sendBtn.title = 'Send message';
-        }
-    }
-}
-
-// Reset narrative chat messages
-function resetNarrativeChatMessages() {
-    const messagesContainer = document.getElementById('narrativeChatMessages');
-    if (!messagesContainer) return;
-    
-    narrativeChat.messages = [];
-    
-    messagesContainer.innerHTML = `
-        <div class="chat-message assistant">
-            <div class="chat-avatar">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
-                </svg>
-            </div>
-            <div class="chat-content">
-                <div class="chat-bubble">
-                    <p>I can answer questions about the narrative and source documents. Ask me anything!</p>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// Send a message in the narrative chat
-async function sendNarrativeChatMessage() {
-    const input = document.getElementById('narrativeChatInput');
-    const messagesContainer = document.getElementById('narrativeChatMessages');
-    
-    if (!input || !messagesContainer) return;
-    
-    const message = input.value.trim();
-    if (!message || narrativeChat.isProcessing) return;
-    
-    // Check if this is a confirmation response for full rewrite
-    if (narrativeChat.awaitingConfirmation) {
-        handleIterateConfirmation(message);
-        input.value = '';
-        input.style.height = 'auto';
-        return;
-    }
-    
-    setProcessingState(true);
-    
-    // Clear input
-    input.value = '';
-    input.style.height = 'auto';
-    
-    // Get current mode
-    const mode = narrativeChat.currentMode;
-    
-    // Build the full message with highlighted context if present
-    let fullMessage = message;
-    let displayMessage = message;
-    const highlightedContext = narrativeChat.highlightedText;
-    
-    if (highlightedContext) {
-        // Append the highlighted text as context for the AI
-        fullMessage = `[User has highlighted the following text from the narrative for context]\n---\n${highlightedContext}\n---\n\nUser ${mode === 'iterate' ? 'edit request' : 'question'}: ${message}`;
-        // Show in UI that context was included
-        displayMessage = `📝 "${highlightedContext.length > 100 ? highlightedContext.substring(0, 100) + '...' : highlightedContext}"\n\n${message}`;
-        
-        // Clear the highlighted context after sending
-        clearHighlightedContext();
-    }
-    
-    // Add mode indicator for iterate
-    if (mode === 'iterate') {
-        displayMessage = `✏️ **[Iterate]** ${displayMessage}`;
-    }
-    
-    // Add user message to UI (show the display version)
-    addNarrativeChatMessage('user', displayMessage);
-    
-    // Check if we have a source pack (old narratives won't have one)
-    if (!narrativeChat.currentSourcePack) {
-        addNarrativeChatMessage('assistant', "⚠️ **Source documents not available**\n\nThis narrative was generated before source packs were saved to history. I can still discuss the narrative content itself, but I won't be able to reference the original source documents.\n\nFor full functionality, please generate a new narrative.");
-        setProcessingState(false);
-        return;
-    }
-    
-    // For iterate mode without highlighted text, check if full rewrite might be needed
-    if (mode === 'iterate' && !highlightedContext) {
-        // Store the request and ask for confirmation
-        narrativeChat.pendingIterateRequest = { fullMessage, displayMessage };
-        narrativeChat.awaitingConfirmation = true;
-        
-        addNarrativeChatMessage('assistant', "⚠️ **No text selected**\n\nYou haven't highlighted any specific text. Depending on your request, this might require editing multiple sections or a full rewrite of the narrative.\n\n**Would you like me to:**\n• Proceed with targeted edits where needed\n• Do a full regeneration of the narrative\n\nPlease respond with your preference (e.g., \"proceed with edits\" or \"full regeneration\").");
-        setProcessingState(false);
-        return;
-    }
-    
-    // Add typing indicator - use special iterate indicator if in iterate mode
-    const typingEl = mode === 'iterate' 
-        ? addNarrativeChatEditingIndicator(highlightedContext)
-        : addNarrativeChatTypingIndicator();
-    
-    // Add visual effect to narrative panel if iterating
-    if (mode === 'iterate') {
-        showNarrativeEditingOverlay();
-    }
-    
-    try {
-        let response;
-        
-        if (state.isElectron && window.electronAPI?.narrativeChat) {
-            // Send the message with mode information
-            response = await window.electronAPI.narrativeChat.sendMessage(
-                fullMessage, 
-                narrativeChat.currentNarrativeContent,
-                narrativeChat.currentSourcePack,
-                mode,  // Pass the mode
-                highlightedContext  // Pass highlighted text for iterate
-            );
-        } else {
-            // Fallback simulation
-            await sleep(1500);
-            response = {
-                success: true,
-                message: "I'm sorry, the narrative chat feature requires the Electron backend to be connected."
-            };
-        }
-        
-        // Remove typing indicator
-        typingEl?.remove();
-        
-        // Hide editing overlay
-        hideNarrativeEditingOverlay();
-        
-        if (response.cancelled) {
-            // Request was cancelled, already handled
+        const result = await window.electronAPI.supportingDocs.upload();
+        if (result.canceled) return;
+        if (!result.success) {
+            showToast(result.error || 'Upload failed', 'error');
             return;
         }
-        
-        if (response.success) {
-            // Check if this was an iterate response with updated narrative
-            if (mode === 'iterate' && response.updatedNarrative) {
-                // Capture learning signal for the iteration
-                captureIterationSignal({
-                    userRequest: message,
-                    highlightedText: highlightedContext,
-                    originalNarrative: narrativeChat.currentNarrativeContent,
-                    updatedNarrative: response.updatedNarrative,
-                    section: detectNarrativeSection(highlightedContext)
-                });
-                
-                // Update the narrative display with success flash
-                applyNarrativeUpdate(response.updatedNarrative, response.message);
-                flashNarrativeSuccess();
-            } else {
-                addNarrativeChatMessage('assistant', response.message);
-            }
-        } else {
-            addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${response.error || 'Unknown error'}`);
-        }
-        
+        // Merge into local state
+        state.supportingDocFiles.push(...result.files);
+        renderDocFileList();
+        showToast(`${result.files.length} file(s) added — processing...`, 'info');
+
+        // Save supporting docs to history
+        saveSessionProgress(3);
+
+        // Auto-process immediately after upload
+        await processSupportingDocs();
     } catch (error) {
-        console.error('[NarrativeChat] Error:', error);
-        typingEl?.remove();
-        hideNarrativeEditingOverlay();
-        if (error.name !== 'AbortError') {
-            addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${error.message}`);
-        }
-    } finally {
-        setProcessingState(false);
-        hideNarrativeEditingOverlay();
+        console.error('[Step 3] Upload error:', error);
+        showToast('Upload failed: ' + error.message, 'error');
     }
 }
 
-// Handle confirmation response for iterate mode
-async function handleIterateConfirmation(response) {
-    const lowerResponse = response.toLowerCase();
-    
-    addNarrativeChatMessage('user', response);
-    
-    if (lowerResponse.includes('full') || lowerResponse.includes('regenerat') || lowerResponse.includes('rewrite')) {
-        // User wants full regeneration
-        narrativeChat.awaitingConfirmation = false;
-        
-        // Proceed with full regeneration using the pending request
-        if (narrativeChat.pendingIterateRequest) {
-            const pendingRequest = narrativeChat.pendingIterateRequest; // Store before nulling
-            setProcessingState(true);
-            const typingEl = addNarrativeChatEditingIndicator(false);
-            showNarrativeEditingOverlay();
-            
-            try {
-                const response = await window.electronAPI.narrativeChat.sendMessage(
-                    pendingRequest.fullMessage,
-                    narrativeChat.currentNarrativeContent,
-                    narrativeChat.currentSourcePack,
-                    'iterate',
-                    null,  // No highlighted text
-                    true   // Full rewrite confirmed
-                );
-                
-                typingEl?.remove();
-                hideNarrativeEditingOverlay();
-                
-                if (response.success && response.updatedNarrative) {
-                    // Capture learning signal for full rewrite
-                    captureIterationSignal({
-                        userRequest: pendingRequest.fullMessage,
-                        highlightedText: null,
-                        originalNarrative: narrativeChat.currentNarrativeContent,
-                        updatedNarrative: response.updatedNarrative,
-                        section: null,
-                        iterationType: 'full_rewrite'
-                    });
-                    
-                    applyNarrativeUpdate(response.updatedNarrative, response.message);
-                    flashNarrativeSuccess();
-                } else if (response.success) {
-                    addNarrativeChatMessage('assistant', response.message);
-                } else {
-                    addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${response.error}`);
-                }
-            } catch (error) {
-                typingEl?.remove();
-                hideNarrativeEditingOverlay();
-                addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${error.message}`);
-            } finally {
-                setProcessingState(false);
-                hideNarrativeEditingOverlay();
-            }
-        }
-        
-        narrativeChat.pendingIterateRequest = null;
-    } else if (lowerResponse.includes('proceed') || lowerResponse.includes('edit') || lowerResponse.includes('targeted') || lowerResponse.includes('yes') || lowerResponse.includes('continue')) {
-        // User wants targeted edits
-        narrativeChat.awaitingConfirmation = false;
-        
-        if (narrativeChat.pendingIterateRequest) {
-            const pendingRequest = narrativeChat.pendingIterateRequest; // Store before nulling
-            setProcessingState(true);
-            const typingEl = addNarrativeChatEditingIndicator(false);
-            showNarrativeEditingOverlay();
-            
-            try {
-                const response = await window.electronAPI.narrativeChat.sendMessage(
-                    pendingRequest.fullMessage,
-                    narrativeChat.currentNarrativeContent,
-                    narrativeChat.currentSourcePack,
-                    'iterate',
-                    null,  // No highlighted text
-                    false  // Targeted edits, not full rewrite
-                );
-                
-                typingEl?.remove();
-                hideNarrativeEditingOverlay();
-                
-                if (response.success && response.updatedNarrative) {
-                    // Capture learning signal for targeted edit
-                    captureIterationSignal({
-                        userRequest: pendingRequest.fullMessage,
-                        highlightedText: null,
-                        originalNarrative: narrativeChat.currentNarrativeContent,
-                        updatedNarrative: response.updatedNarrative,
-                        section: null,
-                        iterationType: 'targeted_edit'
-                    });
-                    
-                    applyNarrativeUpdate(response.updatedNarrative, response.message);
-                    flashNarrativeSuccess();
-                } else if (response.success) {
-                    addNarrativeChatMessage('assistant', response.message);
-                } else {
-                    addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${response.error}`);
-                }
-            } catch (error) {
-                typingEl?.remove();
-                hideNarrativeEditingOverlay();
-                addNarrativeChatMessage('assistant', `Sorry, I encountered an error: ${error.message}`);
-            } finally {
-                setProcessingState(false);
-                hideNarrativeEditingOverlay();
-            }
-        }
-        
-        narrativeChat.pendingIterateRequest = null;
-    } else if (lowerResponse.includes('cancel') || lowerResponse.includes('nevermind') || lowerResponse.includes('stop')) {
-        // User wants to cancel
-        narrativeChat.awaitingConfirmation = false;
-        narrativeChat.pendingIterateRequest = null;
-        addNarrativeChatMessage('assistant', "✅ Request cancelled.");
-    } else {
-        // Unclear response, ask again
-        addNarrativeChatMessage('assistant', "I didn't quite understand. Please say:\n• **\"proceed with edits\"** for targeted changes\n• **\"full regeneration\"** for a complete rewrite\n• **\"cancel\"** to cancel this request");
-    }
-}
+let _docProcessingActive = false;
 
-// Apply an updated narrative from iterate mode
-function applyNarrativeUpdate(updatedNarrative, message) {
-    console.log('[NarrativeChat] Applying narrative update...');
-    
-    // Update the narrative content in the display
-    const contentDiv = document.getElementById('narrativeDisplayContent');
-    if (contentDiv) {
-        const htmlContent = renderMarkdownToHtml(updatedNarrative);
-        contentDiv.innerHTML = htmlContent;
-    }
-    
-    // Update the stored narrative content
-    narrativeChat.currentNarrativeContent = updatedNarrative;
-    
-    // Update state
-    if (state.currentDisplayedNarrative) {
-        state.currentDisplayedNarrative.content = updatedNarrative;
-        state.currentDisplayedNarrative.lastEdited = new Date().toISOString();
-    }
-    
-    // Update the history entry (find active narrative within the client session)
-    if (narrativeChat.currentHistoryEntryId) {
-        const historyEntry = state.generatedPacks.find(p => p.id === narrativeChat.currentHistoryEntryId);
-        if (historyEntry && historyEntry.narratives) {
-            const narrativeId = narrativeChat.currentNarrativeId || historyEntry.activeNarrativeId;
-            const narrative = historyEntry.narratives.find(n => n.id === narrativeId);
-            if (narrative) {
-                narrative.content = updatedNarrative;
-                narrative.lastEdited = new Date().toISOString();
-            }
-            
-            // Persist to disk
-            persistHistory();
-        }
-    }
-    
-    // Show success message
-    addNarrativeChatMessage('assistant', `✅ **Narrative updated!**\n\n${message || 'The changes have been applied to the narrative.'}`);
-}
+async function processSupportingDocs() {
+    if (!state.isElectron) return;
 
-// ============================================
-// Learning System - Signal Capture
-// ============================================
+    // Guard: if already processing, the active loop will pick up new files
+    if (_docProcessingActive) return;
+    _docProcessingActive = true;
 
-/**
- * Capture an iteration signal for the learning system
- */
-async function captureIterationSignal(data) {
-    if (!state.isElectron || !window.electronAPI?.learnings) {
-        console.log('[Learnings] Not in Electron, skipping signal capture');
-        return;
-    }
-    
     try {
-        const signal = {
-            type: 'iteration',
-            timestamp: new Date().toISOString(),
-            userRequest: data.userRequest,
-            highlightedText: data.highlightedText?.substring(0, 500), // Truncate for storage
-            section: data.section,
-            iterationType: data.iterationType || 'highlighted',
-            client: state.selectedClient ? {
-                name: state.selectedClient.name,
-                industry: state.selectedClient.industry
-            } : null,
-            industry: state.selectedClient?.industry,
-            outputIntent: state.currentContext?.outputIntent,
-            // Don't store full narratives - just lengths for analysis
-            originalLength: data.originalNarrative?.length || 0,
-            updatedLength: data.updatedNarrative?.length || 0,
-            lengthDelta: (data.updatedNarrative?.length || 0) - (data.originalNarrative?.length || 0)
-        };
-        
-        const result = await window.electronAPI.learnings.captureSignal(signal);
-        console.log('[Learnings] Captured iteration signal:', result.success);
-        
-        // Check if we should run inference (every 5 iterations)
-        const stats = await window.electronAPI.learnings.getStats();
-        if (stats.totalIterations > 0 && stats.totalIterations % 5 === 0) {
-            console.log('[Learnings] Triggering inference run after', stats.totalIterations, 'iterations');
-            window.electronAPI.learnings.runInference().then(result => {
-                if (result.success) {
-                    console.log('[Learnings] Inference complete:', result.result?.overallAssessment);
-                    showToast('🧠 AI learned from your recent edits', 'info');
+        // Loop: keep processing while there are pending files
+        // (handles files uploaded while a previous batch was running)
+        let iterations = 0;
+        const MAX_ITERATIONS = 10; // safety valve for runaway loops
+
+        while (iterations < MAX_ITERATIONS) {
+            iterations++;
+            const pending = state.supportingDocFiles.filter(f => f.status === 'pending' || f.status === 'error');
+            if (pending.length === 0) {
+                if (iterations === 1 && state.supportingDocsCorpus) {
+                    showToast('All documents already processed', 'info');
                 }
-            });
+                break;
+            }
+
+            // Show progress bar
+            if (elements.docProcessBar) elements.docProcessBar.classList.remove('hidden');
+            updateDocProcessProgress(0, pending.length, 'Starting...');
+
+            const result = await window.electronAPI.supportingDocs.process();
+            if (result.success) {
+                // Sync state from backend (includes any files uploaded mid-processing)
+                state.supportingDocFiles = result.files || state.supportingDocFiles;
+                state.supportingDocsCorpus = result.corpus;
+                renderDocFileList();
+                renderCorpusSummary(result.corpus);
+            } else {
+                showToast(result.error || 'Processing failed', 'error');
+                break;
+            }
+        }
+
+        // Final summary toast
+        const doneCount = state.supportingDocFiles.filter(f => f.status === 'done').length;
+        const errCount = state.supportingDocFiles.filter(f => f.status === 'error').length;
+        if (doneCount > 0 && errCount === 0) {
+            showToast(`${doneCount} document(s) processed successfully`, 'success');
+        } else if (doneCount > 0 && errCount > 0) {
+            showToast(`${doneCount} processed, ${errCount} failed — hover files for details`, 'warning');
+        } else if (errCount > 0) {
+            showToast(`${errCount} document(s) failed to process — hover files for details`, 'error');
         }
     } catch (error) {
-        console.error('[Learnings] Error capturing signal:', error);
+        console.error('[Step 3] Process error:', error);
+        showToast('Processing failed: ' + error.message, 'error');
+    } finally {
+        _docProcessingActive = false;
+        if (elements.docProcessBar) elements.docProcessBar.classList.add('hidden');
     }
 }
 
-/**
- * Capture an acceptance signal (user finished without further iteration)
- */
-function captureAcceptanceSignal() {
-    if (!state.isElectron || !window.electronAPI?.learnings) {
+async function removeSupportingDoc(fileId) {
+    if (!state.isElectron) return;
+    try {
+        const result = await window.electronAPI.supportingDocs.remove(fileId);
+        if (result.success) {
+            state.supportingDocFiles = result.files;
+            state.supportingDocsCorpus = result.corpus;
+            renderDocFileList();
+            if (result.corpus) renderCorpusSummary(result.corpus);
+            else if (elements.docCorpusSummary) elements.docCorpusSummary.classList.add('hidden');
+            updateProcessBtnState();
+        }
+    } catch (error) {
+        console.error('[Step 3] Remove error:', error);
+    }
+}
+
+function renderDocFileList() {
+    const container = elements.docFileList;
+    if (!container) return;
+
+    if (state.supportingDocFiles.length === 0) {
+        container.innerHTML = '';
         return;
     }
-    
-    // Defer signal capture to prevent UI blocking
-    setTimeout(async () => {
-        try {
-            const signal = {
-                type: 'acceptance',
-                timestamp: new Date().toISOString(),
-                narrativeId: narrativeChat.currentHistoryEntryId,
-                client: state.selectedClient ? {
-                    name: state.selectedClient.name,
-                    industry: state.selectedClient.industry
-                } : null,
-                industry: state.selectedClient?.industry,
-                outputIntent: state.currentContext?.outputIntent,
-                iterationCount: narrativeChat.iterationCount || 0,
-                wasEdited: (narrativeChat.iterationCount || 0) > 0
-            };
-            
-            await window.electronAPI.learnings.captureSignal(signal);
-            console.log('[Learnings] Captured acceptance signal');
-        } catch (error) {
-            console.error('[Learnings] Error capturing acceptance signal:', error);
-        }
-    }, 0);
-}
 
-/**
- * Capture a generation signal (new narrative was generated)
- */
-function captureGenerationSignal(narrativeContent) {
-    if (!state.isElectron || !window.electronAPI?.learnings) {
-        return;
-    }
-    
-    // Defer signal capture to prevent UI blocking
-    setTimeout(async () => {
-        try {
-            const signal = {
-                type: 'generation',
-                timestamp: new Date().toISOString(),
-                client: state.selectedClient ? {
-                    name: state.selectedClient.name,
-                    industry: state.selectedClient.industry
-                } : null,
-                industry: state.selectedClient?.industry,
-                outputIntent: state.currentContext?.outputIntent,
-                narrativeLength: narrativeContent?.length || 0,
-                wordCount: narrativeContent?.split(/\s+/).length || 0
-            };
-            
-            await window.electronAPI.learnings.captureSignal(signal);
-            console.log('[Learnings] Captured generation signal');
-            
-            // Reset iteration count for this narrative
-            narrativeChat.iterationCount = 0;
-        } catch (error) {
-            console.error('[Learnings] Error capturing generation signal:', error);
-        }
-    }, 0);
-}
-
-/**
- * Detect which section of the narrative the highlighted text belongs to
- */
-function detectNarrativeSection(highlightedText) {
-    if (!highlightedText) return null;
-    
-    const text = highlightedText.toLowerCase();
-    const narrative = narrativeChat.currentNarrativeContent?.toLowerCase() || '';
-    
-    // Define section patterns
-    const sections = [
-        { name: 'opening_belief', patterns: ['opening belief', 'identity', 'current moment', 'stands at'] },
-        { name: 'purpose', patterns: ['purpose', 'why this', 'exists to'] },
-        { name: 'goals', patterns: ['goals', 'strategic goal', 'commercial goal', 'experiential goal', 'objectives'] },
-        { name: 'capabilities', patterns: ['capabilities', 'signature capabilities', 'components', 'pillars'] },
-        { name: 'end_to_end_flow', patterns: ['end-to-end', 'flow', 'execution', 'ambition to'] },
-        { name: 'impact', patterns: ['impact', 'outcomes', 'expected impact', 'strategic impact', 'commercial impact'] },
-        { name: 'executive_summary', patterns: ['executive summary', 'summary', 'overview'] }
-    ];
-    
-    // Find position of highlighted text in narrative
-    const position = narrative.indexOf(text.substring(0, 50));
-    
-    if (position === -1) return null;
-    
-    // Look backwards from position to find section header
-    const textBeforeHighlight = narrative.substring(0, position);
-    
-    // Check which section patterns appear most recently before the highlight
-    let bestMatch = null;
-    let bestPosition = -1;
-    
-    for (const section of sections) {
-        for (const pattern of section.patterns) {
-            const patternPos = textBeforeHighlight.lastIndexOf(pattern);
-            if (patternPos > bestPosition) {
-                bestPosition = patternPos;
-                bestMatch = section.name;
-            }
-        }
-    }
-    
-    return bestMatch;
-}
-
-// Add a message to the narrative chat
-function addNarrativeChatMessage(role, content) {
-    const messagesContainer = document.getElementById('narrativeChatMessages');
-    if (!messagesContainer) return;
-    
-    const messageEl = document.createElement('div');
-    messageEl.className = `chat-message ${role}`;
-    
-    const avatarIcon = role === 'assistant' 
-        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>'
-        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>';
-    
-    // Format content
-    const formattedContent = content
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/\n/g, '<br>');
-    
-    messageEl.innerHTML = `
-        <div class="chat-avatar">${avatarIcon}</div>
-        <div class="chat-content">
-            <div class="chat-bubble">${formattedContent}</div>
-        </div>
-    `;
-    
-    messagesContainer.appendChild(messageEl);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    
-    narrativeChat.messages.push({ role, content });
-    
-    // Save chat history to the current history entry
-    saveChatToHistoryEntry();
-}
-
-// Save current chat messages to the history entry
-function saveChatToHistoryEntry() {
-    if (!narrativeChat.currentHistoryEntryId) return;
-    
-    const historyEntry = state.generatedPacks.find(p => p.id === narrativeChat.currentHistoryEntryId);
-    if (historyEntry) {
-        // Find the active narrative within the entry
-        const narrativeId = narrativeChat.currentNarrativeId || historyEntry.activeNarrativeId;
-        if (narrativeId && historyEntry.narratives) {
-            const narrative = historyEntry.narratives.find(n => n.id === narrativeId);
-            if (narrative) {
-                narrative.chatHistory = [...narrativeChat.messages];
-            }
-        }
-        
-        // Persist to disk
-        persistHistory();
-    }
-}
-
-// Add typing indicator to narrative chat
-function addNarrativeChatTypingIndicator() {
-    const messagesContainer = document.getElementById('narrativeChatMessages');
-    if (!messagesContainer) return null;
-    
-    const typingEl = document.createElement('div');
-    typingEl.className = 'chat-message assistant typing';
-    typingEl.id = 'narrativeChatTypingIndicator';
-    typingEl.innerHTML = `
-        <div class="chat-avatar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
-            </svg>
-        </div>
-        <div class="chat-content">
-            <div class="chat-bubble">
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
-            </div>
-        </div>
-    `;
-    
-    messagesContainer.appendChild(typingEl);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    
-    return typingEl;
-}
-
-// Special editing indicator for iterate mode
-function addNarrativeChatEditingIndicator(highlightedText) {
-    const messagesContainer = document.getElementById('narrativeChatMessages');
-    if (!messagesContainer) return null;
-    
-    const typingEl = document.createElement('div');
-    typingEl.className = 'chat-message assistant typing editing-indicator';
-    typingEl.id = 'narrativeChatTypingIndicator';
-    
-    const editingText = highlightedText 
-        ? 'Editing selected section...'
-        : 'Editing narrative...';
-    
-    typingEl.innerHTML = `
-        <div class="chat-avatar editing">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/>
-                <path d="M19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/>
-            </svg>
-        </div>
-        <div class="chat-content">
-            <div class="chat-bubble editing-bubble">
-                <div class="editing-status">
-                    <span class="editing-icon-pulse"></span>
-                    <span class="editing-text">${editingText}</span>
-                </div>
-                <div class="editing-progress">
-                    <div class="editing-progress-bar"></div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    messagesContainer.appendChild(typingEl);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    
-    return typingEl;
-}
-
-// Show editing overlay on narrative panel
-function showNarrativeEditingOverlay() {
-    const contentDiv = document.getElementById('narrativeDisplayContent');
-    const containerDiv = contentDiv?.closest('.narrative-split-left');
-    
-    if (!containerDiv) return;
-    
-    // Add editing class to content for shimmer effect
-    contentDiv.classList.add('is-editing');
-    
-    // Create overlay if not exists - attach to the container, not the scrollable content
-    let overlay = document.getElementById('narrativeEditingOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'narrativeEditingOverlay';
-        overlay.className = 'narrative-editing-overlay';
-        overlay.innerHTML = `
-            <div class="editing-overlay-content">
-                <svg class="editing-overlay-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/>
+    container.innerHTML = state.supportingDocFiles.map(f => {
+        const statusIcon = getStatusIcon(f.status);
+        const sizeStr = formatFileSize(f.size || 0);
+        const chunkInfo = f.chunkCount ? `<span class="file-chunks">${f.chunkCount} chunks</span>` : '';
+        const errorTip = f.error ? ` title="${f.error}"` : '';
+        return `
+            <div class="doc-file-item" data-id="${f.id}"${errorTip}>
+                <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
                 </svg>
-                <span>Editing...</span>
+                <span class="file-name">${f.fileName}</span>
+                <span class="file-ext">${(f.ext || '').replace('.', '')}</span>
+                <span class="file-size">${sizeStr}</span>
+                ${chunkInfo}
+                ${statusIcon}
+                <button class="file-remove" onclick="removeSupportingDoc('${f.id}')" title="Remove">&times;</button>
             </div>
         `;
-        containerDiv.style.position = 'relative';
-        containerDiv.appendChild(overlay);
+    }).join('');
+}
+
+function getStatusIcon(status) {
+    switch (status) {
+        case 'pending':
+            return '<svg class="file-status status-pending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+        case 'processing':
+            return '<svg class="file-status status-processing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>';
+        case 'done':
+            return '<svg class="file-status status-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+        case 'error':
+            return '<svg class="file-status status-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+        default:
+            return '';
     }
-    
-    // Trigger animation
-    requestAnimationFrame(() => {
-        overlay.classList.add('visible');
+}
+
+function updateDocProcessProgress(current, total, fileName) {
+    if (elements.docProcessLabel) elements.docProcessLabel.textContent = `Processing: ${fileName}`;
+    if (elements.docProcessCount) elements.docProcessCount.textContent = `${current} / ${total}`;
+    const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+    if (elements.docProgressFill) elements.docProgressFill.style.width = `${pct}%`;
+}
+
+function renderCorpusSummary(corpus) {
+    if (!corpus || !elements.docCorpusSummary) return;
+    elements.docCorpusSummary.classList.remove('hidden');
+    if (elements.corpusDocCount) elements.corpusDocCount.textContent = corpus.totalDocuments || 0;
+    if (elements.corpusChunkCount) elements.corpusChunkCount.textContent = corpus.totalChunks || 0;
+    if (elements.corpusSuccessCount) elements.corpusSuccessCount.textContent = corpus.successfulDocuments || 0;
+    if (corpus.failedDocuments > 0) {
+        if (elements.corpusErrorStat) elements.corpusErrorStat.classList.remove('hidden');
+        if (elements.corpusErrorCount) elements.corpusErrorCount.textContent = corpus.failedDocuments;
+    } else {
+        if (elements.corpusErrorStat) elements.corpusErrorStat.classList.add('hidden');
+    }
+}
+
+function updateProcessBtnState() {
+    const pending = state.supportingDocFiles.filter(f => f.status === 'pending' || f.status === 'error');
+    if (elements.processDocsBtn) {
+        elements.processDocsBtn.disabled = pending.length === 0;
+        elements.processDocsBtn.textContent = pending.length > 0
+            ? `Process ${pending.length} Document${pending.length > 1 ? 's' : ''}`
+            : 'All Processed';
+    }
+}
+
+function resetSupportingDocsUI() {
+    state.supportingDocFiles = [];
+    state.supportingDocsCorpus = null;
+    if (elements.docFileList) elements.docFileList.innerHTML = '';
+    if (elements.docProcessBar) elements.docProcessBar.classList.add('hidden');
+    if (elements.docCorpusSummary) elements.docCorpusSummary.classList.add('hidden');
+    updateProcessBtnState();
+    // Also clear on backend
+    if (state.isElectron && window.electronAPI.supportingDocs?.clear) {
+        window.electronAPI.supportingDocs.clear().catch(() => {});
+    }
+}
+
+// Make removeSupportingDoc global so inline onclick works
+window.removeSupportingDoc = removeSupportingDoc;
+
+// ============================================
+// Step 4: Qualification Criteria
+// ============================================
+
+function setupQualificationListeners() {
+    // Generate button
+    if (elements.generateQualBtn) {
+        elements.generateQualBtn.addEventListener('click', () => generateQualification());
+    }
+
+    // Download button
+    if (elements.downloadQualDocBtn) {
+        elements.downloadQualDocBtn.addEventListener('click', () => downloadQualDoc());
+    }
+
+    // Regenerate button
+    if (elements.regenerateQualBtn) {
+        elements.regenerateQualBtn.addEventListener('click', () => generateQualification());
+    }
+
+    // Reset prompt to default
+    if (elements.resetQualPromptBtn) {
+        elements.resetQualPromptBtn.addEventListener('click', async () => {
+            if (state.qualDefaultPrompt !== null) {
+                elements.qualPromptEditor.value = state.qualDefaultPrompt;
+                showToast('Prompt reset to default', 'info');
+            } else {
+                await loadQualificationPrompt();
+                showToast('Prompt reset to default', 'info');
+            }
+        });
+    }
+
+    // Back to Step 3
+    if (elements.backToStep3) {
+        elements.backToStep3.addEventListener('click', () => goToStep(3));
+    }
+
+    // Step 3 → Step 4
+    if (elements.proceedToStep4) {
+        elements.proceedToStep4.addEventListener('click', () => goToStep(4));
+    }
+
+    // Listen for progress from main process
+    if (state.isElectron && window.electronAPI.qualification?.onProgress) {
+        window.electronAPI.qualification.onProgress((data) => {
+            updateQualProgress(data.stage, data.pct);
+        });
+    }
+}
+
+/**
+ * Load the default qualification prompt from settings into the editor
+ */
+async function loadQualificationPrompt() {
+    if (!elements.qualPromptEditor) return;
+
+    // Only load fresh if we haven't loaded yet or it's still empty
+    if (state.qualDefaultPrompt === null && state.isElectron && window.electronAPI.settings?.getQualPrompt) {
+        try {
+            const prompt = await window.electronAPI.settings.getQualPrompt();
+            state.qualDefaultPrompt = prompt || '';
+        } catch (error) {
+            console.error('[Step 4] Error loading qual prompt:', error);
+            state.qualDefaultPrompt = '';
+        }
+    }
+
+    // Only set if the user hasn't already typed something
+    if (!elements.qualPromptEditor.value.trim()) {
+        elements.qualPromptEditor.value = state.qualDefaultPrompt || '';
+    }
+}
+
+/**
+ * Generate qualification document using the prompt and corpus context
+ */
+async function generateQualification() {
+    if (!state.isElectron) {
+        showToast('Qualification generation requires the Electron app', 'error');
+        return;
+    }
+
+    if (state.qualificationGenerating) {
+        showToast('Generation already in progress', 'info');
+        return;
+    }
+
+    const prompt = elements.qualPromptEditor?.value?.trim();
+    if (!prompt) {
+        showToast('Please enter a qualification prompt', 'error');
+        return;
+    }
+
+    if (!state.selectedClient) {
+        showToast('No client selected', 'error');
+        return;
+    }
+
+    // Begin generation
+    state.qualificationGenerating = true;
+    state.qualGenerationStartTime = Date.now();
+
+    // UI: show progress, hide preview, disable buttons
+    if (elements.qualProgress) elements.qualProgress.classList.remove('hidden');
+    if (elements.qualPreview) elements.qualPreview.classList.add('hidden');
+    if (elements.generateQualBtn) elements.generateQualBtn.disabled = true;
+    if (elements.regenerateQualBtn) elements.regenerateQualBtn.disabled = true;
+    updateQualProgress('Initializing...', 0);
+
+    // Start elapsed timer
+    const timerInterval = setInterval(() => {
+        if (!state.qualGenerationStartTime) { clearInterval(timerInterval); return; }
+        const elapsed = Math.floor((Date.now() - state.qualGenerationStartTime) / 1000);
+        const mins = Math.floor(elapsed / 60);
+        const secs = elapsed % 60;
+        if (elements.qualProgressElapsed) {
+            elements.qualProgressElapsed.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+
+    try {
+        const result = await window.electronAPI.qualification.generate(
+            prompt,
+            state.selectedClient.name,
+            state.selectedClient.industry || '',
+            state.selectedClient.geography || ''
+        );
+
+        clearInterval(timerInterval);
+        state.qualificationGenerating = false;
+        state.qualGenerationStartTime = null;
+
+        if (result.success) {
+            state.qualificationMarkdown = result.markdown;
+
+            // Render preview
+            if (elements.qualPreviewContent) {
+                elements.qualPreviewContent.innerHTML = renderMarkdownToHtml(result.markdown);
+            }
+            if (elements.qualPreview) elements.qualPreview.classList.remove('hidden');
+            if (elements.qualProgress) elements.qualProgress.classList.add('hidden');
+
+            // Enable the continue button to Step 5
+            if (elements.proceedToStep5) elements.proceedToStep5.disabled = false;
+
+            // Update corpus summary if it was enriched
+            if (result.corpusSummary) {
+                state.supportingDocsCorpus = result.corpusSummary;
+                updateCorpusSummary(result.corpusSummary);
+            }
+
+            showToast('Qualification document generated successfully', 'success');
+
+            // Save qualification to history
+            saveSessionProgress(4);
+        } else {
+            showToast(result.error || 'Qualification generation failed', 'error');
+            if (elements.qualProgress) elements.qualProgress.classList.add('hidden');
+        }
+    } catch (error) {
+        clearInterval(timerInterval);
+        state.qualificationGenerating = false;
+        state.qualGenerationStartTime = null;
+        console.error('[Step 4] Generation error:', error);
+        showToast('Generation failed: ' + error.message, 'error');
+        if (elements.qualProgress) elements.qualProgress.classList.add('hidden');
+    } finally {
+        if (elements.generateQualBtn) elements.generateQualBtn.disabled = false;
+        if (elements.regenerateQualBtn) elements.regenerateQualBtn.disabled = false;
+    }
+}
+
+/**
+ * Update qualification progress bar UI
+ */
+function updateQualProgress(stage, pct) {
+    const stageLabels = {
+        'generating': 'Generating qualification answers with AI...',
+        'building_doc': 'Building Word document...',
+        'chunking': 'Adding to document corpus...',
+        'done': 'Complete!'
+    };
+    const label = stageLabels[stage] || stage || 'Processing...';
+    if (elements.qualProgressLabel) elements.qualProgressLabel.textContent = label;
+    if (elements.qualProgressFill) {
+        elements.qualProgressFill.style.width = `${Math.min(100, pct || 0)}%`;
+        if (stage === 'generating') {
+            elements.qualProgressFill.classList.add('progress-indeterminate');
+        } else {
+            elements.qualProgressFill.classList.remove('progress-indeterminate');
+        }
+    }
+}
+
+/**
+ * Download the generated qualification Word doc
+ */
+async function downloadQualDoc() {
+    if (!state.isElectron) return;
+
+    try {
+        const result = await window.electronAPI.qualification.download();
+        if (result.success) {
+            showToast('Document saved successfully', 'success');
+        } else if (!result.canceled) {
+            showToast(result.error || 'Download failed', 'error');
+        }
+    } catch (error) {
+        console.error('[Step 4] Download error:', error);
+        showToast('Download failed: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Update the corpus summary display (reusable helper)
+ */
+function updateCorpusSummary(corpus) {
+    if (!corpus) return;
+    if (elements.corpusDocCount) elements.corpusDocCount.textContent = corpus.documentCount || 0;
+    if (elements.corpusChunkCount) elements.corpusChunkCount.textContent = corpus.totalChunks || 0;
+    if (elements.corpusSuccessCount) elements.corpusSuccessCount.textContent = corpus.successCount || 0;
+    if (corpus.errorCount > 0) {
+        if (elements.corpusErrorStat) elements.corpusErrorStat.classList.remove('hidden');
+        if (elements.corpusErrorCount) elements.corpusErrorCount.textContent = corpus.errorCount;
+    }
+}
+
+/**
+ * Reset qualification UI to initial state
+ */
+function resetQualificationUI() {
+    state.qualificationGenerating = false;
+    state.qualificationMarkdown = null;
+    state.qualGenerationStartTime = null;
+
+    if (elements.qualPromptEditor) elements.qualPromptEditor.value = '';
+    if (elements.qualProgress) elements.qualProgress.classList.add('hidden');
+    if (elements.qualPreview) elements.qualPreview.classList.add('hidden');
+    if (elements.qualPreviewContent) elements.qualPreviewContent.innerHTML = '';
+    if (elements.qualProgressFill) elements.qualProgressFill.style.width = '0%';
+    if (elements.qualProgressLabel) elements.qualProgressLabel.textContent = 'Initializing...';
+    if (elements.qualProgressElapsed) elements.qualProgressElapsed.textContent = '0:00';
+    if (elements.generateQualBtn) elements.generateQualBtn.disabled = false;
+    if (elements.proceedToStep5) elements.proceedToStep5.disabled = true;
+}
+
+// ============================================
+// Step 5: Value Case
+// ============================================
+
+function setupValueCaseListeners() {
+    // Generate button
+    if (elements.generateValueCaseBtn) {
+        elements.generateValueCaseBtn.addEventListener('click', () => generateValueCase());
+    }
+
+    // Download button
+    if (elements.downloadValueCaseDocBtn) {
+        elements.downloadValueCaseDocBtn.addEventListener('click', () => downloadValueCaseDoc());
+    }
+
+    // Regenerate button
+    if (elements.regenerateValueCaseBtn) {
+        elements.regenerateValueCaseBtn.addEventListener('click', () => generateValueCase());
+    }
+
+    // Reset prompt to default
+    if (elements.resetValueCasePromptBtn) {
+        elements.resetValueCasePromptBtn.addEventListener('click', async () => {
+            if (state.valueCaseDefaultPrompt !== null) {
+                elements.valueCasePromptEditor.value = state.valueCaseDefaultPrompt;
+                showToast('Prompt reset to default', 'info');
+            } else {
+                await loadValueCasePrompt();
+                showToast('Prompt reset to default', 'info');
+            }
+        });
+    }
+
+    // Back to Step 4
+    if (elements.backToStep4VC) {
+        elements.backToStep4VC.addEventListener('click', () => goToStep(4));
+    }
+
+    // Continue to Step 6 (Provoke)
+    if (elements.proceedToStep6) {
+        elements.proceedToStep6.addEventListener('click', () => goToStep(6));
+    }
+
+    // Listen for progress from main process
+    if (state.isElectron && window.electronAPI.valueCase?.onProgress) {
+        window.electronAPI.valueCase.onProgress((data) => {
+            updateValueCaseProgress(data.stage, data.pct);
+        });
+    }
+}
+
+/**
+ * Load the default value case prompt from settings into the editor
+ */
+async function loadValueCasePrompt() {
+    if (!elements.valueCasePromptEditor) return;
+
+    if (state.valueCaseDefaultPrompt === null && state.isElectron && window.electronAPI.settings?.getValueCasePrompt) {
+        try {
+            const prompt = await window.electronAPI.settings.getValueCasePrompt();
+            state.valueCaseDefaultPrompt = prompt || '';
+        } catch (error) {
+            console.error('[Step 5] Error loading value case prompt:', error);
+            state.valueCaseDefaultPrompt = '';
+        }
+    }
+
+    // Only set if the user hasn't already typed something
+    if (!elements.valueCasePromptEditor.value.trim()) {
+        elements.valueCasePromptEditor.value = state.valueCaseDefaultPrompt || '';
+    }
+}
+
+/**
+ * Generate value case document using the prompt and corpus context
+ */
+async function generateValueCase() {
+    if (!state.isElectron) {
+        showToast('Value case generation requires the Electron app', 'error');
+        return;
+    }
+
+    if (state.valueCaseGenerating) {
+        showToast('Generation already in progress', 'info');
+        return;
+    }
+
+    const prompt = elements.valueCasePromptEditor?.value?.trim();
+    if (!prompt) {
+        showToast('Please enter a value case prompt', 'error');
+        return;
+    }
+
+    if (!state.selectedClient) {
+        showToast('No client selected', 'error');
+        return;
+    }
+
+    // Begin generation
+    state.valueCaseGenerating = true;
+    state.valueCaseGenerationStartTime = Date.now();
+
+    // UI: show progress, hide preview, disable buttons
+    if (elements.valueCaseProgress) elements.valueCaseProgress.classList.remove('hidden');
+    if (elements.valueCasePreview) elements.valueCasePreview.classList.add('hidden');
+    if (elements.generateValueCaseBtn) elements.generateValueCaseBtn.disabled = true;
+    if (elements.regenerateValueCaseBtn) elements.regenerateValueCaseBtn.disabled = true;
+    updateValueCaseProgress('Initializing...', 0);
+
+    // Start elapsed timer
+    const timerInterval = setInterval(() => {
+        if (!state.valueCaseGenerationStartTime) { clearInterval(timerInterval); return; }
+        const elapsed = Math.floor((Date.now() - state.valueCaseGenerationStartTime) / 1000);
+        const mins = Math.floor(elapsed / 60);
+        const secs = elapsed % 60;
+        if (elements.valueCaseProgressElapsed) {
+            elements.valueCaseProgressElapsed.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+
+    try {
+        const result = await window.electronAPI.valueCase.generate(
+            prompt,
+            state.selectedClient.name,
+            state.selectedClient.industry || '',
+            state.selectedClient.geography || ''
+        );
+
+        clearInterval(timerInterval);
+        state.valueCaseGenerating = false;
+        state.valueCaseGenerationStartTime = null;
+
+        if (result.success) {
+            state.valueCaseMarkdown = result.markdown;
+
+            // Render preview
+            if (elements.valueCasePreviewContent) {
+                elements.valueCasePreviewContent.innerHTML = renderMarkdownToHtml(result.markdown);
+            }
+            if (elements.valueCasePreview) elements.valueCasePreview.classList.remove('hidden');
+            if (elements.valueCaseProgress) elements.valueCaseProgress.classList.add('hidden');
+
+            // Enable continue to Provoke
+            if (elements.proceedToStep6) elements.proceedToStep6.disabled = false;
+
+            // Update corpus summary if enriched
+            if (result.corpusSummary) {
+                state.supportingDocsCorpus = result.corpusSummary;
+                updateCorpusSummary(result.corpusSummary);
+            }
+
+            showToast('Value case document generated successfully', 'success');
+
+            // Auto-extract assumptions in the background
+            extractAndRenderAssumptions();
+
+            // Save to history
+            saveSessionProgress(5);
+        } else {
+            showToast(result.error || 'Value case generation failed', 'error');
+            if (elements.valueCaseProgress) elements.valueCaseProgress.classList.add('hidden');
+        }
+    } catch (error) {
+        clearInterval(timerInterval);
+        state.valueCaseGenerating = false;
+        state.valueCaseGenerationStartTime = null;
+        console.error('[Step 5] Generation error:', error);
+        showToast('Generation failed: ' + error.message, 'error');
+        if (elements.valueCaseProgress) elements.valueCaseProgress.classList.add('hidden');
+    } finally {
+        if (elements.generateValueCaseBtn) elements.generateValueCaseBtn.disabled = false;
+        if (elements.regenerateValueCaseBtn) elements.regenerateValueCaseBtn.disabled = false;
+    }
+}
+
+/**
+ * Update value case progress bar UI
+ */
+function updateValueCaseProgress(stage, pct) {
+    const stageLabels = {
+        'generating': 'Generating value case document with AI...',
+        'building_doc': 'Building Word document...',
+        'chunking': 'Adding to document corpus...',
+        'done': 'Complete!'
+    };
+    const label = stageLabels[stage] || stage || 'Processing...';
+    if (elements.valueCaseProgressLabel) elements.valueCaseProgressLabel.textContent = label;
+    if (elements.valueCaseProgressFill) {
+        elements.valueCaseProgressFill.style.width = `${Math.min(100, pct || 0)}%`;
+        if (stage === 'generating') {
+            elements.valueCaseProgressFill.classList.add('progress-indeterminate');
+        } else {
+            elements.valueCaseProgressFill.classList.remove('progress-indeterminate');
+        }
+    }
+}
+
+/**
+ * Download the generated value case Word doc
+ */
+async function downloadValueCaseDoc() {
+    if (!state.isElectron) return;
+
+    try {
+        const result = await window.electronAPI.valueCase.download();
+        if (result.success) {
+            showToast('Document saved successfully', 'success');
+        } else if (!result.canceled) {
+            showToast(result.error || 'Download failed', 'error');
+        }
+    } catch (error) {
+        console.error('[Step 5] Download error:', error);
+        showToast('Download failed: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Reset value case UI to initial state
+ */
+function resetValueCaseUI() {
+    state.valueCaseGenerating = false;
+    state.valueCaseMarkdown = null;
+    state.valueCaseAssumptions = null;
+    state.valueCaseGenerationStartTime = null;
+
+    if (elements.valueCasePromptEditor) elements.valueCasePromptEditor.value = '';
+    if (elements.valueCaseProgress) elements.valueCaseProgress.classList.add('hidden');
+    if (elements.valueCasePreview) elements.valueCasePreview.classList.add('hidden');
+    if (elements.valueCasePreviewContent) elements.valueCasePreviewContent.innerHTML = '';
+    if (elements.assumptionsTableContainer) elements.assumptionsTableContainer.classList.add('hidden');
+    if (elements.assumptionsTableBody) elements.assumptionsTableBody.innerHTML = '';
+    if (elements.valueCaseProgressFill) elements.valueCaseProgressFill.style.width = '0%';
+    if (elements.valueCaseProgressLabel) elements.valueCaseProgressLabel.textContent = 'Initializing...';
+    if (elements.valueCaseProgressElapsed) elements.valueCaseProgressElapsed.textContent = '0:00';
+    if (elements.generateValueCaseBtn) elements.generateValueCaseBtn.disabled = false;
+    if (elements.proceedToStep6) elements.proceedToStep6.disabled = true;
+}
+
+// ============================================
+// Step 5b: Value Case — Assumptions Table
+// ============================================
+
+async function extractAndRenderAssumptions() {
+    if (!state.selectedClient) return;
+
+    // Show container with loading state
+    if (elements.assumptionsTableContainer) elements.assumptionsTableContainer.classList.remove('hidden');
+    if (elements.assumptionsLoading) elements.assumptionsLoading.style.display = 'inline-block';
+    if (elements.assumptionsTableBody) elements.assumptionsTableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#888;">Analysing assumptions…</td></tr>';
+
+    try {
+        const result = await window.electronAPI.valueCase.extractAssumptions(state.selectedClient.name);
+        if (result && result.success && Array.isArray(result.assumptions)) {
+            state.valueCaseAssumptions = result.assumptions;
+            renderAssumptionsTable(result.assumptions);
+            // Persist to history
+            saveSessionProgress(5);
+        } else {
+            if (elements.assumptionsTableBody) {
+                elements.assumptionsTableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#c0392b;">Failed to extract assumptions</td></tr>';
+            }
+        }
+    } catch (err) {
+        console.error('Assumptions extraction error:', err);
+        if (elements.assumptionsTableBody) {
+            elements.assumptionsTableBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#c0392b;">Error extracting assumptions</td></tr>';
+        }
+    } finally {
+        if (elements.assumptionsLoading) elements.assumptionsLoading.style.display = 'none';
+    }
+}
+
+function renderAssumptionsTable(assumptions) {
+    if (!elements.assumptionsTableBody || !Array.isArray(assumptions)) return;
+    if (elements.assumptionsTableContainer) elements.assumptionsTableContainer.classList.remove('hidden');
+
+    const ragIcon = (level) => {
+        const colors = { red: '#e74c3c', amber: '#f39c12', green: '#27ae60' };
+        const labels = { red: 'Red', amber: 'Amber', green: 'Green' };
+        const color = colors[level] || '#999';
+        const label = labels[level] || level;
+        return `<span class="rag-indicator rag-${level}" title="${label}"><span class="rag-dot" style="background:${color};"></span> ${label}</span>`;
+    };
+
+    let html = '';
+    assumptions.forEach((a) => {
+        html += `<tr>
+            <td class="assumption-text">${escapeHtml(a.assumption || '')}</td>
+            <td class="assumption-rag">${ragIcon(a.impact)}</td>
+            <td class="assumption-rag">${ragIcon(a.confidence)}</td>
+        </tr>`;
+    });
+
+    elements.assumptionsTableBody.innerHTML = html;
+}
+
+// ============================================
+// Step 6: Provoke — Origination Engine
+// ============================================
+
+function setupProvocationListeners() {
+    // Generate button
+    if (elements.generateProvokeBtn) {
+        elements.generateProvokeBtn.addEventListener('click', () => generateProvocation());
+    }
+
+    // Download button
+    if (elements.downloadProvokeDocBtn) {
+        elements.downloadProvokeDocBtn.addEventListener('click', () => downloadProvokeDoc());
+    }
+
+    // Regenerate button
+    if (elements.regenerateProvokeBtn) {
+        elements.regenerateProvokeBtn.addEventListener('click', () => generateProvocation());
+    }
+
+    // Reset prompt to default
+    if (elements.resetProvokePromptBtn) {
+        elements.resetProvokePromptBtn.addEventListener('click', async () => {
+            if (state.provokeDefaultPrompt !== null) {
+                elements.provokePromptEditor.value = state.provokeDefaultPrompt;
+                showToast('Prompt reset to default', 'info');
+            } else {
+                await loadProvocationPrompt();
+                showToast('Prompt reset to default', 'info');
+            }
+        });
+    }
+
+    // Back to Step 5 (Value Case)
+    if (elements.backToStep5) {
+        elements.backToStep5.addEventListener('click', () => goToStep(5));
+    }
+
+    // Listen for progress from main process
+    if (state.isElectron && window.electronAPI.provocation?.onProgress) {
+        window.electronAPI.provocation.onProgress((data) => {
+            updateProvokeProgress(data.stage, data.pct);
+        });
+    }
+}
+
+/**
+ * Load the default provocation prompt from settings into the editor
+ */
+async function loadProvocationPrompt() {
+    if (!elements.provokePromptEditor) return;
+
+    if (state.provokeDefaultPrompt === null && state.isElectron && window.electronAPI.settings?.getProvokePrompt) {
+        try {
+            const prompt = await window.electronAPI.settings.getProvokePrompt();
+            state.provokeDefaultPrompt = prompt || '';
+        } catch (error) {
+            console.error('[Step 5] Error loading provoke prompt:', error);
+            state.provokeDefaultPrompt = '';
+        }
+    }
+
+    // Only set if the user hasn't already typed something
+    if (!elements.provokePromptEditor.value.trim()) {
+        elements.provokePromptEditor.value = state.provokeDefaultPrompt || '';
+    }
+}
+
+/**
+ * Generate provocation document using the prompt and corpus context
+ */
+async function generateProvocation() {
+    if (!state.isElectron) {
+        showToast('Provocation generation requires the Electron app', 'error');
+        return;
+    }
+
+    if (state.provocationGenerating) {
+        showToast('Generation already in progress', 'info');
+        return;
+    }
+
+    const prompt = elements.provokePromptEditor?.value?.trim();
+    if (!prompt) {
+        showToast('Please enter a provocation prompt', 'error');
+        return;
+    }
+
+    if (!state.selectedClient) {
+        showToast('No client selected', 'error');
+        return;
+    }
+
+    // Begin generation
+    state.provocationGenerating = true;
+    state.provokeGenerationStartTime = Date.now();
+
+    // UI: show progress, hide preview, disable buttons
+    if (elements.provokeProgress) elements.provokeProgress.classList.remove('hidden');
+    if (elements.provokePreview) elements.provokePreview.classList.add('hidden');
+    if (elements.generateProvokeBtn) elements.generateProvokeBtn.disabled = true;
+    if (elements.regenerateProvokeBtn) elements.regenerateProvokeBtn.disabled = true;
+    updateProvokeProgress('Initializing...', 0);
+
+    // Start elapsed timer
+    const timerInterval = setInterval(() => {
+        if (!state.provokeGenerationStartTime) { clearInterval(timerInterval); return; }
+        const elapsed = Math.floor((Date.now() - state.provokeGenerationStartTime) / 1000);
+        const mins = Math.floor(elapsed / 60);
+        const secs = elapsed % 60;
+        if (elements.provokeProgressElapsed) {
+            elements.provokeProgressElapsed.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+
+    try {
+        const result = await window.electronAPI.provocation.generate(
+            prompt,
+            state.selectedClient.name,
+            state.selectedClient.industry || '',
+            state.selectedClient.geography || ''
+        );
+
+        clearInterval(timerInterval);
+        state.provocationGenerating = false;
+        state.provokeGenerationStartTime = null;
+
+        if (result.success) {
+            state.provocationMarkdown = result.markdown;
+
+            // Render preview
+            if (elements.provokePreviewContent) {
+                elements.provokePreviewContent.innerHTML = renderMarkdownToHtml(result.markdown);
+            }
+            if (elements.provokePreview) elements.provokePreview.classList.remove('hidden');
+            if (elements.provokeProgress) elements.provokeProgress.classList.add('hidden');
+
+            // Update corpus summary if enriched
+            if (result.corpusSummary) {
+                state.supportingDocsCorpus = result.corpusSummary;
+                updateCorpusSummary(result.corpusSummary);
+            }
+
+            showToast('Provocation document generated successfully', 'success');
+
+            // Save provocation to history
+            saveSessionProgress(6);
+        } else {
+            showToast(result.error || 'Provocation generation failed', 'error');
+            if (elements.provokeProgress) elements.provokeProgress.classList.add('hidden');
+        }
+    } catch (error) {
+        clearInterval(timerInterval);
+        state.provocationGenerating = false;
+        state.provokeGenerationStartTime = null;
+        console.error('[Step 6] Provoke generation error:', error);
+        showToast('Generation failed: ' + error.message, 'error');
+        if (elements.provokeProgress) elements.provokeProgress.classList.add('hidden');
+    } finally {
+        if (elements.generateProvokeBtn) elements.generateProvokeBtn.disabled = false;
+        if (elements.regenerateProvokeBtn) elements.regenerateProvokeBtn.disabled = false;
+    }
+}
+
+/**
+ * Update provocation progress bar UI
+ */
+function updateProvokeProgress(stage, pct) {
+    const stageLabels = {
+        'generating': 'Generating provocation document with AI...',
+        'building_doc': 'Building Word document...',
+        'chunking': 'Adding to document corpus...',
+        'done': 'Complete!'
+    };
+    const label = stageLabels[stage] || stage || 'Processing...';
+    if (elements.provokeProgressLabel) elements.provokeProgressLabel.textContent = label;
+    if (elements.provokeProgressFill) {
+        elements.provokeProgressFill.style.width = `${Math.min(100, pct || 0)}%`;
+        if (stage === 'generating') {
+            elements.provokeProgressFill.classList.add('progress-indeterminate');
+        } else {
+            elements.provokeProgressFill.classList.remove('progress-indeterminate');
+        }
+    }
+}
+
+/**
+ * Download the generated provocation Word doc
+ */
+async function downloadProvokeDoc() {
+    if (!state.isElectron) return;
+
+    try {
+        const result = await window.electronAPI.provocation.download();
+        if (result.success) {
+            showToast('Document saved successfully', 'success');
+        } else if (!result.canceled) {
+            showToast(result.error || 'Download failed', 'error');
+        }
+    } catch (error) {
+        console.error('[Step 6] Provoke download error:', error);
+        showToast('Download failed: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Reset provocation UI to initial state
+ */
+function resetProvocationUI() {
+    state.provocationGenerating = false;
+    state.provocationMarkdown = null;
+    state.provokeGenerationStartTime = null;
+
+    if (elements.provokePromptEditor) elements.provokePromptEditor.value = '';
+    if (elements.provokeProgress) elements.provokeProgress.classList.add('hidden');
+    if (elements.provokePreview) elements.provokePreview.classList.add('hidden');
+    if (elements.provokePreviewContent) elements.provokePreviewContent.innerHTML = '';
+    if (elements.provokeProgressFill) elements.provokeProgressFill.style.width = '0%';
+    if (elements.provokeProgressLabel) elements.provokeProgressLabel.textContent = 'Initializing...';
+    if (elements.provokeProgressElapsed) elements.provokeProgressElapsed.textContent = '0:00';
+    if (elements.generateProvokeBtn) elements.generateProvokeBtn.disabled = false;
+}
+
+// ============================================
+// Step 7: Review — C-Suite Consistency & Accuracy Check
+// ============================================
+
+const CSUITE_ROLES = {
+    ceo: { icon: '👤', label: 'CEO', full: 'Chief Executive Officer' },
+    cfo: { icon: '💰', label: 'CFO', full: 'Chief Financial Officer' },
+    coo: { icon: '⚙️', label: 'COO', full: 'Chief Operating Officer' },
+    cto: { icon: '💻', label: 'CTO', full: 'Chief Technology Officer' },
+    cmo: { icon: '📢', label: 'CMO', full: 'Chief Marketing Officer' }
+};
+
+/**
+ * Load C-suite prompts from settings into state
+ */
+async function loadCsuitePrompts() {
+    if (state.isElectron && window.electronAPI.settings?.getCsuitePrompts) {
+        try {
+            state.csuitePrompts = await window.electronAPI.settings.getCsuitePrompts();
+        } catch (e) {
+            console.error('[Step 7] loadCsuitePrompts error:', e);
+        }
+    }
+}
+
+/**
+ * Setup event listeners for the Review step
+ */
+function setupReviewListeners() {
+    // Back to Step 6 (Provoke)
+    if (elements.backToStep6) {
+        elements.backToStep6.addEventListener('click', () => goToStep(6));
+    }
+
+    // Proceed to Step 7 (from Step 6) — reserved for future use
+    if (elements.proceedToStep7) {
+        elements.proceedToStep7.addEventListener('click', () => goToStep(7));
+    }
+
+    // C-Suite tile clicks (tile select, edit button, review button, rewrite button)
+    if (elements.csuiteTilesGrid) {
+        elements.csuiteTilesGrid.addEventListener('click', (e) => {
+            // Check if rewrite button was clicked
+            const rewriteBtn = e.target.closest('.csuite-rewrite-btn');
+            if (rewriteBtn) {
+                e.stopPropagation();
+                const role = rewriteBtn.dataset.role;
+                showRewriteConfirmation(role);
+                return;
+            }
+            // Check if review button was clicked
+            const reviewBtn = e.target.closest('.csuite-review-btn');
+            if (reviewBtn) {
+                e.stopPropagation();
+                const role = reviewBtn.dataset.role;
+                selectCsuiteTile(role);
+                showCsuiteConfirmation(role);
+                return;
+            }
+            // Check if edit button was clicked
+            const editBtn = e.target.closest('.csuite-edit-btn');
+            if (editBtn) {
+                e.stopPropagation();
+                const role = editBtn.dataset.role;
+                openCsuitePromptEditor(role);
+                return;
+            }
+            // Clicking the tile itself selects the persona and shows its checklist
+            const tile = e.target.closest('.csuite-tile');
+            if (tile) {
+                const role = tile.dataset.role;
+                selectCsuiteTile(role);
+            }
+        });
+    }
+
+    // Prompt editor: Save
+    if (elements.saveCsuitePromptBtn) {
+        elements.saveCsuitePromptBtn.addEventListener('click', () => {
+            saveCsuitePromptInline();
+        });
+    }
+
+    // Prompt editor: Cancel
+    if (elements.closeCsuitePromptBtn) {
+        elements.closeCsuitePromptBtn.addEventListener('click', () => {
+            if (elements.csuitePromptEditor) elements.csuitePromptEditor.classList.add('hidden');
+        });
+    }
+
+    // Confirmation: Yes — uses stored action callback for reliable routing
+    if (elements.csuiteConfirmYes) {
+        elements.csuiteConfirmYes.addEventListener('click', () => {
+            if (elements.csuiteConfirmOverlay) elements.csuiteConfirmOverlay.classList.add('hidden');
+            console.log('[Confirm Yes] rewritePending:', state.rewritePending, 'pendingConfirmAction:', typeof state.pendingConfirmAction, 'role:', state.reviewSelectedRole);
+            // Primary routing: use stored action callback (always set by showCsuiteConfirmation or showRewriteConfirmation)
+            if (typeof state.pendingConfirmAction === 'function') {
+                const action = state.pendingConfirmAction;
+                state.pendingConfirmAction = null;
+                state.rewritePending = false;
+                action();
+            } else if (state.rewritePending && state.reviewSelectedRole) {
+                // Fallback: flag-based routing (should never reach here)
+                console.warn('[Confirm Yes] Using fallback flag routing — pendingConfirmAction was null');
+                state.rewritePending = false;
+                rewriteProvokeFromReview(state.reviewSelectedRole);
+            } else if (state.reviewSelectedRole) {
+                console.warn('[Confirm Yes] Using fallback role routing — pendingConfirmAction was null');
+                generateReview(state.reviewSelectedRole);
+            }
+        });
+    }
+
+    // Confirmation: No
+    if (elements.csuiteConfirmNo) {
+        elements.csuiteConfirmNo.addEventListener('click', () => {
+            if (elements.csuiteConfirmOverlay) elements.csuiteConfirmOverlay.classList.add('hidden');
+            state.reviewSelectedRole = null;
+            state.rewritePending = false;
+            state.pendingConfirmAction = null;
+        });
+    }
+
+    // Listen for progress from main process
+    if (state.isElectron && window.electronAPI.review?.onProgress) {
+        window.electronAPI.review.onProgress((data) => {
+            updateReviewProgress(data.stage, data.pct);
+        });
+    }
+}
+
+/**
+ * Open the inline prompt editor for a specific C-suite role
+ */
+function openCsuitePromptEditor(role) {
+    const info = CSUITE_ROLES[role];
+    if (!info) return;
+
+    if (elements.csuitePromptEditorTitle) {
+        elements.csuitePromptEditorTitle.textContent = `Edit ${info.icon} ${info.label} Instructions`;
+    }
+    if (elements.csuitePromptTextarea) {
+        elements.csuitePromptTextarea.value = state.csuitePrompts?.[role] || '';
+        elements.csuitePromptTextarea.dataset.role = role;
+    }
+    if (elements.csuitePromptEditor) elements.csuitePromptEditor.classList.remove('hidden');
+}
+
+/**
+ * Save the inline C-suite prompt edit
+ */
+async function saveCsuitePromptInline() {
+    const role = elements.csuitePromptTextarea?.dataset.role;
+    if (!role) return;
+
+    const newPrompt = elements.csuitePromptTextarea.value || '';
+    state.csuitePrompts[role] = newPrompt;
+
+    // Persist all prompts
+    if (state.isElectron && window.electronAPI.settings?.saveCsuitePrompts) {
+        try {
+            await window.electronAPI.settings.saveCsuitePrompts(state.csuitePrompts);
+            showToast(`${CSUITE_ROLES[role]?.label || role.toUpperCase()} prompt saved`, 'success');
+        } catch (e) {
+            console.error('[Step 7] saveCsuitePromptInline error:', e);
+            showToast('Failed to save prompt', 'error');
+        }
+    }
+    if (elements.csuitePromptEditor) elements.csuitePromptEditor.classList.add('hidden');
+}
+
+/**
+ * Select a C-suite tile — highlights it and shows its checklist (if any)
+ */
+function selectCsuiteTile(role) {
+    const info = CSUITE_ROLES[role];
+    if (!info) return;
+
+    state.reviewSelectedRole = role;
+
+    // Highlight selected tile
+    document.querySelectorAll('.csuite-tile').forEach(t => t.classList.remove('active'));
+    const tile = document.querySelector(`.csuite-tile[data-role="${role}"]`);
+    if (tile) tile.classList.add('active');
+
+    // Show only this role's checklist panel, hide others
+    if (elements.reviewChecklistsContainer) {
+        elements.reviewChecklistsContainer.querySelectorAll('.review-checklist-panel').forEach(p => {
+            if (p.dataset.role === role) {
+                p.classList.remove('hidden');
+                p.classList.add('expanded');
+            } else {
+                p.classList.add('hidden');
+            }
+        });
+    }
+}
+
+/**
+ * Show the confirmation modal for running a review as a C-suite role
+ */
+function showCsuiteConfirmation(role) {
+    const info = CSUITE_ROLES[role];
+    if (!info) return;
+
+    state.reviewSelectedRole = role;
+    state.rewritePending = false;
+    // Store the EXACT action to perform when Yes is clicked
+    state.pendingConfirmAction = () => generateReview(role);
+
+    if (elements.csuiteConfirmIcon) elements.csuiteConfirmIcon.textContent = info.icon;
+    if (elements.csuiteConfirmTitle) elements.csuiteConfirmTitle.textContent = `Run review as ${info.label}?`;
+    if (elements.csuiteConfirmDesc) elements.csuiteConfirmDesc.textContent = `The AI will review the qualification and provocation documents from the perspective of the ${info.full}, focusing on their specific areas of concern.`;
+    if (elements.csuiteConfirmYes) elements.csuiteConfirmYes.textContent = 'Yes, Run Review';
+    if (elements.csuiteConfirmOverlay) elements.csuiteConfirmOverlay.classList.remove('hidden');
+}
+
+/**
+ * Confirm rewrite of the provoke document based on a review
+ */
+function showRewriteConfirmation(role) {
+    const info = CSUITE_ROLES[role];
+    if (!info) return;
+
+    const reviewData = state.reviewsByRole[role];
+    if (!reviewData || !(reviewData.changes || reviewData)) {
+        console.warn('[Rewrite] No review in state.reviewsByRole for role:', role, '— available:', Object.keys(state.reviewsByRole));
+        showToast('No review available for this role yet', 'info');
+        return;
+    }
+
+    // Collect the checked changes from this role's checklist
+    const panel = elements.reviewChecklistsContainer?.querySelector(`.review-checklist-panel[data-role="${role}"]`);
+    const checkedChanges = [];
+    if (panel) {
+        panel.querySelectorAll('.review-checklist-checkbox:checked').forEach(cb => {
+            const item = cb.closest('.review-checklist-item');
+            if (item) {
+                checkedChanges.push({
+                    title: item.querySelector('.review-checklist-item-title')?.textContent || '',
+                    detail: item.querySelector('.review-checklist-item-detail')?.textContent || ''
+                });
+            }
+        });
+    }
+
+    if (checkedChanges.length === 0) {
+        showToast(`Select at least one change from the ${info.label} checklist first`, 'info');
+        return;
+    }
+
+    // Reuse the confirmation overlay with rewrite-specific text
+    state.reviewSelectedRole = role;
+    state.rewritePending = true;
+    state._pendingRewriteChanges = checkedChanges; // stash for the action callback
+    // Store the EXACT action to perform when Yes is clicked
+    state.pendingConfirmAction = () => rewriteProvokeFromReview(role, checkedChanges);
+    console.log('[Rewrite] pendingConfirmAction set for role:', role, 'changes:', checkedChanges.length);
+
+    if (elements.csuiteConfirmIcon) elements.csuiteConfirmIcon.textContent = '🔄';
+    if (elements.csuiteConfirmTitle) elements.csuiteConfirmTitle.textContent = `Apply ${checkedChanges.length} ${info.label} edit${checkedChanges.length !== 1 ? 's' : ''}?`;
+    if (elements.csuiteConfirmDesc) elements.csuiteConfirmDesc.textContent = `The AI will apply the ${checkedChanges.length} selected change${checkedChanges.length !== 1 ? 's' : ''} from the ${info.label} review to produce a new version of the provoke narrative. The original will be preserved.`;
+    if (elements.csuiteConfirmYes) elements.csuiteConfirmYes.textContent = 'Yes, Apply Edits';
+    if (elements.csuiteConfirmOverlay) elements.csuiteConfirmOverlay.classList.remove('hidden');
+}
+
+/**
+ * Agentically rewrite the provoke narrative using review feedback
+ */
+async function rewriteProvokeFromReview(role, selectedChanges) {
+    if (!state.isElectron) return;
+
+    const roleInfo = CSUITE_ROLES[role];
+    const roleName = roleInfo?.label || role.toUpperCase();
+    const changes = selectedChanges || state._pendingRewriteChanges || [];
+
+    if (changes.length === 0) {
+        showToast('No changes selected', 'info');
+        return;
+    }
+
+    // Show progress UI
+    state.reviewGenerating = true;
+    state.reviewGenerationStartTime = Date.now();
+    if (elements.reviewProgress) elements.reviewProgress.classList.remove('hidden');
+    updateReviewProgress(`Rewriting provoke based on ${roleName} review...`, 0);
+
+    // Start elapsed timer
+    const timerInterval = setInterval(() => {
+        if (!state.reviewGenerationStartTime) { clearInterval(timerInterval); return; }
+        const elapsed = Math.floor((Date.now() - state.reviewGenerationStartTime) / 1000);
+        const mins = Math.floor(elapsed / 60);
+        const secs = elapsed % 60;
+        if (elements.reviewProgressElapsed) {
+            elements.reviewProgressElapsed.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+
+    try {
+        const result = await window.electronAPI.provocation.rewrite(
+            state.selectedClient?.name || 'Client',
+            role,
+            changes
+        );
+
+        clearInterval(timerInterval);
+        state.reviewGenerating = false;
+        state.reviewGenerationStartTime = null;
+
+        if (result.success) {
+            // Store the new version
+            state.provokeVersions.push({
+                label: `Narrative Provoke ${roleName} Edits`,
+                markdown: result.markdown,
+                fileName: result.fileName,
+                role: role,
+                timestamp: Date.now()
+            });
+
+            if (elements.reviewProgress) elements.reviewProgress.classList.add('hidden');
+
+            // Refresh asset summary to show all versions
+            renderReviewAssetSummary();
+
+            showToast(`Provoke rewritten based on ${roleName} review`, 'success');
+            saveSessionProgress(7);
+        } else {
+            showToast(result.error || 'Rewrite failed', 'error');
+            if (elements.reviewProgress) elements.reviewProgress.classList.add('hidden');
+        }
+    } catch (error) {
+        clearInterval(timerInterval);
+        state.reviewGenerating = false;
+        state.reviewGenerationStartTime = null;
+        console.error('[Rewrite] Error:', error);
+        showToast('Rewrite failed: ' + error.message, 'error');
+        if (elements.reviewProgress) elements.reviewProgress.classList.add('hidden');
+    }
+}
+
+/**
+ * Render asset summary cards showing all generated documents
+ */
+async function renderReviewAssetSummary() {
+    if (!elements.reviewAssetsGrid) return;
+
+    let assets = [];
+    if (state.isElectron && window.electronAPI.review?.getAssets) {
+        try {
+            assets = await window.electronAPI.review.getAssets();
+        } catch (e) {
+            console.error('[Step 7] getAssets error:', e);
+        }
+    }
+
+    if (assets.length === 0) {
+        elements.reviewAssetsGrid.innerHTML = '<p class="text-muted" style="grid-column:1/-1;">No documents generated yet.</p>';
+        return;
+    }
+
+    const icons = {
+        qualification: '📋',
+        valueCase: '💼',
+        provocation: '🎯',
+        'provocation-rewrite': '🔄'
+    };
+
+    elements.reviewAssetsGrid.innerHTML = assets.map(a => {
+        const sizeKB = a.size ? Math.round(a.size / 1024) : 0;
+        const icon = icons[a.type] || '📄';
+        // Build the data attributes for the download button
+        let dlAttr;
+        if (a.versionIndex !== undefined) {
+            dlAttr = `data-asset-type="provocation-version" data-version-index="${a.versionIndex}"`;
+        } else {
+            dlAttr = `data-asset-type="${a.type}"`;
+        }
+        return `
+            <div class="review-asset-card">
+                <div class="review-asset-icon">${icon}</div>
+                <div class="review-asset-info">
+                    <div class="review-asset-label">${a.label}</div>
+                    <div class="review-asset-file">${a.fileName}</div>
+                    <div class="review-asset-size">${sizeKB} KB</div>
+                </div>
+                <button class="btn btn-sm btn-outline review-asset-dl" ${dlAttr} title="Download">⬇️</button>
+            </div>
+        `;
+    }).join('');
+
+    // Wire download buttons for each asset
+    elements.reviewAssetsGrid.querySelectorAll('.review-asset-dl').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const type = btn.dataset.assetType;
+            if (type === 'qualification' && window.electronAPI.qualification?.download) {
+                const r = await window.electronAPI.qualification.download();
+                if (r.success) showToast('Qualification doc saved', 'success');
+                else if (!r.canceled) showToast(r.error || 'Download failed', 'error');
+            } else if (type === 'valueCase' && window.electronAPI.valueCase?.download) {
+                const r = await window.electronAPI.valueCase.download();
+                if (r.success) showToast('Value Case doc saved', 'success');
+                else if (!r.canceled) showToast(r.error || 'Download failed', 'error');
+            } else if (type === 'provocation' && window.electronAPI.provocation?.download) {
+                const r = await window.electronAPI.provocation.download();
+                if (r.success) showToast('Provocation doc saved', 'success');
+                else if (!r.canceled) showToast(r.error || 'Download failed', 'error');
+            } else if (type === 'provocation-version' && window.electronAPI.provocation?.downloadVersion) {
+                const idx = parseInt(btn.dataset.versionIndex, 10);
+                const r = await window.electronAPI.provocation.downloadVersion(idx);
+                if (r.success) showToast('Provoke version saved', 'success');
+                else if (!r.canceled) showToast(r.error || 'Download failed', 'error');
+            }
+        });
     });
 }
 
-// Hide editing overlay
-function hideNarrativeEditingOverlay() {
-    const overlay = document.getElementById('narrativeEditingOverlay');
-    const contentDiv = document.getElementById('narrativeDisplayContent');
-    
-    contentDiv?.classList.remove('is-editing');
-    
-    if (overlay) {
-        overlay.classList.remove('visible');
-        setTimeout(() => overlay.remove(), 300);
+/**
+ * Generate the review document with a specific C-suite persona
+ */
+async function generateReview(role) {
+    if (!state.isElectron) {
+        showToast('Review generation requires the Electron app', 'error');
+        return;
+    }
+
+    if (state.reviewGenerating) {
+        showToast('Review already in progress', 'info');
+        return;
+    }
+
+    if (!state.selectedClient) {
+        showToast('No client selected', 'error');
+        return;
+    }
+
+    if (!role) {
+        showToast('Select a C-suite reviewer first', 'info');
+        return;
+    }
+
+    const roleInfo = CSUITE_ROLES[role];
+    const rolePrompt = state.csuitePrompts?.[role] || '';
+
+    // Begin generation
+    state.reviewGenerating = true;
+    state.reviewSelectedRole = role;
+    state.reviewGenerationStartTime = Date.now();
+
+    // Hide prompt editor and tiles area during generation
+    if (elements.csuitePromptEditor) elements.csuitePromptEditor.classList.add('hidden');
+
+    // UI: show progress
+    if (elements.reviewProgress) elements.reviewProgress.classList.remove('hidden');
+    updateReviewProgress(`Running ${roleInfo?.label || role.toUpperCase()} review...`, 0);
+
+    // Start elapsed timer
+    const timerInterval = setInterval(() => {
+        if (!state.reviewGenerationStartTime) { clearInterval(timerInterval); return; }
+        const elapsed = Math.floor((Date.now() - state.reviewGenerationStartTime) / 1000);
+        const mins = Math.floor(elapsed / 60);
+        const secs = elapsed % 60;
+        if (elements.reviewProgressElapsed) {
+            elements.reviewProgressElapsed.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+
+    try {
+        const result = await window.electronAPI.review.generate(
+            state.selectedClient.name,
+            role,
+            rolePrompt
+        );
+
+        clearInterval(timerInterval);
+        state.reviewGenerating = false;
+        state.reviewGenerationStartTime = null;
+
+        if (result.success) {
+            // Store changes and questions per role
+            state.reviewsByRole[role] = {
+                changes: result.changes || [],
+                questions: result.questions || []
+            };
+
+            // Render the checklist + questions for this role and show it
+            renderReviewChecklist(role, result.changes || [], result.questions || []);
+            selectCsuiteTile(role);
+
+            if (elements.reviewProgress) elements.reviewProgress.classList.add('hidden');
+
+            // Show rewrite button on that tile
+            const rewriteBtn = document.querySelector(`.csuite-rewrite-btn[data-role="${role}"]`);
+            if (rewriteBtn) rewriteBtn.classList.remove('hidden');
+
+            // Refresh asset summary
+            renderReviewAssetSummary();
+
+            const qCount = (result.questions || []).length;
+            showToast(`${roleInfo?.label || role.toUpperCase()} review: ${(result.changes || []).length} changes, ${qCount} questions`, 'success');
+
+            // Save review to history
+            saveSessionProgress(7);
+        } else {
+            showToast(result.error || 'Review generation failed', 'error');
+            if (elements.reviewProgress) elements.reviewProgress.classList.add('hidden');
+        }
+    } catch (error) {
+        clearInterval(timerInterval);
+        state.reviewGenerating = false;
+        state.reviewGenerationStartTime = null;
+        console.error('[Step 7] Review generation error:', error);
+        showToast('Review failed: ' + error.message, 'error');
+        if (elements.reviewProgress) elements.reviewProgress.classList.add('hidden');
     }
 }
 
-// Flash success effect on narrative after update
-function flashNarrativeSuccess() {
-    const contentDiv = document.getElementById('narrativeDisplayContent');
-    if (!contentDiv) return;
-    
-    contentDiv.classList.add('update-success');
-    setTimeout(() => {
-        contentDiv.classList.remove('update-success');
-    }, 1500);
+/**
+ * Render a collapsible checklist of recommended changes for a C-suite role.
+ * If a checklist for this role already exists, it is replaced.
+ */
+function renderReviewChecklist(role, changes, questions) {
+    const container = elements.reviewChecklistsContainer;
+    if (!container) return;
+
+    const roleInfo = CSUITE_ROLES[role] || {};
+    const existingPanel = container.querySelector(`.review-checklist-panel[data-role="${role}"]`);
+    if (existingPanel) existingPanel.remove();
+
+    const hasChanges = changes && changes.length > 0;
+    const hasQuestions = questions && questions.length > 0;
+    if (!hasChanges && !hasQuestions) return;
+
+    const panel = document.createElement('div');
+    panel.className = 'review-checklist-panel';
+    panel.dataset.role = role;
+
+    // ---- CHANGES SECTION ----
+    if (hasChanges) {
+        const changesSection = document.createElement('div');
+        changesSection.className = 'review-section review-changes-section';
+
+        const changesHeader = document.createElement('div');
+        changesHeader.className = 'review-checklist-header';
+        changesHeader.innerHTML = `
+            <div class="review-checklist-header-left">
+                <span class="review-checklist-icon">✏️</span>
+                <span class="review-checklist-title">Recommended Changes</span>
+                <span class="review-checklist-count">${changes.length} change${changes.length !== 1 ? 's' : ''}</span>
+            </div>
+            <svg class="review-checklist-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <polyline points="6 9 12 15 18 9"/>
+            </svg>
+        `;
+        changesHeader.addEventListener('click', () => {
+            changesSection.classList.toggle('expanded');
+        });
+
+        const changesBody = document.createElement('div');
+        changesBody.className = 'review-checklist-body';
+
+        for (const change of changes) {
+            const item = document.createElement('label');
+            item.className = 'review-checklist-item';
+            item.innerHTML = `
+                <input type="checkbox" class="review-checklist-checkbox" data-change-id="${change.id || ''}">
+                <div class="review-checklist-item-content">
+                    <div class="review-checklist-item-title">${escapeHtml(change.title)}</div>
+                    <div class="review-checklist-item-detail">${escapeHtml(change.detail)}</div>
+                </div>
+            `;
+            changesBody.appendChild(item);
+        }
+
+        changesSection.appendChild(changesHeader);
+        changesSection.appendChild(changesBody);
+        changesSection.classList.add('expanded');
+        panel.appendChild(changesSection);
+    }
+
+    // ---- QUESTIONS SECTION ----
+    if (hasQuestions) {
+        const questionsSection = document.createElement('div');
+        questionsSection.className = 'review-section review-questions-section';
+
+        const questionsHeader = document.createElement('div');
+        questionsHeader.className = 'review-checklist-header review-questions-header';
+        questionsHeader.innerHTML = `
+            <div class="review-checklist-header-left">
+                <span class="review-checklist-icon">❓</span>
+                <span class="review-checklist-title">Likely ${roleInfo.label || role.toUpperCase()} Questions</span>
+                <span class="review-checklist-count">${questions.length} question${questions.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="review-questions-header-right">
+                <button class="review-questions-dl-btn" data-role="${role}" title="Download questions as Word doc">⬇️</button>
+                <svg class="review-checklist-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </div>
+        `;
+        // Expand/collapse on header click (but not on download button)
+        questionsHeader.addEventListener('click', (e) => {
+            if (e.target.closest('.review-questions-dl-btn')) return;
+            questionsSection.classList.toggle('expanded');
+        });
+        // Download questions button
+        questionsHeader.querySelector('.review-questions-dl-btn').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!window.electronAPI?.review?.downloadQuestions) {
+                showToast('Download not available', 'error');
+                return;
+            }
+            try {
+                const r = await window.electronAPI.review.downloadQuestions(role);
+                if (r.success) showToast('Questions document saved', 'success');
+                else if (!r.canceled) showToast(r.error || 'Download failed', 'error');
+            } catch (err) {
+                showToast('Download failed: ' + err.message, 'error');
+            }
+        });
+
+        const questionsBody = document.createElement('div');
+        questionsBody.className = 'review-checklist-body review-questions-body';
+
+        for (const q of questions) {
+            const qItem = document.createElement('div');
+            qItem.className = 'review-question-item';
+            qItem.innerHTML = `
+                <span class="review-question-bullet">•</span>
+                <span class="review-question-text">${escapeHtml(q.text || q)}</span>
+            `;
+            questionsBody.appendChild(qItem);
+        }
+
+        questionsSection.appendChild(questionsHeader);
+        questionsSection.appendChild(questionsBody);
+        questionsSection.classList.add('expanded');
+        panel.appendChild(questionsSection);
+    }
+
+    // Start hidden — selectCsuiteTile() controls which panel is visible
+    panel.classList.add('hidden');
+
+    container.appendChild(panel);
+}
+
+/**
+ * Escape HTML special characters for safe insertion
+ */
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Update review progress bar UI
+ */
+function updateReviewProgress(stage, pct) {
+    const stageLabels = {
+        'reviewing': 'AI is reviewing documents...',
+        'rewriting': 'AI is rewriting the provoke based on review...',
+        'building_doc': 'Building review Word document...',
+        'building_rewrite': 'Building rewritten provoke Word document...',
+        'done': 'Complete!'
+    };
+    const label = stageLabels[stage] || stage || 'Processing...';
+    if (elements.reviewProgressLabel) elements.reviewProgressLabel.textContent = label;
+    if (elements.reviewProgressFill) {
+        elements.reviewProgressFill.style.width = `${Math.min(100, pct || 0)}%`;
+        // Add pulsing animation during active AI processing stages
+        if (stage === 'reviewing' || stage === 'rewriting') {
+            elements.reviewProgressFill.classList.add('progress-indeterminate');
+        } else {
+            elements.reviewProgressFill.classList.remove('progress-indeterminate');
+        }
+    }
+}
+
+/**
+ * Reset review UI to initial state
+ */
+function resetReviewUI() {
+    state.reviewGenerating = false;
+    state.reviewMarkdown = null;
+    state.reviewGenerationStartTime = null;
+    state.reviewSelectedRole = null;
+    state.reviewsByRole = {};
+    state.provokeVersions = [];
+
+    if (elements.reviewProgress) elements.reviewProgress.classList.add('hidden');
+    if (elements.reviewChecklistsContainer) elements.reviewChecklistsContainer.innerHTML = '';
+    if (elements.reviewProgressFill) elements.reviewProgressFill.style.width = '0%';
+    if (elements.reviewProgressLabel) elements.reviewProgressLabel.textContent = 'Initializing...';
+    if (elements.reviewProgressElapsed) elements.reviewProgressElapsed.textContent = '0:00';
+    if (elements.reviewAssetsGrid) elements.reviewAssetsGrid.innerHTML = '';
+    if (elements.csuitePromptEditor) elements.csuitePromptEditor.classList.add('hidden');
+    if (elements.csuiteConfirmOverlay) elements.csuiteConfirmOverlay.classList.add('hidden');
+    document.querySelectorAll('.csuite-tile').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.csuite-rewrite-btn').forEach(b => b.classList.add('hidden'));
 }
 
 // Render markdown to HTML (basic conversion)
@@ -3474,12 +2986,12 @@ function renderMarkdownToHtml(markdown) {
         .replace(/(?<![*<])\*([^*<>]+)\*(?![*>])/g, '<em>$1</em>')
         // Bullet points
         .replace(/^- (.+)$/gm, '<li>$1</li>')
-        .replace(/^• (.+)$/gm, '<li>$1</li>')
+        .replace(/^â€¢ (.+)$/gm, '<li>$1</li>')
         // Numbered lists
         .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
         // Horizontal rules
         .replace(/^---$/gm, '<hr>')
-        .replace(/^───+$/gm, '<hr>')
+        .replace(/^â”€â”€â”€+$/gm, '<hr>')
         // Blockquotes
         .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
         // Paragraphs (double newline)
@@ -3505,12 +3017,15 @@ function renderMarkdownToHtml(markdown) {
     html = html.replace(/<br><table/g, '<table');
     html = html.replace(/<\/table><br>/g, '</table>');
     
-    // Final cleanup: catch ANY remaining ** patterns (multiple passes)
-    // This catches edge cases the earlier regex missed
-    while (html.includes('**')) {
-        html = html.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
-        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    }
+    // Final cleanup: one more pass for any remaining paired ** patterns,
+    // then strip any leftover unpaired ** so they don't cause display issues
+    html = html.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*\*/g, '');   // remove any unpaired **
+    html = html.replace(/(?<![<\/\w])\*([^*<>]+)\*(?![>\w])/g, '<em>$1</em>'); // remaining paired *
+    html = html.replace(/(?<![\w])\*(?![\w*])/g, ''); // strip truly orphaned *
+
+    // Strip leftover heading markers that didn't get matched (e.g. inside table cells or inline)
+    html = html.replace(/^#{1,6}\s+/gm, '');
     
     return html;
 }
@@ -3613,1182 +3128,6 @@ function convertTableToHtml(rows) {
     return html;
 }
 
-// Hide narrative display section
-function hideNarrativeDisplay() {
-    const section = document.getElementById('narrativeDisplaySection');
-    if (section) {
-        section.style.display = 'none';
-    }
-}
-
-// Reset Intel Pack section to initial state
-function resetIntelPackSection() {
-    const btn = document.getElementById('generateIntelPackBtn');
-    const loading = document.getElementById('intelPackLoading');
-    const success = document.getElementById('intelPackSuccess');
-    
-    if (btn) btn.style.display = 'flex';
-    if (loading) loading.style.display = 'none';
-    if (success) success.style.display = 'none';
-}
-
-// Generate Client Intel Pack
-async function generateClientIntelPack() {
-    const btn = document.getElementById('generateIntelPackBtn');
-    const loading = document.getElementById('intelPackLoading');
-    const success = document.getElementById('intelPackSuccess');
-    const downloadLink = document.getElementById('intelPackDownloadLink');
-    
-    // Get current narrative
-    const currentNarrative = state.currentDisplayedNarrative;
-    if (!currentNarrative || !currentNarrative.content) {
-        showNotification('No narrative available. Please generate a narrative first.', 'error');
-        return;
-    }
-    
-    // Get POC document content
-    if (!state.pocFile || !state.pocFile.content) {
-        showNotification('No POC document found. Please upload a POC document in Step 1.', 'error');
-        return;
-    }
-    
-    // Show loading state
-    if (btn) btn.style.display = 'none';
-    if (loading) loading.style.display = 'flex';
-    if (success) success.style.display = 'none';
-    
-    try {
-        // Call the backend to generate the Intel Pack
-        const result = await window.electronAPI.intelPack.generate({
-            narrative: currentNarrative.content,
-            pocContent: state.pocFile.content,
-            clientName: state.selectedClient?.name || 'Client'
-        });
-        
-        if (result.success) {
-            // Show success state
-            if (loading) loading.style.display = 'none';
-            if (success) success.style.display = 'flex';
-            
-            // Update download link
-            if (downloadLink && result.filePath) {
-                downloadLink.onclick = () => {
-                    window.electronAPI.shell.openPath(result.filePath);
-                };
-            }
-            
-            showNotification('Client Intel Pack generated successfully!', 'success');
-        } else {
-            throw new Error(result.error || 'Failed to generate Intel Pack');
-        }
-    } catch (error) {
-        console.error('Error generating Intel Pack:', error);
-        showNotification(`Error generating Intel Pack: ${error.message}`, 'error');
-        
-        // Reset to button state
-        resetIntelPackSection();
-    }
-}
-
-// Render narrative history list
-function renderNarrativeHistory(narratives) {
-    const historySection = document.getElementById('narrativeHistorySection');
-    const historyList = document.getElementById('narrativeHistoryList');
-    const historyCount = document.getElementById('narrativeHistoryCount');
-    
-    if (!historySection || !historyList) return;
-    
-    // Show/hide based on count (only show if more than 1 narrative)
-    if (!narratives || narratives.length <= 1) {
-        historySection.style.display = 'none';
-        return;
-    }
-    
-    historySection.style.display = 'block';
-    historyCount.textContent = narratives.length;
-    
-    // Render history items (skip first since it's shown as current)
-    historyList.innerHTML = narratives.slice(1).map((narrative, index) => {
-        const date = new Date(narrative.timestamp);
-        const dateStr = date.toLocaleDateString();
-        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        return `
-            <div class="narrative-history-item" data-narrative-id="${narrative.id}" onclick="selectNarrativeFromHistory('${narrative.id}')">
-                <div class="narrative-history-item-info">
-                    <span class="narrative-history-item-date">${dateStr} at ${timeStr}</span>
-                    <span class="narrative-history-item-meta">${narrative.wordCount || 0} words • ${narrative.outputIntent || 'Narrative'}</span>
-                </div>
-                <div class="narrative-history-item-actions">
-                    <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); deleteNarrativeFromHistory('${narrative.id}')" title="Delete">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-// Select a narrative from history
-function selectNarrativeFromHistory(narrativeId) {
-    const narrative = state.clientNarratives?.find(n => n.id === narrativeId);
-    if (narrative) {
-        displayNarrative(narrative);
-    }
-}
-
-// Update active state in history list
-function updateNarrativeHistoryActiveState(activeId) {
-    const items = document.querySelectorAll('.narrative-history-item');
-    items.forEach(item => {
-        if (item.dataset.narrativeId === activeId) {
-            item.classList.add('active');
-        } else {
-            item.classList.remove('active');
-        }
-    });
-}
-
-// Delete a narrative from history
-async function deleteNarrativeFromHistory(narrativeId) {
-    if (!confirm('Delete this narrative?')) return;
-    
-    if (state.isElectron && window.electronAPI?.narratives && state.selectedClient?.id) {
-        try {
-            await window.electronAPI.narratives.delete(state.selectedClient.id, narrativeId);
-            showToast('Narrative deleted', 'success');
-            
-            // Reload narratives
-            await loadClientNarratives(state.selectedClient.id);
-        } catch (error) {
-            console.error('[Narrative] Error deleting:', error);
-            showToast('Failed to delete narrative', 'error');
-        }
-    }
-}
-
-// Copy narrative to clipboard
-function copyNarrativeToClipboard() {
-    const content = state.currentDisplayedNarrative?.content;
-    if (content) {
-        navigator.clipboard.writeText(content).then(() => {
-            showToast('Narrative copied to clipboard', 'success');
-            // Capture acceptance signal - user is exporting the narrative
-            captureAcceptanceSignal();
-        }).catch(err => {
-            showToast('Failed to copy', 'error');
-        });
-    }
-}
-
-// Download workshop materials (blank PPTX and DOCX)
-async function downloadWorkshopMaterials() {
-    console.log('[Workshop] Starting workshop materials download...');
-    
-    const btn = document.getElementById('downloadWorkshopBtn');
-    const btnText = document.getElementById('downloadWorkshopText');
-    const btnIcon = btn?.querySelector('svg');
-    
-    // Show generating state with spinner
-    if (btn) {
-        btn.disabled = true;
-        btn.classList.add('generating');
-    }
-    if (btnText) btnText.textContent = 'Generating AI Content...';
-    
-    // Add spinning animation to icon
-    if (btnIcon) {
-        btnIcon.style.animation = 'spin 1s linear infinite';
-    }
-    showToast('Generating workshop materials...', 'info');
-    
-    try {
-        if (state.isElectron && window.electronAPI?.workshop) {
-            // Get the strategic question (if provided) - narrative is NOT passed to workshops
-            const strategicQuestion = document.getElementById('strategicQuestion')?.value?.trim() || '';
-            
-            const result = await window.electronAPI.workshop.generate({
-                client: state.selectedClient,
-                strategicQuestion: strategicQuestion
-            });
-            
-            console.log('[Workshop] Result:', result);
-            
-            if (result.success) {
-                showToast('Workshop materials generated successfully!', 'success');
-            } else if (result.error === 'Save location not selected') {
-                showToast('Workshop materials download canceled', 'info');
-            } else {
-                showToast(result.error || 'Failed to generate workshop materials', 'error');
-            }
-        } else {
-            console.log('[Workshop] Running in demo mode');
-            await sleep(1000);
-            showToast('Workshop materials generated (Demo Mode)', 'success');
-        }
-    } catch (error) {
-        console.error('[Workshop] Error generating materials:', error);
-        showToast('Failed to generate workshop materials: ' + error.message, 'error');
-    } finally {
-        // Reset button state
-        if (btn) {
-            btn.disabled = false;
-            btn.classList.remove('generating');
-        }
-        if (btnText) btnText.textContent = 'Download Workshop Materials';
-        
-        // Stop spinning animation
-        const btnIcon = btn?.querySelector('svg');
-        if (btnIcon) {
-            btnIcon.style.animation = '';
-        }
-    }
-}
-
-// ============================================
-// Video Generation (Runway ML)
-// ============================================
-function setupVideoGeneration() {
-    const generateBtn = document.getElementById('generateVideoBtn');
-    const downloadBtn = document.getElementById('downloadVideoBtn');
-    
-    if (generateBtn) {
-        generateBtn.addEventListener('click', generateVideo);
-    }
-    
-    if (downloadBtn) {
-        downloadBtn.addEventListener('click', downloadGeneratedVideo);
-    }
-}
-
-async function generateVideo() {
-    const promptInput = document.getElementById('videoPromptInput');
-    const durationSelect = document.getElementById('videoDuration');
-    const ratioSelect = document.getElementById('videoRatio');
-    const audioSelect = document.getElementById('videoAudio');
-    const generateBtn = document.getElementById('generateVideoBtn');
-    const generateText = document.getElementById('generateVideoText');
-    
-    const prompt = promptInput?.value?.trim();
-    
-    if (!prompt || prompt.length < 5) {
-        showToast('Please enter a video prompt (at least 5 characters)', 'warning');
-        return;
-    }
-    
-    // Show loading state
-    if (generateBtn) generateBtn.disabled = true;
-    if (generateText) generateText.textContent = 'Generating...';
-    
-    // Show output section with loading state
-    const outputSection = document.getElementById('videoOutputSection');
-    const loadingState = document.getElementById('videoLoadingState');
-    const playerContainer = document.getElementById('videoPlayerContainer');
-    const errorState = document.getElementById('videoErrorState');
-    const downloadBtn = document.getElementById('downloadVideoBtn');
-    
-    outputSection?.classList.remove('hidden');
-    loadingState?.classList.remove('hidden');
-    playerContainer?.classList.add('hidden');
-    errorState?.classList.add('hidden');
-    downloadBtn?.classList.add('hidden');
-    
-    try {
-        if (!state.isElectron || !window.electronAPI?.video) {
-            throw new Error('Video generation requires Electron with Runway ML configured');
-        }
-        
-        const result = await window.electronAPI.video.generate({
-            promptText: prompt,
-            duration: parseInt(durationSelect?.value || '8'),
-            ratio: ratioSelect?.value || '1920:1080',
-            audio: audioSelect?.value === 'true'
-        });
-        
-        if (result.success && result.videoUrl) {
-            // Show video player
-            const videoPlayer = document.getElementById('generatedVideoPlayer');
-            if (videoPlayer) {
-                videoPlayer.src = result.videoUrl;
-            }
-            
-            // Store video URL for download
-            state.generatedVideoUrl = result.videoUrl;
-            
-            loadingState?.classList.add('hidden');
-            playerContainer?.classList.remove('hidden');
-            downloadBtn?.classList.remove('hidden');
-            
-            showToast('Video generated successfully!', 'success');
-        } else {
-            throw new Error(result.error || 'Video generation failed');
-        }
-    } catch (error) {
-        console.error('[Video] Generation error:', error);
-        
-        loadingState?.classList.add('hidden');
-        errorState?.classList.remove('hidden');
-        
-        const errorText = document.getElementById('videoErrorText');
-        if (errorText) {
-            errorText.textContent = error.message || 'Failed to generate video';
-        }
-        
-        showToast('Video generation failed: ' + error.message, 'error');
-    } finally {
-        if (generateBtn) generateBtn.disabled = false;
-        if (generateText) generateText.textContent = 'Generate Video';
-    }
-}
-
-async function downloadGeneratedVideo() {
-    if (!state.generatedVideoUrl) {
-        showToast('No video to download', 'warning');
-        return;
-    }
-    
-    try {
-        // Open the video URL in browser for download
-        if (state.isElectron && window.electronAPI?.shell) {
-            await window.electronAPI.shell.openExternal(state.generatedVideoUrl);
-        } else {
-            window.open(state.generatedVideoUrl, '_blank');
-        }
-    } catch (error) {
-        console.error('[Video] Download error:', error);
-        showToast('Failed to download video', 'error');
-    }
-}
-
-// ============================================
-// Narration Generation (ElevenLabs)
-// ============================================
-
-function setupNarrationGeneration() {
-    const textInput = document.getElementById('narrationTextInput');
-    const charCount = document.getElementById('narrationCharCount');
-    const generateBtn = document.getElementById('generateNarrationBtn');
-    const clearHistoryBtn = document.getElementById('clearNarrationHistoryBtn');
-    
-    // Character count
-    if (textInput && charCount) {
-        textInput.addEventListener('input', () => {
-            const count = textInput.value.length;
-            charCount.textContent = count.toLocaleString();
-            if (count > 5000) {
-                charCount.style.color = 'var(--error)';
-            } else {
-                charCount.style.color = '';
-            }
-        });
-    }
-    
-    // Generate button
-    if (generateBtn) {
-        generateBtn.addEventListener('click', generateNarration);
-    }
-    
-    // Clear history button
-    if (clearHistoryBtn) {
-        clearHistoryBtn.addEventListener('click', clearNarrationHistory);
-    }
-    
-    // Load history on init
-    loadNarrationHistory();
-}
-
-async function generateNarration() {
-    const textInput = document.getElementById('narrationTextInput');
-    const voiceSelect = document.getElementById('narrationVoice');
-    const modelSelect = document.getElementById('narrationModel');
-    const generateBtn = document.getElementById('generateNarrationBtn');
-    const generateText = document.getElementById('generateNarrationText');
-    const outputSection = document.getElementById('narrationOutputSection');
-    const loadingState = document.getElementById('narrationLoadingState');
-    const playerContainer = document.getElementById('narrationPlayerContainer');
-    const audioPlayer = document.getElementById('generatedNarrationPlayer');
-    const downloadBtn = document.getElementById('downloadNarrationBtn');
-    const errorState = document.getElementById('narrationErrorState');
-    const errorText = document.getElementById('narrationErrorText');
-    
-    const text = textInput?.value?.trim();
-    
-    if (!text) {
-        showToast('Please enter text to convert to speech', 'warning');
-        return;
-    }
-    
-    if (text.length > 5000) {
-        showToast('Text is too long. Maximum 5,000 characters.', 'warning');
-        return;
-    }
-    
-    // Show loading state
-    if (outputSection) outputSection.classList.remove('hidden');
-    if (loadingState) loadingState.classList.remove('hidden');
-    if (playerContainer) playerContainer.classList.add('hidden');
-    if (downloadBtn) downloadBtn.classList.add('hidden');
-    if (errorState) errorState.classList.add('hidden');
-    
-    if (generateBtn) generateBtn.disabled = true;
-    if (generateText) generateText.textContent = 'Generating...';
-    
-    try {
-        const result = await window.electronAPI.narration.generate({
-            text: text,
-            voiceId: voiceSelect?.value || '21m00Tcm4TlvDq8ikWAM',
-            modelId: modelSelect?.value || 'eleven_multilingual_v2'
-        });
-        
-        if (result.success) {
-            // Create audio blob from base64
-            const audioBlob = base64ToBlob(result.audioBase64, 'audio/mpeg');
-            const audioUrl = URL.createObjectURL(audioBlob);
-            
-            // Store for download
-            state.generatedNarrationUrl = audioUrl;
-            state.generatedNarrationBase64 = result.audioBase64;
-            
-            // Show player
-            if (loadingState) loadingState.classList.add('hidden');
-            if (playerContainer) playerContainer.classList.remove('hidden');
-            if (downloadBtn) downloadBtn.classList.remove('hidden');
-            
-            if (audioPlayer) {
-                audioPlayer.src = audioUrl;
-                audioPlayer.load();
-            }
-            
-            // Setup download button
-            if (downloadBtn) {
-                downloadBtn.onclick = () => downloadNarration();
-            }
-            
-            // Reload history
-            await loadNarrationHistory();
-            
-            showToast('Narration generated successfully!', 'success');
-        } else {
-            // Show error
-            if (loadingState) loadingState.classList.add('hidden');
-            if (errorState) errorState.classList.remove('hidden');
-            if (errorText) errorText.textContent = result.error || 'Failed to generate narration';
-            
-            showToast('Narration generation failed', 'error');
-        }
-    } catch (error) {
-        console.error('[Narration] Error:', error);
-        
-        if (loadingState) loadingState.classList.add('hidden');
-        if (errorState) errorState.classList.remove('hidden');
-        if (errorText) errorText.textContent = error.message || 'Failed to generate narration';
-        
-        showToast('Narration generation failed: ' + error.message, 'error');
-    } finally {
-        if (generateBtn) generateBtn.disabled = false;
-        if (generateText) generateText.textContent = 'Generate Narration';
-    }
-}
-
-function base64ToBlob(base64, mimeType) {
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: mimeType });
-}
-
-function downloadNarration() {
-    if (!state.generatedNarrationBase64) {
-        showToast('No narration to download', 'warning');
-        return;
-    }
-    
-    try {
-        const blob = base64ToBlob(state.generatedNarrationBase64, 'audio/mpeg');
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `narration_${Date.now()}.mp3`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        showToast('Narration downloaded', 'success');
-    } catch (error) {
-        console.error('[Narration] Download error:', error);
-        showToast('Failed to download narration', 'error');
-    }
-}
-
-async function loadNarrationHistory() {
-    if (!state.isElectron || !window.electronAPI?.narration) return;
-    
-    const historyEmpty = document.getElementById('narrationHistoryEmpty');
-    const historyList = document.getElementById('narrationHistoryList');
-    const clearBtn = document.getElementById('clearNarrationHistoryBtn');
-    
-    try {
-        const history = await window.electronAPI.narration.getHistory();
-        
-        if (!history || history.length === 0) {
-            if (historyEmpty) historyEmpty.classList.remove('hidden');
-            if (historyList) historyList.classList.add('hidden');
-            if (clearBtn) clearBtn.classList.add('hidden');
-            return;
-        }
-        
-        if (historyEmpty) historyEmpty.classList.add('hidden');
-        if (historyList) historyList.classList.remove('hidden');
-        if (clearBtn) clearBtn.classList.remove('hidden');
-        
-        const voiceNames = {
-            '21m00Tcm4TlvDq8ikWAM': 'Rachel',
-            'EXAVITQu4vr4xnSDxMaL': 'Bella',
-            'ErXwobaYiN019PkySvjV': 'Antoni',
-            'VR6AewLTigWG4xSOukaG': 'Arnold',
-            'pNInz6obpgDQGcFmaJgB': 'Adam',
-            'yoZ06aMxZJJ28mfd3POQ': 'Sam'
-        };
-        
-        historyList.innerHTML = history.map(item => `
-            <div class="narration-history-item" data-id="${item.id}">
-                <div class="narration-history-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
-                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                    </svg>
-                </div>
-                <div class="narration-history-info">
-                    <div class="narration-history-text">${escapeHtml(item.text)}</div>
-                    <div class="narration-history-meta">
-                        ${voiceNames[item.voiceId] || 'Voice'} • ${formatFileSize(item.size)} • ${formatRelativeTime(item.createdAt)}
-                    </div>
-                </div>
-                <div class="narration-history-actions">
-                    <button class="btn btn-secondary btn-sm play-narration-btn" data-id="${item.id}" title="Play">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                            <polygon points="5 3 19 12 5 21 5 3"/>
-                        </svg>
-                    </button>
-                    <button class="btn btn-ghost btn-sm delete-narration-btn" data-id="${item.id}" title="Delete">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `).join('');
-        
-        // Add event listeners
-        historyList.querySelectorAll('.play-narration-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const id = btn.dataset.id;
-                await playHistoryNarration(id);
-            });
-        });
-        
-        historyList.querySelectorAll('.delete-narration-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const id = btn.dataset.id;
-                await deleteHistoryNarration(id);
-            });
-        });
-    } catch (error) {
-        console.error('[Narration] Failed to load history:', error);
-    }
-}
-
-async function playHistoryNarration(id) {
-    try {
-        const result = await window.electronAPI.narration.getAudio(id);
-        if (result.success && result.audioBase64) {
-            const blob = base64ToBlob(result.audioBase64, 'audio/mpeg');
-            const url = URL.createObjectURL(blob);
-            
-            const audioPlayer = document.getElementById('generatedNarrationPlayer');
-            const outputSection = document.getElementById('narrationOutputSection');
-            const loadingState = document.getElementById('narrationLoadingState');
-            const playerContainer = document.getElementById('narrationPlayerContainer');
-            const downloadBtn = document.getElementById('downloadNarrationBtn');
-            const errorState = document.getElementById('narrationErrorState');
-            
-            // Store for download
-            state.generatedNarrationUrl = url;
-            state.generatedNarrationBase64 = result.audioBase64;
-            
-            // Show player
-            if (outputSection) outputSection.classList.remove('hidden');
-            if (loadingState) loadingState.classList.add('hidden');
-            if (playerContainer) playerContainer.classList.remove('hidden');
-            if (downloadBtn) downloadBtn.classList.remove('hidden');
-            if (errorState) errorState.classList.add('hidden');
-            
-            if (audioPlayer) {
-                audioPlayer.src = url;
-                audioPlayer.load();
-                audioPlayer.play();
-            }
-            
-            if (downloadBtn) {
-                downloadBtn.onclick = () => downloadNarration();
-            }
-        } else {
-            showToast('Failed to load audio', 'error');
-        }
-    } catch (error) {
-        console.error('[Narration] Failed to play:', error);
-        showToast('Failed to play narration', 'error');
-    }
-}
-
-async function deleteHistoryNarration(id) {
-    try {
-        await window.electronAPI.narration.deleteHistoryItem(id);
-        await loadNarrationHistory();
-        showToast('Narration deleted', 'success');
-    } catch (error) {
-        console.error('[Narration] Failed to delete:', error);
-        showToast('Failed to delete narration', 'error');
-    }
-}
-
-async function clearNarrationHistory() {
-    if (!confirm('Are you sure you want to clear all narration history?')) return;
-    
-    try {
-        await window.electronAPI.narration.clearHistory();
-        await loadNarrationHistory();
-        showToast('Narration history cleared', 'success');
-    } catch (error) {
-        console.error('[Narration] Failed to clear history:', error);
-        showToast('Failed to clear history', 'error');
-    }
-}
-
-function formatFileSize(bytes) {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-function formatRelativeTime(dateString) {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-}
-
-// ============================================
-// Narrative Audio Generation (Step 6)
-// ============================================
-
-function setupNarrativeAudioGeneration() {
-    const generateBtn = document.getElementById('generateNarrativeAudioBtn');
-    const toggleBtn = document.getElementById('toggleScriptPreview');
-    const downloadBtn = document.getElementById('downloadNarrativeAudioBtn');
-    
-    if (generateBtn) {
-        generateBtn.addEventListener('click', generateNarrativeAudio);
-    }
-    
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', toggleScriptPreviewCollapse);
-    }
-    
-    if (downloadBtn) {
-        downloadBtn.addEventListener('click', downloadNarrativeAudio);
-    }
-    
-    // Listen for progress updates
-    if (state.isElectron && window.electronAPI?.onNarrativeAudioProgress) {
-        window.electronAPI.onNarrativeAudioProgress(handleNarrativeAudioProgress);
-    }
-}
-
-function handleNarrativeAudioProgress(data) {
-    const loadingTitle = document.getElementById('narrativeAudioLoadingTitle');
-    const loadingSubtitle = document.getElementById('narrativeAudioLoadingSubtitle');
-    
-    if (data.stage === 'script') {
-        if (loadingTitle) loadingTitle.textContent = 'Crafting your script...';
-        if (loadingSubtitle) loadingSubtitle.textContent = 'AI is transforming your narrative into an executive-ready script';
-    } else if (data.stage === 'audio') {
-        if (loadingTitle) loadingTitle.textContent = 'Generating audio...';
-        if (loadingSubtitle) loadingSubtitle.textContent = 'Converting script to natural speech';
-    }
-}
-
-async function generateNarrativeAudio() {
-    const generateBtn = document.getElementById('generateNarrativeAudioBtn');
-    const generateText = document.getElementById('generateNarrativeAudioText');
-    const statusSection = document.getElementById('narrativeAudioStatus');
-    const scriptPreview = document.getElementById('narrativeScriptPreview');
-    const audioPlayer = document.getElementById('narrativeAudioPlayer');
-    const errorSection = document.getElementById('narrativeAudioError');
-    const voiceSelect = document.getElementById('narrativeAudioVoice');
-    const toneSelect = document.getElementById('narrativeAudioTone');
-    
-    // Get the current narrative content
-    const narrativeContent = state.currentDisplayedNarrative?.content;
-    
-    if (!narrativeContent) {
-        showToast('No narrative to convert. Please generate a narrative first.', 'warning');
-        return;
-    }
-    
-    // Reset and show loading state
-    if (statusSection) statusSection.classList.remove('hidden');
-    if (scriptPreview) scriptPreview.classList.add('hidden');
-    if (audioPlayer) audioPlayer.classList.add('hidden');
-    if (errorSection) errorSection.classList.add('hidden');
-    
-    if (generateBtn) generateBtn.disabled = true;
-    if (generateText) generateText.textContent = 'Generating...';
-    
-    try {
-        const result = await window.electronAPI.narration.generateFromNarrative({
-            narrativeContent: narrativeContent,
-            clientName: state.selectedClient?.name || 'the company',
-            voiceId: voiceSelect?.value || 'pNInz6obpgDQGcFmaJgB',
-            tone: toneSelect?.value || 'inspiring'
-        });
-        
-        if (result.success) {
-            // Hide loading
-            if (statusSection) statusSection.classList.add('hidden');
-            
-            // Show script preview
-            if (scriptPreview) {
-                scriptPreview.classList.remove('hidden');
-                const scriptContent = document.getElementById('scriptPreviewContent');
-                if (scriptContent) {
-                    scriptContent.textContent = result.script;
-                }
-            }
-            
-            // Show audio player
-            if (audioPlayer) {
-                audioPlayer.classList.remove('hidden');
-                const audioElement = document.getElementById('narrativeAudioElement');
-                if (audioElement && result.audioBase64) {
-                    const blob = base64ToBlob(result.audioBase64, 'audio/mpeg');
-                    const url = URL.createObjectURL(blob);
-                    audioElement.src = url;
-                    audioElement.load();
-                    
-                    // Store for download
-                    state.narrativeAudioBase64 = result.audioBase64;
-                    state.narrativeAudioScript = result.script;
-                }
-            }
-            
-            showToast('Executive audio narration generated!', 'success');
-        } else {
-            // Show error
-            if (statusSection) statusSection.classList.add('hidden');
-            if (errorSection) {
-                errorSection.classList.remove('hidden');
-                const errorText = document.getElementById('narrativeAudioErrorText');
-                if (errorText) errorText.textContent = result.error || 'Failed to generate audio';
-            }
-            showToast('Audio generation failed', 'error');
-        }
-    } catch (error) {
-        console.error('[NarrativeAudio] Error:', error);
-        
-        if (statusSection) statusSection.classList.add('hidden');
-        if (errorSection) {
-            errorSection.classList.remove('hidden');
-            const errorText = document.getElementById('narrativeAudioErrorText');
-            if (errorText) errorText.textContent = error.message || 'Failed to generate audio';
-        }
-        showToast('Audio generation failed: ' + error.message, 'error');
-    } finally {
-        if (generateBtn) generateBtn.disabled = false;
-        if (generateText) generateText.textContent = 'Generate Audio';
-    }
-}
-
-function resetNarrativeAudioSection() {
-    const statusSection = document.getElementById('narrativeAudioStatus');
-    const scriptPreview = document.getElementById('narrativeScriptPreview');
-    const audioPlayer = document.getElementById('narrativeAudioPlayer');
-    const errorSection = document.getElementById('narrativeAudioError');
-    const generateBtn = document.getElementById('generateNarrativeAudioBtn');
-    const generateText = document.getElementById('generateNarrativeAudioText');
-    
-    if (statusSection) statusSection.classList.add('hidden');
-    if (scriptPreview) scriptPreview.classList.add('hidden');
-    if (audioPlayer) audioPlayer.classList.add('hidden');
-    if (errorSection) errorSection.classList.add('hidden');
-    if (generateBtn) generateBtn.disabled = false;
-    if (generateText) generateText.textContent = 'Generate Audio';
-    
-    // Clear stored audio
-    state.narrativeAudioBase64 = null;
-    state.narrativeAudioScript = null;
-}
-
-function toggleScriptPreviewCollapse() {
-    const content = document.getElementById('scriptPreviewContent');
-    const toggleBtn = document.getElementById('toggleScriptPreview');
-    
-    if (content) {
-        content.classList.toggle('collapsed');
-        
-        // Update icon
-        if (toggleBtn) {
-            const svg = toggleBtn.querySelector('svg');
-            if (svg) {
-                if (content.classList.contains('collapsed')) {
-                    svg.innerHTML = '<path d="M9 18l6-6-6-6"/>';
-                } else {
-                    svg.innerHTML = '<path d="M19 9l-7 7-7-7"/>';
-                }
-            }
-        }
-    }
-}
-
-function downloadNarrativeAudio() {
-    if (!state.narrativeAudioBase64) {
-        showToast('No audio to download', 'warning');
-        return;
-    }
-    
-    try {
-        const blob = base64ToBlob(state.narrativeAudioBase64, 'audio/mpeg');
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.selectedClient?.name || 'narrative'}_audio_${Date.now()}.mp3`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        showToast('Audio downloaded', 'success');
-    } catch (error) {
-        console.error('[NarrativeAudio] Download error:', error);
-        showToast('Failed to download audio', 'error');
-    }
-}
-
-// ============================================
-// Video Narrative Generation (Script to Video Montage)
-// ============================================
-
-function setupVideoNarrativeGeneration() {
-    const generateBtn = document.getElementById('generateVideoNarrativeBtn');
-    const scriptTextarea = document.getElementById('videoNarrationScript');
-    const downloadBtn = document.getElementById('downloadVideoNarrativeBtn');
-    
-    if (generateBtn) {
-        generateBtn.addEventListener('click', generateVideoNarrative);
-    }
-    
-    if (scriptTextarea) {
-        scriptTextarea.addEventListener('input', updateVideoScriptInfo);
-    }
-    
-    if (downloadBtn) {
-        downloadBtn.addEventListener('click', downloadVideoNarrative);
-    }
-    
-    // Set up progress listener
-    if (window.electronAPI?.onVideoNarrativeProgress) {
-        window.electronAPI.onVideoNarrativeProgress((data) => {
-            updateVideoNarrativeProgress(data);
-        });
-    }
-    
-    console.log('[VideoNarrative] Setup complete');
-}
-
-function updateVideoScriptInfo() {
-    const textarea = document.getElementById('videoNarrationScript');
-    const wordCountEl = document.getElementById('videoScriptWordCount');
-    const estimateEl = document.getElementById('videoScriptEstimate');
-    
-    if (!textarea) return;
-    
-    const text = textarea.value.trim();
-    const words = text ? text.split(/\s+/).length : 0;
-    
-    // Update word count
-    if (wordCountEl) {
-        wordCountEl.textContent = `${words} words`;
-    }
-    
-    // Estimate segments (~20-25 words per 7-second segment)
-    // Average speaking rate is about 150 words per minute = 2.5 words per second
-    // 7 seconds = ~17-18 words, let's use 20 for buffer
-    const wordsPerSegment = 20;
-    const segments = Math.max(1, Math.ceil(words / wordsPerSegment));
-    const duration = segments * 7;
-    
-    if (estimateEl) {
-        if (words > 0) {
-            estimateEl.textContent = `~${segments} segments, ~${duration}s video`;
-        } else {
-            estimateEl.textContent = 'Paste your script above';
-        }
-    }
-}
-
-async function generateVideoNarrative() {
-    const scriptTextarea = document.getElementById('videoNarrationScript');
-    const generateBtn = document.getElementById('generateVideoNarrativeBtn');
-    const progressSection = document.getElementById('videoNarrativeProgress');
-    const playerSection = document.getElementById('videoNarrativePlayer');
-    const errorSection = document.getElementById('videoNarrativeError');
-    
-    const script = scriptTextarea?.value?.trim();
-    
-    if (!script) {
-        showToast('Please enter a narration script', 'warning');
-        return;
-    }
-    
-    // Get options
-    const aspectRatio = document.getElementById('videoNarrativeRatio')?.value || '16:9';
-    const visualStyle = document.getElementById('videoNarrativeStyle')?.value || 'cinematic';
-    
-    // Disable button and show progress
-    if (generateBtn) {
-        generateBtn.disabled = true;
-        generateBtn.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
-                <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                <path d="M12 6v6l4 2"/>
-            </svg>
-            Generating...
-        `;
-    }
-    
-    // Show progress, hide player and error
-    if (progressSection) progressSection.classList.remove('hidden');
-    if (playerSection) playerSection.classList.add('hidden');
-    if (errorSection) errorSection.classList.add('hidden');
-    
-    // Reset progress UI
-    resetVideoNarrativeProgress();
-    
-    console.log('[VideoNarrative] Starting generation:', {
-        scriptLength: script.length,
-        aspectRatio,
-        visualStyle
-    });
-    
-    try {
-        const result = await window.electronAPI.videoNarrative.generate({
-            script,
-            aspectRatio,
-            visualStyle,
-            clientName: state.selectedClient?.name || 'Unknown'
-        });
-        
-        if (result.success) {
-            console.log('[VideoNarrative] Generation complete:', result);
-            
-            // Show the video player
-            const videoElement = document.getElementById('videoNarrativeElement');
-            if (videoElement && result.videoPath) {
-                videoElement.src = `file://${result.videoPath}`;
-                videoElement.load();
-            }
-            
-            // Store the path for download
-            state.videoNarrativePath = result.videoPath;
-            
-            if (playerSection) playerSection.classList.remove('hidden');
-            showToast('Video narrative generated successfully!', 'success');
-        } else {
-            throw new Error(result.error || 'Generation failed');
-        }
-    } catch (error) {
-        console.error('[VideoNarrative] Generation error:', error);
-        
-        // Show error section
-        const errorMessage = document.getElementById('videoNarrativeErrorText');
-        if (errorMessage) {
-            errorMessage.textContent = error.message || 'Failed to generate video narrative';
-        }
-        if (errorSection) errorSection.classList.remove('hidden');
-        
-        showToast('Failed to generate video narrative', 'error');
-    } finally {
-        // Re-enable button
-        if (generateBtn) {
-            generateBtn.disabled = false;
-            generateBtn.innerHTML = `
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="5 3 19 12 5 21 5 3"/>
-                </svg>
-                Generate Video Narrative
-            `;
-        }
-    }
-}
-
-function resetVideoNarrativeProgress() {
-    const progressBar = document.getElementById('videoProgressBarFill');
-    const progressPercent = document.getElementById('videoProgressPercent');
-    const progressStage = document.getElementById('videoProgressStage');
-    const segmentList = document.getElementById('videoSegmentList');
-    
-    if (progressBar) progressBar.style.width = '0%';
-    if (progressPercent) progressPercent.textContent = '0%';
-    if (progressStage) progressStage.textContent = 'Initializing...';
-    if (segmentList) segmentList.innerHTML = '';
-}
-
-function updateVideoNarrativeProgress(data) {
-    console.log('[VideoNarrative] Progress update:', data);
-    
-    const progressBar = document.getElementById('videoProgressBarFill');
-    const progressPercent = document.getElementById('videoProgressPercent');
-    const progressStage = document.getElementById('videoProgressStage');
-    const segmentList = document.getElementById('videoSegmentList');
-    
-    // Update overall progress
-    if (data.percent !== undefined) {
-        if (progressBar) progressBar.style.width = `${data.percent}%`;
-        if (progressPercent) progressPercent.textContent = `${Math.round(data.percent)}%`;
-    }
-    
-    // Update stage
-    if (data.stage && progressStage) {
-        progressStage.textContent = data.stage;
-    }
-    
-    // Update segment list
-    if (data.segments && segmentList) {
-        segmentList.innerHTML = data.segments.map((seg, i) => {
-            let iconSvg = '';
-            let statusClass = '';
-            let statusText = '';
-            
-            switch (seg.status) {
-                case 'pending':
-                    iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>';
-                    statusClass = 'pending';
-                    statusText = 'Pending';
-                    break;
-                case 'generating-prompt':
-                    iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path d="M12 6v6l4 2"/></svg>';
-                    statusClass = 'processing';
-                    statusText = 'Creating prompt...';
-                    break;
-                case 'generating-video':
-                    iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path d="M12 6v6l4 2"/></svg>';
-                    statusClass = 'processing';
-                    statusText = 'Generating video...';
-                    break;
-                case 'complete':
-                    iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
-                    statusClass = 'complete';
-                    statusText = 'Complete';
-                    break;
-                case 'error':
-                    iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
-                    statusClass = 'error';
-                    statusText = 'Error';
-                    break;
-            }
-            
-            return `
-                <div class="video-segment-item">
-                    <span class="video-segment-icon ${statusClass}">${iconSvg}</span>
-                    <span class="video-segment-text">Segment ${i + 1}: ${truncateText(seg.text, 50)}</span>
-                    <span class="video-segment-status ${statusClass}">${statusText}</span>
-                </div>
-            `;
-        }).join('');
-    }
-}
-
-function truncateText(text, maxLength) {
-    if (!text) return '';
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
-}
-
-async function downloadVideoNarrative() {
-    if (!state.videoNarrativePath) {
-        showToast('No video to download', 'warning');
-        return;
-    }
-    
-    try {
-        // Use shell to open the folder containing the video
-        // or copy to Downloads
-        showToast('Opening video location...', 'info');
-        
-        // For now, we'll just alert the path - in production you'd copy to Downloads
-        if (window.electronAPI?.shell?.openExternal) {
-            // Open the folder containing the video
-            const folderPath = state.videoNarrativePath.substring(0, state.videoNarrativePath.lastIndexOf('\\'));
-            await window.electronAPI.shell.openExternal(`file://${folderPath}`);
-        }
-    } catch (error) {
-        console.error('[VideoNarrative] Download error:', error);
-        showToast('Failed to open video location', 'error');
-    }
-}
-
-function resetVideoNarrativeSection() {
-    const progressSection = document.getElementById('videoNarrativeProgress');
-    const playerSection = document.getElementById('videoNarrativePlayer');
-    const errorSection = document.getElementById('videoNarrativeError');
-    const scriptTextarea = document.getElementById('videoNarrationScript');
-    const generateBtn = document.getElementById('generateVideoNarrativeBtn');
-    
-    // Hide progress, player, and error sections
-    if (progressSection) progressSection.classList.add('hidden');
-    if (playerSection) playerSection.classList.add('hidden');
-    if (errorSection) errorSection.classList.add('hidden');
-    
-    // Reset button state
-    if (generateBtn) {
-        generateBtn.disabled = false;
-        generateBtn.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-            </svg>
-            Generate Video Narrative
-        `;
-    }
-    
-    // Clear stored video path
-    state.videoNarrativePath = null;
-    
-    // Reset progress UI
-    resetVideoNarrativeProgress();
-    
-    // Update script info
-    updateVideoScriptInfo();
-}
-
 // ============================================
 // Admin: Template Management
 // ============================================
@@ -4811,11 +3150,38 @@ function setupTemplateManagement() {
         saveSourcePromptsBtn.addEventListener('click', saveSourcePrompts);
     }
     
-    // Load existing templates, default prompt, and source prompts
+    // Setup qualification prompt save button
+    const saveQualPromptBtn = document.getElementById('saveQualPromptBtn');
+    if (saveQualPromptBtn) {
+        saveQualPromptBtn.addEventListener('click', saveQualificationPrompt);
+    }
+    
+    // Setup value case prompt save button
+    const saveValueCasePromptBtn = document.getElementById('saveValueCasePromptBtn');
+    if (saveValueCasePromptBtn) {
+        saveValueCasePromptBtn.addEventListener('click', saveValueCasePrompt);
+    }
+    
+    // Setup provocation prompt save button
+    const saveProvokePromptBtn = document.getElementById('saveProvokePromptBtn');
+    if (saveProvokePromptBtn) {
+        saveProvokePromptBtn.addEventListener('click', saveProvocationPrompt);
+    }
+    
+    // Setup C-suite review prompts save button
+    const saveCsuitePromptsBtn = document.getElementById('saveCsuitePromptsBtn');
+    if (saveCsuitePromptsBtn) {
+        saveCsuitePromptsBtn.addEventListener('click', saveAdminCsuitePrompts);
+    }
+    
+    // Load existing templates, default prompt, source prompts, qualification prompt, provocation prompt, and C-suite prompts
     loadAdminTemplates();
     loadDefaultPrompt();
     loadSourcePrompts();
-    initLearningsPanel();
+    loadAdminQualificationPrompt();
+    loadAdminValueCasePrompt();
+    loadAdminProvocationPrompt();
+    loadAdminCsuitePrompts();
 }
 
 async function loadDefaultPrompt() {
@@ -4861,6 +3227,68 @@ async function saveDefaultPrompt() {
     } catch (error) {
         console.error('Error saving default prompt:', error);
         showToast('Failed to save default prompt', 'error');
+    } finally {
+        if (btn) {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+}
+
+// ============================================
+// Admin: C-Suite Review Prompts (Step 7)
+// ============================================
+
+async function loadAdminCsuitePrompts() {
+    const roles = ['ceo', 'cfo', 'coo', 'cto', 'cmo'];
+    try {
+        if (state.isElectron && window.electronAPI.settings?.getCsuitePrompts) {
+            const prompts = await window.electronAPI.settings.getCsuitePrompts();
+            for (const role of roles) {
+                const textarea = document.getElementById(`adminCsuite${role.charAt(0).toUpperCase() + role.slice(1)}`);
+                if (textarea) textarea.value = prompts?.[role] || '';
+            }
+            state.csuitePrompts = prompts || {};
+        }
+    } catch (error) {
+        console.error('Error loading C-suite prompts:', error);
+    }
+}
+
+async function saveAdminCsuitePrompts() {
+    const roles = ['ceo', 'cfo', 'coo', 'cto', 'cmo'];
+    const btn = document.getElementById('saveCsuitePromptsBtn');
+
+    const originalText = btn?.innerHTML;
+    if (btn) {
+        btn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 6px;" class="spin">
+                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Saving...
+        `;
+        btn.disabled = true;
+    }
+
+    try {
+        const prompts = {};
+        for (const role of roles) {
+            const textarea = document.getElementById(`adminCsuite${role.charAt(0).toUpperCase() + role.slice(1)}`);
+            prompts[role] = textarea?.value || '';
+        }
+
+        if (state.isElectron && window.electronAPI.settings?.saveCsuitePrompts) {
+            const result = await window.electronAPI.settings.saveCsuitePrompts(prompts);
+            if (result.success) {
+                state.csuitePrompts = prompts;
+                showToast('C-suite review prompts saved', 'success');
+            }
+        } else {
+            showToast('Settings are only available in the desktop app', 'info');
+        }
+    } catch (error) {
+        console.error('Error saving C-suite prompts:', error);
+        showToast('Failed to save C-suite prompts', 'error');
     } finally {
         if (btn) {
             btn.innerHTML = originalText;
@@ -4938,133 +3366,172 @@ async function saveSourcePrompts() {
 }
 
 // ============================================
-// AI Learnings Management
+// Admin: Qualification Criteria Prompt
 // ============================================
 
-async function initLearningsPanel() {
-    // Setup refresh button
-    const refreshBtn = document.getElementById('refreshLearningsBtn');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', loadLearningsPanel);
-    }
-    
-    // Setup clear button
-    const clearBtn = document.getElementById('clearLearningsBtn');
-    if (clearBtn) {
-        clearBtn.addEventListener('click', async () => {
-            if (confirm('Are you sure you want to clear all learned preferences? This cannot be undone.')) {
-                try {
-                    if (state.isElectron && window.electronAPI.learnings) {
-                        await window.electronAPI.learnings.clear();
-                        showToast('Learned preferences cleared', 'success');
-                        loadLearningsPanel();
-                    }
-                } catch (error) {
-                    console.error('Error clearing learnings:', error);
-                    showToast('Failed to clear learnings', 'error');
-                }
-            }
-        });
-    }
-    
-    // Load initial data
-    loadLearningsPanel();
-}
+async function loadAdminQualificationPrompt() {
+    const textarea = document.getElementById('adminQualPrompt');
+    if (!textarea) return;
 
-async function loadLearningsPanel() {
-    if (!state.isElectron || !window.electronAPI.learnings) return;
-    
     try {
-        const learnings = await window.electronAPI.learnings.get();
-        const stats = await window.electronAPI.learnings.getStats();
-        
-        // Update stats
-        const iterationsEl = document.getElementById('learnStatIterations');
-        const narrativesEl = document.getElementById('learnStatNarratives');
-        const preferencesEl = document.getElementById('learnStatPreferences');
-        
-        if (iterationsEl) iterationsEl.textContent = stats?.totalIterations || 0;
-        if (narrativesEl) narrativesEl.textContent = stats?.totalNarratives || 0;
-        
-        // Count total preferences
-        let totalPrefs = 0;
-        const categories = ['tone', 'structure', 'content', 'vocabulary'];
-        categories.forEach(cat => {
-            const prefs = learnings?.preferences?.[cat] || [];
-            totalPrefs += prefs.length;
-            updateLearningsCategory(cat, prefs);
-        });
-        
-        if (preferencesEl) preferencesEl.textContent = totalPrefs;
-        
+        if (state.isElectron && window.electronAPI.settings?.getQualPrompt) {
+            const prompt = await window.electronAPI.settings.getQualPrompt();
+            textarea.value = prompt || '';
+        }
     } catch (error) {
-        console.error('Error loading learnings panel:', error);
+        console.error('Error loading qualification prompt:', error);
     }
 }
 
-function updateLearningsCategory(category, preferences) {
-    const countEl = document.getElementById(`learnCount${category.charAt(0).toUpperCase() + category.slice(1)}`);
-    const listEl = document.getElementById(`learnList${category.charAt(0).toUpperCase() + category.slice(1)}`);
-    
-    if (countEl) countEl.textContent = preferences.length;
-    
-    if (!listEl) return;
-    
-    if (preferences.length === 0) {
-        listEl.innerHTML = `<p class="learnings-empty">No ${category} preferences learned yet</p>`;
-        return;
-    }
-    
-    listEl.innerHTML = preferences.map((pref, idx) => {
-        const confidence = pref.confidence || 0.5;
-        const confidencePercent = Math.round(confidence * 100);
-        const confidenceClass = confidence >= 0.8 ? 'high' : confidence >= 0.5 ? 'medium' : 'low';
-        
-        return `
-            <div class="learning-item" data-category="${category}" data-index="${idx}">
-                <div class="learning-content">
-                    <div class="learning-text">${escapeHtml(pref.preference || pref)}</div>
-                    <div class="learning-confidence">
-                        <div class="learning-confidence-bar">
-                            <div class="learning-confidence-fill ${confidenceClass}" style="width: ${confidencePercent}%"></div>
-                        </div>
-                        <span>${confidencePercent}% confidence</span>
-                        ${pref.source ? `<span>• from ${pref.source}</span>` : ''}
-                    </div>
-                </div>
-                <button class="learning-remove" title="Remove this preference">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                        <path d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
+async function saveQualificationPrompt() {
+    const textarea = document.getElementById('adminQualPrompt');
+    const btn = document.getElementById('saveQualPromptBtn');
+
+    if (!textarea) return;
+
+    const originalText = btn?.innerHTML;
+    if (btn) {
+        btn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 6px;" class="spin">
+                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Saving...
         `;
-    }).join('');
-    
-    // Add remove handlers
-    listEl.querySelectorAll('.learning-remove').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const item = e.target.closest('.learning-item');
-            const cat = item.dataset.category;
-            const idx = parseInt(item.dataset.index);
-            
-            try {
-                if (state.isElectron && window.electronAPI.learnings) {
-                    // Get current learnings and remove the item
-                    const learnings = await window.electronAPI.learnings.get();
-                    if (learnings?.preferences?.[cat]) {
-                        learnings.preferences[cat].splice(idx, 1);
-                        await window.electronAPI.learnings.updatePreference(cat, learnings.preferences[cat]);
-                        loadLearningsPanel();
-                        showToast('Preference removed', 'success');
-                    }
-                }
-            } catch (error) {
-                console.error('Error removing preference:', error);
-                showToast('Failed to remove preference', 'error');
+        btn.disabled = true;
+    }
+
+    try {
+        if (state.isElectron && window.electronAPI.settings?.saveQualPrompt) {
+            const result = await window.electronAPI.settings.saveQualPrompt(textarea.value);
+            if (result.success) {
+                // Also update the cached default so Step 4 reset picks it up
+                state.qualDefaultPrompt = textarea.value;
+                showToast('Qualification prompt saved', 'success');
             }
-        });
-    });
+        } else {
+            showToast('Settings are only available in the desktop app', 'info');
+        }
+    } catch (error) {
+        console.error('Error saving qualification prompt:', error);
+        showToast('Failed to save qualification prompt', 'error');
+    } finally {
+        if (btn) {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+}
+
+// ============================================
+// Admin: Value Case Prompt
+// ============================================
+
+async function loadAdminValueCasePrompt() {
+    const textarea = document.getElementById('adminValueCasePrompt');
+    if (!textarea) return;
+
+    try {
+        if (state.isElectron && window.electronAPI.settings?.getValueCasePrompt) {
+            const prompt = await window.electronAPI.settings.getValueCasePrompt();
+            textarea.value = prompt || '';
+        }
+    } catch (error) {
+        console.error('Error loading value case prompt:', error);
+    }
+}
+
+async function saveValueCasePrompt() {
+    const textarea = document.getElementById('adminValueCasePrompt');
+    const btn = document.getElementById('saveValueCasePromptBtn');
+
+    if (!textarea) return;
+
+    const originalText = btn?.innerHTML;
+    if (btn) {
+        btn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 6px;" class="spin">
+                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Saving...
+        `;
+        btn.disabled = true;
+    }
+
+    try {
+        if (state.isElectron && window.electronAPI.settings?.saveValueCasePrompt) {
+            const result = await window.electronAPI.settings.saveValueCasePrompt(textarea.value);
+            if (result.success) {
+                state.valueCaseDefaultPrompt = textarea.value;
+                showToast('Value case prompt saved', 'success');
+            }
+        } else {
+            showToast('Settings are only available in the desktop app', 'info');
+        }
+    } catch (error) {
+        console.error('Error saving value case prompt:', error);
+        showToast('Failed to save value case prompt', 'error');
+    } finally {
+        if (btn) {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+}
+
+// ============================================
+// Admin: Provocation / Origination Engine Prompt
+// ============================================
+
+async function loadAdminProvocationPrompt() {
+    const textarea = document.getElementById('adminProvokePrompt');
+    if (!textarea) return;
+
+    try {
+        if (state.isElectron && window.electronAPI.settings?.getProvokePrompt) {
+            const prompt = await window.electronAPI.settings.getProvokePrompt();
+            textarea.value = prompt || '';
+        }
+    } catch (error) {
+        console.error('Error loading provocation prompt:', error);
+    }
+}
+
+async function saveProvocationPrompt() {
+    const textarea = document.getElementById('adminProvokePrompt');
+    const btn = document.getElementById('saveProvokePromptBtn');
+
+    if (!textarea) return;
+
+    const originalText = btn?.innerHTML;
+    if (btn) {
+        btn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 6px;" class="spin">
+                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Saving...
+        `;
+        btn.disabled = true;
+    }
+
+    try {
+        if (state.isElectron && window.electronAPI.settings?.saveProvokePrompt) {
+            const result = await window.electronAPI.settings.saveProvokePrompt(textarea.value);
+            if (result.success) {
+                state.provokeDefaultPrompt = textarea.value;
+                showToast('Provocation prompt saved', 'success');
+            }
+        } else {
+            showToast('Settings are only available in the desktop app', 'info');
+        }
+    } catch (error) {
+        console.error('Error saving provocation prompt:', error);
+        showToast('Failed to save provocation prompt', 'error');
+    } finally {
+        if (btn) {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
 }
 
 function escapeHtml(text) {
@@ -5176,12 +3643,12 @@ function renderReviewPreview() {
     
     // POC section (3.0)
     const pocFilesHtml = hasPocFile 
-        ? `<li class="generated"><strong>3.0</strong> Client Point of Contact Info (${state.pocFile.name}) ✓</li>`
+        ? `<li class="generated"><strong>3.0</strong> Client Point of Contact Info (${state.pocFile.name}) âœ“</li>`
         : '';
     
     // Additional files section (now 4.0)
     const additionalFilesHtml = additionalFilesCount > 0 
-        ? `<li class="generated"><strong>4.0</strong> Additional Client Materials (${additionalFilesCount} file${additionalFilesCount !== 1 ? 's' : ''}) ✓</li>`
+        ? `<li class="generated"><strong>4.0</strong> Additional Client Materials (${additionalFilesCount} file${additionalFilesCount !== 1 ? 's' : ''}) âœ“</li>`
         : '';
     
     // Estimate document count (3 sections x 4 docs each + POC + additional)
@@ -5235,15 +3702,15 @@ function renderReviewPreview() {
                     <li><strong>0.0</strong> Situation Summary</li>
                     <li class="placeholder"><strong>0.1</strong> Situation AlphaSense [PLACEHOLDER]</li>
                     <li class="placeholder"><strong>0.2</strong> Situation ARC [PLACEHOLDER]</li>
-                    <li class="generated"><strong>0.3</strong> Situation DeepResearch ✓</li>
+                    <li class="generated"><strong>0.3</strong> Situation DeepResearch âœ“</li>
                     <li><strong>1.0</strong> Complication Summary</li>
                     <li class="placeholder"><strong>1.1</strong> Complication AlphaSense [PLACEHOLDER]</li>
                     <li class="placeholder"><strong>1.2</strong> Complication ARC [PLACEHOLDER]</li>
-                    <li class="generated"><strong>1.3</strong> Complication DeepResearch ✓</li>
+                    <li class="generated"><strong>1.3</strong> Complication DeepResearch âœ“</li>
                     <li><strong>2.0</strong> Value Summary</li>
                     <li class="placeholder"><strong>2.1</strong> Value AlphaSense [PLACEHOLDER]</li>
                     <li class="placeholder"><strong>2.2</strong> Value ARC [PLACEHOLDER]</li>
-                    <li class="generated"><strong>2.3</strong> Value DeepResearch ✓</li>
+                    <li class="generated"><strong>2.3</strong> Value DeepResearch âœ“</li>
                     ${pocFilesHtml}
                     ${additionalFilesHtml}
                 </ul>
@@ -5280,12 +3747,6 @@ function renderReviewPreview() {
             if (btnText) btnText.textContent = 'Export Source Pack';
         }
     });
-    
-    // Continue button - goes to narrative step (now step 5)
-    document.getElementById('continueToNarrativeBtn')?.addEventListener('click', () => {
-        goToStep(5);
-        populateNarrativeStep();
-    });
 }
 
 // Simulation fallback for non-Electron mode
@@ -5316,7 +3777,7 @@ async function simulateSourcePackGeneration(context) {
                 { competitor: 'Competitor A', move: 'Expanded cloud services', impact: 'Medium' }
             ],
             industry_kpis: {
-                'Revenue Growth': { value: '12%', trend: 'up', trend_indicator: '↑', benchmark: '10%' }
+                'Revenue Growth': { value: '12%', trend: 'up', trend_indicator: 'â†‘', benchmark: '10%' }
             },
             regulatory_events: [
                 { title: 'New Data Privacy Regulation', impact: 'High', regulator: 'SEC' }
@@ -5340,7 +3801,7 @@ async function simulateSourcePackGeneration(context) {
         },
         validation: {
             status: 'ready',
-            statusLabel: '✅ Ready',
+            statusLabel: 'âœ… Ready',
             statusDescription: 'Source Pack meets all validation requirements'
         }
     };
@@ -5370,7 +3831,7 @@ function updateStageStatus(stage, status, progress = null) {
         
         const statusEl = stageEl.querySelector('.stage-status');
         if (status === 'complete') {
-            statusEl.textContent = '✓';
+            statusEl.textContent = 'âœ“';
         } else if (status === 'in-progress') {
             statusEl.textContent = progress !== null ? `${Math.round(progress)}%` : '...';
         } else if (status === 'placeholder') {
@@ -5409,267 +3870,6 @@ function getStageMessage(stage) {
         complete: 'Finalising Source Pack...'
     };
     return messages[stage] || 'Processing...';
-}
-
-// ============================================
-// Review Rendering
-// ============================================
-function renderReview(sourcePack, validation) {
-    const statusConfig = {
-        'ready': { icon: 'check', class: 'ready', label: '✅ Ready' },
-        'ready_with_caveats': { icon: 'warning', class: 'caveats', label: '⚠️ Ready with Caveats' },
-        'incomplete': { icon: 'error', class: 'incomplete', label: '❌ Incomplete' }
-    };
-    
-    const status = statusConfig[validation.status] || statusConfig.ready;
-    
-    elements.reviewContainer.innerHTML = `
-        <div class="review-header">
-            <div class="review-status">
-                <div class="status-icon ${status.class}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        ${status.class === 'ready' ? '<path d="M5 13l4 4L19 7"/>' :
-                          status.class === 'caveats' ? '<path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>' :
-                          '<path d="M6 18L18 6M6 6l12 12"/>'}
-                    </svg>
-                </div>
-                <div class="status-info">
-                    <h3>${status.label}</h3>
-                    <p>${validation.statusDescription || 'Validation complete'}</p>
-                </div>
-            </div>
-            <div class="export-buttons">
-                <button class="btn btn-ghost" onclick="exportJSON()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
-                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                    </svg>
-                    Export JSON
-                </button>
-                <button class="btn btn-primary" onclick="exportMarkdown()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
-                        <path d="M9 12h6M9 16h6M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                    </svg>
-                    Export Report
-                </button>
-            </div>
-        </div>
-        
-        <div class="review-grid">
-            <!-- Confidence Scores -->
-            <div class="review-section full-width">
-                <h4>Confidence Scores</h4>
-                <div class="confidence-meters">
-                    ${renderConfidenceMeter('Overall', sourcePack.confidence_scores.overall)}
-                    ${renderConfidenceMeter('Data Completeness', sourcePack.confidence_scores.data_completeness)}
-                    ${renderConfidenceMeter('Source Quality', sourcePack.confidence_scores.source_quality)}
-                    ${renderConfidenceMeter('Timeliness', sourcePack.confidence_scores.timeliness)}
-                </div>
-            </div>
-            
-            <!-- Client Info -->
-            <div class="review-section">
-                <h4>Client</h4>
-                <div class="data-list">
-                    <div class="data-item">
-                        <span class="data-label">Name</span>
-                        <span class="data-value">${sourcePack.client.name}</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Industry</span>
-                        <span class="data-value">${sourcePack.client.industry}</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Geography</span>
-                        <span class="data-value">${sourcePack.client.geography}</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Time Horizon</span>
-                        <span class="data-value">${sourcePack.context.timeHorizon} days</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Output Intent</span>
-                        <span class="data-value">${sourcePack.context.outputIntent}</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Industry KPIs -->
-            <div class="review-section">
-                <h4>Industry KPIs</h4>
-                <div class="data-list">
-                    ${Object.entries(sourcePack.industry_kpis).slice(0, 5).map(([key, data]) => `
-                        <div class="data-item">
-                            <span class="data-label">${key}</span>
-                            <span class="data-value">
-                                ${data.value}
-                                <span class="trend-${data.trend}">${data.trend_indicator || getTrendIndicator(data.trend)}</span>
-                            </span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-            
-            <!-- Analyst Themes -->
-            <div class="review-section full-width">
-                <h4>Analyst Consensus Themes</h4>
-                <div class="theme-tags">
-                    ${sourcePack.alphasense_consensus.themes.map(t => `
-                        <span class="theme-tag">${t.theme} (${t.confidence}%)</span>
-                    `).join('')}
-                </div>
-            </div>
-            
-            <!-- Executive Summary -->
-            <div class="review-section full-width">
-                <h4>Executive Summary</h4>
-                <div class="executive-summary">
-                    <p>${sourcePack.company_profile.executive_summary || 'No summary available'}</p>
-                </div>
-            </div>
-            
-            <!-- Key Quotes -->
-            <div class="review-section full-width">
-                <h4>Key Quotes</h4>
-                <div class="quote-cards">
-                    ${(sourcePack.alphasense_consensus.key_quotes || []).slice(0, 3).map(q => `
-                        <div class="quote-card">
-                            <p class="quote-text">"${q.quote}"</p>
-                            <span class="quote-source">— ${q.source}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-            
-            <!-- Strategic Priorities -->
-            <div class="review-section">
-                <h4>Strategic Priorities</h4>
-                <div class="priority-list">
-                    ${(sourcePack.company_profile.strategic_priorities || []).map((p, i) => `
-                        <div class="priority-item">
-                            <span class="priority-number">${i + 1}</span>
-                            <span class="priority-text">${p}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-            
-            <!-- Competitor Moves -->
-            <div class="review-section">
-                <h4>Competitor Intelligence</h4>
-                <div class="data-list">
-                    ${(sourcePack.competitor_moves || []).map(c => `
-                        <div class="data-item">
-                            <span class="data-label">${c.competitor}</span>
-                            <span class="data-value" style="font-size: 0.8rem; max-width: 200px; text-align: right;">${c.move}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-            
-            <!-- Regulatory Events -->
-            <div class="review-section full-width">
-                <h4>Regulatory Events</h4>
-                <div class="regulatory-list">
-                    ${(sourcePack.regulatory_events || []).slice(0, 3).map(e => `
-                        <div class="regulatory-item">
-                            <div class="regulatory-header">
-                                <span class="regulatory-title">${e.title}</span>
-                                <span class="regulatory-impact impact-${e.impact?.toLowerCase() || 'medium'}">${e.impact || 'Medium'}</span>
-                            </div>
-                            <div class="regulatory-meta">
-                                <span>${e.regulator}</span>
-                                ${e.effective_date ? `<span>Effective: ${e.effective_date}</span>` : ''}
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-            
-            <!-- Sources -->
-            <div class="review-section full-width">
-                <h4>Sources (${(sourcePack.sources || []).length})</h4>
-                <div class="sources-grid">
-                    ${(sourcePack.sources || []).slice(0, 12).map(s => `
-                        <div class="source-item">
-                            <span class="source-type ${s.type}">${s.type}</span>
-                            <span class="source-name">${s.name}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-            
-            <!-- Metadata -->
-            <div class="review-section full-width">
-                <h4>Metadata</h4>
-                <div class="metadata-grid">
-                    <div class="metadata-item">
-                        <span class="metadata-label">Request ID</span>
-                        <span class="metadata-value mono">${sourcePack.metadata.request_id}</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Generated At</span>
-                        <span class="metadata-value">${new Date(sourcePack.metadata.generated_at).toLocaleString()}</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Generated By</span>
-                        <span class="metadata-value">${sourcePack.metadata.generated_by}</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Processing Time</span>
-                        <span class="metadata-value">${sourcePack.metadata.processing_time_ms}ms</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Schema Version</span>
-                        <span class="metadata-value">${sourcePack.metadata.schema_version}</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">APIs Used</span>
-                        <span class="metadata-value">${(sourcePack.metadata.apis_used || ['AlphaSense', 'ARC', 'Internet']).join(', ')}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="panel-actions" style="margin-top: var(--spacing-xl);">
-            <button class="btn btn-ghost" onclick="resetGeneration()">Generate Another</button>
-        </div>
-    `;
-}
-
-function getTrendIndicator(trend) {
-    const indicators = { up: '↑', down: '↓', stable: '→' };
-    return indicators[trend] || '→';
-}
-
-function renderConfidenceMeter(label, value) {
-    const circumference = 2 * Math.PI * 35;
-    const offset = circumference - (value / 100) * circumference;
-    const color = value >= 75 ? 'var(--success)' : value >= 50 ? 'var(--warning)' : 'var(--error)';
-    
-    return `
-        <div class="confidence-meter">
-            <div class="meter-circle">
-                <svg viewBox="0 0 80 80">
-                    <circle class="meter-bg" cx="40" cy="40" r="35"/>
-                    <circle class="meter-fill" cx="40" cy="40" r="35"
-                        stroke-dasharray="${circumference}"
-                        stroke-dashoffset="${offset}"
-                        style="stroke: ${color}"/>
-                </svg>
-                <span class="meter-value">${value}%</span>
-            </div>
-            <span class="meter-label">${label}</span>
-        </div>
-    `;
-}
-
-function resetGeneration() {
-    state.selectedClient = null;
-    state.currentSourcePack = null;
-    elements.clientSearch.value = '';
-    renderClientGrid();
-    elements.contextForm.reset();
-    goToStep(1);
 }
 
 // ============================================
@@ -5788,11 +3988,11 @@ function downloadBlob(blob, filename) {
 // ============================================
 function updateDashboardStats() {
     const sessions = state.generatedPacks.filter(p => p.type === 'client-session');
-    const totalNarratives = sessions.reduce((sum, s) => sum + (s.narratives?.length || 0), 0);
+    const completedDocs = sessions.filter(s => s.qualificationMarkdown || s.provocationMarkdown || s.reviewMarkdown).length;
     document.getElementById('statPacks').textContent = sessions.length;
-    document.getElementById('statReady').textContent = totalNarratives;
+    document.getElementById('statReady').textContent = completedDocs;
     document.getElementById('statCaveats').textContent = 
-        sessions.filter(p => p.stage === 'source-pack').length;
+        sessions.filter(p => (p.currentStep || 2) >= 4).length;
     document.getElementById('statClients').textContent = state.clients.length || 8;
 }
 
@@ -5880,273 +4080,162 @@ function addActivity(text, type = 'info') {
 }
 
 // ============================================
-// History Functions — Client-Session Model
+// History Functions — Step-Based Session Model
 // ============================================
-// Each client has ONE history entry. Progress & narratives are nested.
-// Stages: 'client-created' → 'source-pack' → 'narrative'
+// Each client gets ONE history entry. Progress is tracked by currentStep (2-7).
+// Data from each step (POC, supporting docs, qual, value case, provoke, review) is persisted.
+// Clicking a history item restores ALL state and navigates to the last reached step.
+
+const STEP_LABELS = {
+    2: 'Configure',
+    3: 'Supporting Docs',
+    4: 'Qualification',
+    5: 'Value Case',
+    6: 'Provocation',
+    7: 'Review'
+};
 
 /**
- * Migrate old history entries to the new client-session model.
- * Old entries had type: 'narrative' with a single narrative object.
- * New entries have type: 'client-session' with narratives[] array.
+ * Find or create a history entry for the given client.
  */
-function migrateHistoryEntries(entries) {
-    const clientMap = new Map(); // clientId → merged entry
-    const result = [];
-    
-    for (const entry of entries) {
-        // Already new format
-        if (entry.type === 'client-session') {
-            const key = entry.clientId || entry.client?.id;
-            if (key && clientMap.has(key)) {
-                // Merge narratives into existing
-                const existing = clientMap.get(key);
-                if (entry.narratives) {
-                    for (const n of entry.narratives) {
-                        if (!existing.narratives.find(en => en.id === n.id)) {
-                            existing.narratives.push(n);
-                        }
-                    }
-                }
-                // Keep the more advanced stage
-                const stageOrder = ['client-created', 'source-pack', 'narrative'];
-                if (stageOrder.indexOf(entry.stage) > stageOrder.indexOf(existing.stage)) {
-                    existing.stage = entry.stage;
-                    existing.sourcePack = entry.sourcePack || existing.sourcePack;
-                    existing.context = entry.context || existing.context;
-                }
-            } else if (key) {
-                clientMap.set(key, entry);
-                result.push(entry);
-            } else {
-                result.push(entry); // Keep entries we can't merge
-            }
-            continue;
-        }
-        
-        // Old format: type === 'narrative' (or no type)
-        if (entry.type === 'narrative' || !entry.type) {
-            const clientId = entry.client?.id;
-            if (!clientId) continue; // Skip entries with no client
-            
-            if (clientMap.has(clientId)) {
-                // Merge old narrative into existing client-session
-                const existing = clientMap.get(clientId);
-                if (entry.narrative) {
-                    const narrativeEntry = {
-                        id: entry.narrative.id || entry.id || 'narr_' + Date.now(),
-                        content: entry.narrative.content,
-                        timestamp: entry.narrative.timestamp || entry.generatedAt,
-                        outputIntent: entry.narrative.outputIntent || entry.context?.outputIntent,
-                        wordCount: entry.narrative.wordCount || 0,
-                        agentPrompt: entry.narrative.agentPrompt || entry.agentPrompt || '',
-                        strategicQuestion: entry.strategicQuestion || '',
-                        chatHistory: entry.chatHistory || [],
-                        lastEdited: entry.narrative.lastEdited || null
-                    };
-                    if (!existing.narratives.find(n => n.id === narrativeEntry.id)) {
-                        existing.narratives.push(narrativeEntry);
-                    }
-                    existing.stage = 'narrative';
-                }
-                // Keep richer data
-                existing.sourcePack = existing.sourcePack || entry.sourcePack;
-                existing.context = existing.context || entry.context;
-                existing.pocFile = existing.pocFile || entry.pocFile;
-            } else {
-                // Convert old entry to new format
-                const narratives = [];
-                if (entry.narrative) {
-                    narratives.push({
-                        id: entry.narrative.id || entry.id || 'narr_' + Date.now(),
-                        content: entry.narrative.content,
-                        timestamp: entry.narrative.timestamp || entry.generatedAt,
-                        outputIntent: entry.narrative.outputIntent || entry.context?.outputIntent,
-                        wordCount: entry.narrative.wordCount || 0,
-                        agentPrompt: entry.narrative.agentPrompt || entry.agentPrompt || '',
-                        strategicQuestion: entry.strategicQuestion || '',
-                        chatHistory: entry.chatHistory || [],
-                        lastEdited: entry.narrative.lastEdited || null
-                    });
-                }
-                
-                const newEntry = {
-                    id: 'hist_' + clientId + '_' + Date.now(),
-                    clientId: clientId,
-                    type: 'client-session',
-                    client: entry.client,
-                    stage: narratives.length > 0 ? 'narrative' : (entry.sourcePack ? 'source-pack' : 'client-created'),
-                    pocFile: entry.pocFile || null,
-                    context: entry.context || null,
-                    sourcePack: entry.sourcePack || null,
-                    contacts: entry.contacts || { current: [], exited: [] },
-                    agentPrompt: entry.agentPrompt || '',
-                    strategicQuestion: entry.strategicQuestion || '',
-                    narratives: narratives,
-                    activeNarrativeId: narratives[0]?.id || null,
-                    validation: entry.validation || { status: 'ready', statusLabel: '✅ Ready' },
-                    createdAt: entry.generatedAt || new Date().toISOString(),
-                    lastUpdatedAt: entry.generatedAt || new Date().toISOString()
-                };
-                clientMap.set(clientId, newEntry);
-                result.push(newEntry);
-            }
-        }
-    }
-    
-    console.log(`[History] Migration: ${entries.length} entries → ${result.length} client sessions`);
-    return result;
-}
-
-/**
- * Find or create a history entry for the current client.
- * Always returns the entry. Creates one if it doesn't exist.
- */
-function getOrCreateClientHistoryEntry(client) {
+function getOrCreateHistoryEntry(client) {
     if (!client?.id) return null;
-    
+
     let entry = state.generatedPacks.find(p => p.clientId === client.id);
     if (!entry) {
         entry = {
-            id: 'hist_' + client.id + '_' + Date.now(),
-            clientId: client.id,       // Stable lookup key
+            id: 'sess_' + client.id + '_' + Date.now(),
+            clientId: client.id,
             type: 'client-session',
-            client: { ...client },     // Snapshot
-            stage: 'client-created',
-            pocFile: null,
-            context: null,
-            sourcePack: null,
-            contacts: { current: [], exited: [] },
-            agentPrompt: '',
-            strategicQuestion: '',
-            narratives: [],            // Array of narrative versions
-            activeNarrativeId: null,
-            validation: { status: 'ready', statusLabel: '✅ Ready' },
+            client: { ...client },
+            currentStep: 2,
             createdAt: new Date().toISOString(),
-            lastUpdatedAt: new Date().toISOString()
+            lastUpdatedAt: new Date().toISOString(),
+            // Step 2
+            pocFile: null,
+            // Step 3
+            supportingDocNames: [],
+            // Step 4
+            qualificationMarkdown: null,
+            qualPrompt: '',
+            // Step 5
+            valueCaseMarkdown: null,
+            valueCasePrompt: '',
+            // Step 6
+            provocationMarkdown: null,
+            provokePrompt: '',
+            // Step 7
+            reviewMarkdown: null,
+            reviewSelectedRole: null
         };
         state.generatedPacks.unshift(entry);
-        console.log('[History] Created new entry for client:', client.commonName || client.name);
+        console.log('[History] Created entry for:', client.commonName || client.name);
     }
     return entry;
 }
 
 /**
- * Save/update the history entry for the current client at a given stage.
- * Call this at each major progress point.
+ * Save progress for the current client.
+ * Called on every step transition and after every generation/upload.
+ * @param {number} step - The step number (2-7) the user has reached or is working in.
  */
-function saveClientHistory(stage) {
+function saveSessionProgress(step) {
     const client = state.selectedClient;
     if (!client?.id) {
         console.warn('[History] Cannot save — no selected client');
         return;
     }
-    
-    const entry = getOrCreateClientHistoryEntry(client);
+
+    const entry = getOrCreateHistoryEntry(client);
     if (!entry) return;
-    
+
     // Always update client snapshot & timestamp
     entry.client = { ...client };
     entry.lastUpdatedAt = new Date().toISOString();
-    
-    // Update stage (only advance, never go backwards)
-    const stageOrder = ['client-created', 'source-pack', 'narrative'];
-    if (stageOrder.indexOf(stage) >= stageOrder.indexOf(entry.stage)) {
-        entry.stage = stage;
+
+    // Advance step (never go backwards)
+    if (typeof step === 'number' && step > (entry.currentStep || 2)) {
+        entry.currentStep = step;
     }
-    
-    // Capture current state based on stage
-    if (stage === 'source-pack' || stage === 'narrative') {
-        entry.context = state.currentContext || state.pendingGenerationContext || entry.context;
-        entry.sourcePack = state.currentSourcePack || entry.sourcePack;
-        entry.pocFile = state.pocFile || entry.pocFile;
-        entry.contacts = {
-            current: state.researchedContacts?.current || entry.contacts?.current || [],
-            exited: state.researchedContacts?.exited || entry.contacts?.exited || []
+
+    // --- Capture data from current state ---
+
+    // Step 2: POC file (save reference, not content — too large for history)
+    if (state.pocFile) {
+        entry.pocFile = {
+            name: state.pocFile.name,
+            originalName: state.pocFile.originalName || state.pocFile.name,
+            size: state.pocFile.size || 0
         };
     }
-    
+
+    // Step 3: Supporting doc file names
+    if (state.supportingDocFiles && state.supportingDocFiles.length > 0) {
+        entry.supportingDocNames = state.supportingDocFiles.map(f => f.fileName || f.name || 'unknown');
+    }
+
+    // Step 4: Qualification
+    if (state.qualificationMarkdown) {
+        entry.qualificationMarkdown = state.qualificationMarkdown;
+        entry.qualPrompt = elements.qualPromptEditor?.value || entry.qualPrompt || '';
+    }
+
+    // Step 5: Value Case
+    if (state.valueCaseMarkdown) {
+        entry.valueCaseMarkdown = state.valueCaseMarkdown;
+        entry.valueCasePrompt = elements.valueCasePromptEditor?.value || entry.valueCasePrompt || '';
+    }
+    if (state.valueCaseAssumptions && state.valueCaseAssumptions.length > 0) {
+        entry.valueCaseAssumptions = state.valueCaseAssumptions;
+    }
+
+    // Step 6: Provocation
+    if (state.provocationMarkdown) {
+        entry.provocationMarkdown = state.provocationMarkdown;
+        entry.provokePrompt = elements.provokePromptEditor?.value || entry.provokePrompt || '';
+    }
+
+    // Step 7: Review — now stores per-role changes (not a single markdown)
+    entry.reviewSelectedRole = state.reviewSelectedRole || entry.reviewSelectedRole;
+
+    // Step 7: Per-role review changes
+    if (state.reviewsByRole && Object.keys(state.reviewsByRole).length > 0) {
+        entry.reviewsByRole = {};
+        for (const [role, changes] of Object.entries(state.reviewsByRole)) {
+            entry.reviewsByRole[role] = changes;
+        }
+    }
+
+    // Step 7: Provoke rewrite versions (store markdown only)
+    if (state.provokeVersions && state.provokeVersions.length > 1) {
+        entry.provokeRewriteVersions = state.provokeVersions.slice(1).map(v => ({
+            label: v.label,
+            markdown: v.markdown,
+            fileName: v.fileName,
+            role: v.role
+        }));
+    }
+
     // Move to front (most recently updated first)
     const idx = state.generatedPacks.indexOf(entry);
     if (idx > 0) {
         state.generatedPacks.splice(idx, 1);
         state.generatedPacks.unshift(entry);
     }
-    
-    // Keep max 50
+
+    // Keep max 50 entries
     if (state.generatedPacks.length > 50) {
         state.generatedPacks = state.generatedPacks.slice(0, 50);
     }
-    
-    // Persist
+
+    // Persist to disk
     persistHistory();
-    updateHistoryView();
-    
-    console.log('[History] Saved client progress:', client.commonName || client.name, '→', stage);
+
+    console.log('[History] Saved:', client.commonName || client.name, '→ Step', entry.currentStep);
 }
 
 /**
- * Add a narrative version to the client's history entry.
- */
-function addNarrativeToHistory(narrative) {
-    const client = state.selectedClient;
-    const entry = getOrCreateClientHistoryEntry(client || { id: 'unknown', name: 'Unknown', commonName: 'Unknown' });
-    if (!entry) return;
-    
-    // Capture agent prompt & strategic question at generation time
-    const agentPrompt = narrative.agentPrompt || document.getElementById('narrativeAgentPrompt')?.value || '';
-    const strategicQuestion = document.getElementById('strategicQuestion')?.value || '';
-    
-    const narrativeEntry = {
-        id: narrative.id || 'narr_' + Date.now(),
-        content: narrative.content,
-        timestamp: narrative.timestamp || new Date().toISOString(),
-        outputIntent: narrative.outputIntent,
-        wordCount: narrative.content?.split(/\s+/).length || 0,
-        agentPrompt: agentPrompt,
-        strategicQuestion: strategicQuestion,
-        chatHistory: [],
-        lastEdited: null
-    };
-    
-    entry.narratives.unshift(narrativeEntry);
-    entry.activeNarrativeId = narrativeEntry.id;
-    entry.stage = 'narrative';
-    entry.lastUpdatedAt = new Date().toISOString();
-    
-    // Also store latest context/sourcePack/contacts
-    entry.context = state.currentContext || state.pendingGenerationContext || entry.context;
-    entry.sourcePack = state.currentSourcePack || entry.sourcePack;
-    entry.pocFile = state.pocFile || entry.pocFile;
-    entry.contacts = {
-        current: state.researchedContacts?.current || entry.contacts?.current || [],
-        exited: state.researchedContacts?.exited || entry.contacts?.exited || []
-    };
-    entry.agentPrompt = agentPrompt;
-    entry.strategicQuestion = strategicQuestion;
-    
-    // Track for chat saving
-    narrativeChat.currentHistoryEntryId = entry.id;
-    narrativeChat.currentNarrativeId = narrativeEntry.id;
-    
-    // Move to front
-    const idx = state.generatedPacks.indexOf(entry);
-    if (idx > 0) {
-        state.generatedPacks.splice(idx, 1);
-        state.generatedPacks.unshift(entry);
-    }
-    
-    // Persist
-    persistHistory();
-    updateHistoryView();
-    
-    console.log('[History] Added narrative version to', entry.client?.commonName || entry.client?.name, '- total:', entry.narratives.length);
-    
-    return narrativeEntry;
-}
-
-/**
- * Persist history to disk.
+ * Persist history to disk via Electron IPC.
  */
 function persistHistory() {
     if (window.electronAPI?.appData) {
@@ -6154,63 +4243,59 @@ function persistHistory() {
     }
 }
 
+/**
+ * Render the history list view.
+ */
 function updateHistoryView() {
-    // Show all client-session entries (one per client)
-    const sessions = state.generatedPacks.filter(pack => pack.type === 'client-session');
-    
+    const sessions = state.generatedPacks.filter(p => p.type === 'client-session');
+
     if (sessions.length === 0) {
         elements.historyEmpty.classList.remove('hidden');
         elements.historyList.classList.add('hidden');
     } else {
         elements.historyEmpty.classList.add('hidden');
         elements.historyList.classList.remove('hidden');
-        
+
         elements.historyList.innerHTML = sessions.map(pack => {
             const clientName = pack.client?.commonName || pack.client?.name || 'Unknown Client';
-            const narrativeCount = pack.narratives?.length || 0;
             const lastUpdated = pack.lastUpdatedAt || pack.createdAt || new Date().toISOString();
-            
-            // Stage display
-            const stageLabels = {
-                'client-created': '🆕 Client Created',
-                'source-pack': '📦 Source Pack Ready',
-                'narrative': `📝 ${narrativeCount} Narrative${narrativeCount !== 1 ? 's' : ''}`
-            };
-            const stageLabel = stageLabels[pack.stage] || '🆕 Started';
-            
-            // Stage-based icon
-            const stageIcons = {
-                'client-created': '<circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>',
-                'source-pack': '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',
-                'narrative': '<path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/>'
-            };
-            const iconPaths = stageIcons[pack.stage] || stageIcons['client-created'];
-            
-            // Output intent if available
-            const outputIntent = pack.context?.outputIntent || '';
-            const metaParts = [new Date(lastUpdated).toLocaleString()];
-            if (outputIntent) metaParts.push(outputIntent);
-            
-            return `
-            <div class="history-item history-${pack.stage}" data-pack-id="${pack.id}">
-                <div class="history-icon ${pack.stage === 'narrative' ? 'narrative-icon' : ''}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        ${iconPaths}
-                    </svg>
-                </div>
-                <div class="history-info">
-                    <span class="history-title">${clientName}</span>
-                    <span class="history-meta">${metaParts.join(' • ')}</span>
-                </div>
-                <span class="history-status ${pack.stage}">
-                    ${stageLabel}
-                </span>
-                <div class="history-actions">
-                    <button class="btn btn-ghost btn-sm" onclick="viewHistoryPack('${pack.id}')">Resume</button>
-                    <button class="btn btn-ghost btn-sm" onclick="deleteHistoryEntry('${pack.id}')" title="Remove from history" style="color: var(--danger); padding: 4px;">✕</button>
-                </div>
-            </div>
-        `}).join('');
+            const step = pack.currentStep || 2;
+            const stepLabel = STEP_LABELS[step] || 'Configure';
+
+            // Build a progress dots visualization (steps 2-6)
+            const dots = [2, 3, 4, 5, 6].map(s => {
+                const cls = s < step ? 'completed' : s === step ? 'active' : 'pending';
+                return '<span class="history-step-dot ' + cls + '" title="Step ' + s + ': ' + STEP_LABELS[s] + '"></span>';
+            }).join('');
+
+            // Summary of what has been generated
+            const parts = [];
+            if (pack.qualificationMarkdown) parts.push('Qual');
+            if (pack.provocationMarkdown) parts.push('Provoke');
+            if (pack.reviewsByRole && Object.keys(pack.reviewsByRole).length > 0) parts.push('Review');
+            const genSummary = parts.length > 0 ? parts.join(' \u00B7 ') : '';
+
+            return '<div class="history-item" data-pack-id="' + pack.id + '">' +
+                '<div class="history-icon">' +
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                        '<rect x="3" y="3" width="18" height="18" rx="2"/>' +
+                        '<path d="M3 9h18"/><path d="M9 21V9"/>' +
+                    '</svg>' +
+                '</div>' +
+                '<div class="history-info">' +
+                    '<span class="history-title">' + clientName + '</span>' +
+                    '<span class="history-meta">' + new Date(lastUpdated).toLocaleString() + (genSummary ? ' \u00B7 ' + genSummary : '') + '</span>' +
+                '</div>' +
+                '<div class="history-progress">' +
+                    '<div class="history-step-dots">' + dots + '</div>' +
+                    '<span class="history-step-label">Step ' + step + ': ' + stepLabel + '</span>' +
+                '</div>' +
+                '<div class="history-actions">' +
+                    '<button class="btn btn-ghost btn-sm" onclick="viewHistoryPack(\'' + pack.id + '\')">Resume</button>' +
+                    '<button class="btn btn-ghost btn-sm" onclick="deleteHistoryEntry(\'' + pack.id + '\')" title="Remove from history" style="color: var(--danger); padding: 4px;">\u2715</button>' +
+                '</div>' +
+            '</div>';
+        }).join('');
     }
 }
 
@@ -6222,121 +4307,199 @@ function deleteHistoryEntry(packId) {
         persistHistory();
         updateHistoryView();
         updateDashboardStats();
-        showToast(`Removed ${entry.client?.commonName || entry.client?.name || 'entry'} from history`, 'info');
+        showToast('Removed ' + (entry.client?.commonName || entry.client?.name || 'entry') + ' from history', 'info');
     }
 }
 
-function viewHistoryPack(packId) {
+/**
+ * Restore a history entry — loads all saved state and navigates to the last reached step.
+ */
+async function viewHistoryPack(packId) {
     const pack = state.generatedPacks.find(p => p.id === packId);
     if (!pack) return;
-    
-    // Restore full client context
-    state.selectedClient = pack.client;
-    state.currentContext = pack.context;
-    state.currentSourcePack = pack.sourcePack;
-    
-    // Push source pack to backend (critical for workshop generation)
-    if (state.isElectron && window.electronAPI?.narrativeChat?.setSourcePack && pack.sourcePack) {
-        window.electronAPI.narrativeChat.setSourcePack(pack.sourcePack);
-        console.log('[History] Restored source pack to backend with', Object.keys(pack.sourcePack?.documents || {}).length, 'documents');
-    }
-    
-    // Switch to generate view
-    switchView('generate');
-    
-    // Restore POC file & contacts
-    if (pack.pocFile) state.pocFile = pack.pocFile;
-    if (pack.contacts) {
-        state.researchedContacts = {
-            current: pack.contacts.current || [],
-            exited: pack.contacts.exited || []
-        };
-    }
-    
-    // Determine where to resume based on stage
-    if (pack.stage === 'narrative' && pack.narratives?.length > 0) {
-        // Resume at Step 5 — show the most recent (or active) narrative
-        goToStep(5);
-        populateNarrativeStep();
-        
-        // Restore strategic question
-        const sqTextarea = document.getElementById('strategicQuestion');
-        if (sqTextarea && pack.strategicQuestion) sqTextarea.value = pack.strategicQuestion;
-        
-        // Restore agent prompt
-        const promptTextarea = document.getElementById('narrativeAgentPrompt');
-        if (promptTextarea && pack.agentPrompt) promptTextarea.value = pack.agentPrompt;
-        
-        // Restore contacts UI
-        restoreContactsToGrids(pack.contacts);
-        
-        // Find the active narrative (or latest)
-        const activeNarrative = pack.narratives.find(n => n.id === pack.activeNarrativeId) || pack.narratives[0];
-        
-        // Set the history tracking IDs
-        narrativeChat.currentHistoryEntryId = pack.id;
-        narrativeChat.currentNarrativeId = activeNarrative.id;
-        
-        // Load per-client narratives then display
-        if (pack.client?.id) {
-            loadClientNarratives(pack.client.id).then(() => {
-                displayNarrative(activeNarrative, pack.sourcePack, activeNarrative.chatHistory, pack.id);
-            });
-        } else {
-            displayNarrative(activeNarrative, pack.sourcePack, activeNarrative.chatHistory, pack.id);
-        }
-        
-    } else if (pack.stage === 'source-pack' && pack.sourcePack) {
-        // Resume at Step 4 — review / add documents
-        renderReview(pack.sourcePack, pack.validation);
-        goToStep(4);
-        
-        if (pack.client?.id) loadClientNarratives(pack.client.id);
-        
-    } else {
-        // 'client-created' — resume at Step 2 (context/POC)
-        // Re-select the client to set up step 2 properly
-        const client = state.clients.find(c => c.id === pack.client?.id);
-        if (client) {
-            state.selectedClient = client;
-            renderClientGrid(elements.clientSearch?.value || '');
-            document.getElementById('industry').value = client.industry || '';
-            document.getElementById('geography').value = client.geography || '';
-        }
-        goToStep(2);
-    }
-}
 
-// Restore contacts from history to the UI grids
-function restoreContactsToGrids(contacts) {
-    if (!contacts) return;
-    
-    const currentGrid = document.getElementById('currentContactsGrid');
-    const exitedGrid = document.getElementById('exitedContactsGrid');
-    const currentTitle = document.getElementById('currentContactsTitle');
-    const exitedTitle = document.getElementById('exitedContactsTitle');
-    const currentHint = document.getElementById('currentContactsHint');
-    const exitedHint = document.getElementById('exitedContactsHint');
-    
-    // Update titles for restored data
-    if (currentTitle) currentTitle.textContent = 'Key Stakeholders';
-    if (currentHint) currentHint.textContent = 'Contacts from when this narrative was generated';
-    if (exitedTitle) exitedTitle.textContent = 'Recently Exited Senior Leaders';
-    if (exitedHint) exitedHint.textContent = 'Departures found when this narrative was generated';
-    
-    // Populate current contacts
-    if (contacts.current && contacts.current.length > 0) {
-        populateContactGrid(currentGrid, contacts.current, 'current');
-    } else {
-        resetContactGrid(currentGrid, 'No contacts saved');
+    // --- Reset current wizard state without touching history ---
+    state.isGenerating = false;
+    state.qualificationGenerating = false;
+    state.valueCaseGenerating = false;
+    state.provocationGenerating = false;
+    state.reviewGenerating = false;
+    state.qualificationMarkdown = null;
+    state.valueCaseMarkdown = null;
+    state.valueCaseAssumptions = null;
+    state.provocationMarkdown = null;
+    state.reviewMarkdown = null;
+    state.reviewSelectedRole = null;
+    state.pocFile = null;
+    state.supportingDocFiles = [];
+    state.supportingDocsCorpus = null;
+
+    // --- Restore client ---
+    const liveClient = state.clients.find(c => c.id === pack.client?.id);
+    state.selectedClient = liveClient || pack.client;
+
+    // Switch to generate view (without resetWizard — we are restoring)
+    const views = ['dashboard', 'generate', 'history', 'admin'];
+    views.forEach(function(v) {
+        const el = document.getElementById(v + 'View');
+        if (el) el.classList.toggle('hidden', v !== 'generate');
+    });
+    document.querySelectorAll('.nav-item').forEach(function(item) {
+        item.classList.toggle('active', item.dataset.view === 'generate');
+    });
+    state.currentView = 'generate';
+
+    // --- Restore Step 2: Configure ---
+    renderClientGrid(elements.clientSearch?.value || '');
+    if (state.selectedClient) {
+        document.getElementById('industry').value = state.selectedClient.industry || '';
+        document.getElementById('geography').value = state.selectedClient.geography || '';
     }
-    
-    // Populate exited contacts
-    if (contacts.exited && contacts.exited.length > 0) {
-        populateContactGrid(exitedGrid, contacts.exited, 'exited');
-    } else {
-        resetContactGrid(exitedGrid, 'No departures saved');
+
+    // Restore POC file UI (reference only — content not persisted in history)
+    if (pack.pocFile) {
+        var pocFileName = document.getElementById('pocFileName');
+        var pocFileSize = document.getElementById('pocFileSize');
+        var pocEmpty = document.getElementById('pocEmpty');
+        var pocFileInfo = document.getElementById('pocFileInfo');
+        if (pocEmpty) pocEmpty.classList.add('hidden');
+        if (pocFileInfo) pocFileInfo.classList.remove('hidden');
+        if (pocFileName) pocFileName.textContent = (pack.pocFile.originalName || pack.pocFile.name || 'POC file') + ' (from previous session)';
+        if (pocFileSize) pocFileSize.textContent = formatFileSize(pack.pocFile.size || 0);
     }
+
+    // --- Restore Step 3: Supporting Docs summary ---
+    if (pack.supportingDocNames && pack.supportingDocNames.length > 0) {
+        var docFileList = document.getElementById('docFileList');
+        if (docFileList) {
+            docFileList.innerHTML = pack.supportingDocNames.map(function(name) {
+                return '<div class="doc-file-item">' +
+                    '<span class="doc-file-name">' + name + '</span>' +
+                    '<span class="doc-file-status" style="color: var(--text-muted); font-size: 0.8em;">(from previous session)</span>' +
+                '</div>';
+            }).join('');
+        }
+    }
+
+    // --- Restore Step 4: Qualification ---
+    if (pack.qualificationMarkdown) {
+        state.qualificationMarkdown = pack.qualificationMarkdown;
+        if (elements.qualPreviewContent) {
+            elements.qualPreviewContent.innerHTML = renderMarkdownToHtml(pack.qualificationMarkdown);
+        }
+        if (elements.qualPreview) elements.qualPreview.classList.remove('hidden');
+        if (elements.qualProgress) elements.qualProgress.classList.add('hidden');
+        if (elements.proceedToStep5) elements.proceedToStep5.disabled = false;
+    }
+    if (pack.qualPrompt && elements.qualPromptEditor) {
+        elements.qualPromptEditor.value = pack.qualPrompt;
+    }
+
+    // --- Restore Step 5: Value Case ---
+    if (pack.valueCaseMarkdown) {
+        state.valueCaseMarkdown = pack.valueCaseMarkdown;
+        if (elements.valueCasePreviewContent) {
+            elements.valueCasePreviewContent.innerHTML = renderMarkdownToHtml(pack.valueCaseMarkdown);
+        }
+        if (elements.valueCasePreview) elements.valueCasePreview.classList.remove('hidden');
+        if (elements.valueCaseProgress) elements.valueCaseProgress.classList.add('hidden');
+        if (elements.proceedToStep6) elements.proceedToStep6.disabled = false;
+
+        // Restore assumptions table if saved, otherwise re-extract
+        if (pack.valueCaseAssumptions && Array.isArray(pack.valueCaseAssumptions) && pack.valueCaseAssumptions.length > 0) {
+            state.valueCaseAssumptions = pack.valueCaseAssumptions;
+            renderAssumptionsTable(pack.valueCaseAssumptions);
+        } else {
+            extractAndRenderAssumptions();
+        }
+    }
+    if (pack.valueCasePrompt && elements.valueCasePromptEditor) {
+        elements.valueCasePromptEditor.value = pack.valueCasePrompt;
+    }
+
+    // --- Restore Step 6: Provocation ---
+    if (pack.provocationMarkdown) {
+        state.provocationMarkdown = pack.provocationMarkdown;
+        if (elements.provokePreviewContent) {
+            elements.provokePreviewContent.innerHTML = renderMarkdownToHtml(pack.provocationMarkdown);
+        }
+        if (elements.provokePreview) elements.provokePreview.classList.remove('hidden');
+        if (elements.provokeProgress) elements.provokeProgress.classList.add('hidden');
+    }
+    if (pack.provokePrompt && elements.provokePromptEditor) {
+        elements.provokePromptEditor.value = pack.provokePrompt;
+    }
+
+    // --- Restore Step 7: Review ---
+    if (pack.reviewsByRole && typeof pack.reviewsByRole === 'object') {
+        state.reviewsByRole = { ...pack.reviewsByRole };
+        state.reviewSelectedRole = pack.reviewSelectedRole || null;
+        // Render checklists for each role that has data
+        for (const role of Object.keys(pack.reviewsByRole)) {
+            const data = pack.reviewsByRole[role];
+            // Handle both new shape { changes, questions } and legacy bare array
+            const changes = Array.isArray(data) ? data : (data?.changes || []);
+            const questions = Array.isArray(data) ? [] : (data?.questions || []);
+            // Normalise state to new shape
+            if (Array.isArray(data)) {
+                state.reviewsByRole[role] = { changes, questions };
+            }
+            if (changes.length > 0 || questions.length > 0) {
+                renderReviewChecklist(role, changes, questions);
+            }
+            const rewriteBtn = document.querySelector('.csuite-rewrite-btn[data-role="' + role + '"]');
+            if (rewriteBtn && changes.length > 0) rewriteBtn.classList.remove('hidden');
+        }
+        // Select the last-used role tile (highlights it and shows only its checklist)
+        if (pack.reviewSelectedRole) {
+            selectCsuiteTile(pack.reviewSelectedRole);
+        }
+    } else {
+        state.reviewsByRole = {};
+    }
+
+    // Restore provoke rewrite versions
+    state.provokeVersions = [];
+    if (pack.provokeRewriteVersions && Array.isArray(pack.provokeRewriteVersions)) {
+        // Rebuild versions array: original at index 0, then rewrites
+        if (pack.provocationMarkdown) {
+            state.provokeVersions.push({
+                label: 'Original Provoke',
+                markdown: pack.provocationMarkdown,
+                fileName: '',
+                role: null,
+                timestamp: 0
+            });
+        }
+        for (const v of pack.provokeRewriteVersions) {
+            state.provokeVersions.push(v);
+        }
+    }
+
+    // Restore document state in the main process so review:getAssets works
+    if (state.isElectron && window.electronAPI.session?.restoreDocState) {
+        try {
+            await window.electronAPI.session.restoreDocState({
+                qualificationMarkdown: state.qualificationMarkdown || null,
+                valueCaseMarkdown: state.valueCaseMarkdown || null,
+                provocationMarkdown: state.provocationMarkdown || null,
+                reviewMarkdown: null,
+                reviewsByRole: pack.reviewsByRole || null,
+                provokeRewriteVersions: pack.provokeRewriteVersions || null,
+                clientName: state.selectedClient?.name || 'Client'
+            });
+        } catch (e) {
+            console.warn('[History] Failed to restore doc state in main process:', e);
+        }
+    }
+
+    // Navigate to the last reached step
+    var targetStep = pack.currentStep || 2;
+    state.highestStepReached = targetStep; // restore high-water mark before navigating
+    goToStep(targetStep);
+
+    showToast('Resumed ' + (pack.client?.commonName || pack.client?.name || 'session') + ' \u2014 Step ' + targetStep, 'info');
+    console.log('[History] Restored session:', pack.client?.commonName || pack.client?.name, '\u2192 Step', targetStep);
 }
 
 function exportHistoryPack(packId) {
@@ -6376,26 +4539,10 @@ async function loadCredentialStatus() {
                 openaiStatus.className = `credential-status ${status.openai?.configured ? 'configured' : 'not-configured'}`;
             }
             
-            // Update Runway ML status
-            const runwayStatus = document.getElementById('credStatusRunway');
-            if (runwayStatus) {
-                runwayStatus.textContent = status.runway?.configured ? 'Configured' : 'Not Configured';
-                runwayStatus.className = `credential-status ${status.runway?.configured ? 'configured' : 'not-configured'}`;
-            }
-            
-            // Update ElevenLabs status
-            const elevenlabsStatus = document.getElementById('credStatusElevenlabs');
-            if (elevenlabsStatus) {
-                elevenlabsStatus.textContent = status.elevenlabs?.configured ? 'Configured' : 'Not Configured';
-                elevenlabsStatus.className = `credential-status ${status.elevenlabs?.configured ? 'configured' : 'not-configured'}`;
-            }
-            
             // Load masked credentials for each provider
             await loadMaskedCredentials('alphasense');
             await loadMaskedCredentials('arc');
             await loadMaskedCredentials('openai');
-            await loadMaskedCredentials('runway');
-            await loadMaskedCredentials('elevenlabs');
         }
     } catch (error) {
         console.error('Failed to load credential status:', error);
@@ -6664,15 +4811,15 @@ function renderPlaceholdersList(placeholders) {
         // Build max chars badge based on placeholder type
         let maxCharsBadge = '';
         if (p.hasTitleBody && (p.maxCharsTitle || p.maxCharsBody)) {
-            const titlePart = p.maxCharsTitle ? `T≤${p.maxCharsTitle}` : '';
-            const bodyPart = p.maxCharsBody ? `B≤${p.maxCharsBody}` : '';
+            const titlePart = p.maxCharsTitle ? `Tâ‰¤${p.maxCharsTitle}` : '';
+            const bodyPart = p.maxCharsBody ? `Bâ‰¤${p.maxCharsBody}` : '';
             const combined = [titlePart, bodyPart].filter(Boolean).join(' ');
             maxCharsBadge = `<span class="placeholder-list-badge" title="Title: ${p.maxCharsTitle || 'no limit'}, Body: ${p.maxCharsBody || 'no limit'}" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">
                  ${combined}
                </span>`;
         } else if (p.maxChars) {
             maxCharsBadge = `<span class="placeholder-list-badge" title="Max ${p.maxChars} characters per output" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">
-                 ≤${p.maxChars}
+                 â‰¤${p.maxChars}
                </span>`;
         }
         
@@ -7631,7 +5778,15 @@ function setupEventListeners() {
         goToStep(1);
     });
     
-    elements.proceedToGenerate?.addEventListener('click', startGeneration);
+    // Step 2 → Step 3
+    elements.proceedToStep3?.addEventListener('click', () => {
+        goToStep(3);
+    });
+    
+    // Step 4 → Step 5 (Value Case)
+    elements.proceedToStep5?.addEventListener('click', () => {
+        goToStep(5);
+    });
     
     // History
     elements.historyGenerateBtn?.addEventListener('click', () => {
@@ -7653,18 +5808,6 @@ function setupEventListeners() {
     elements.openaiCredForm?.addEventListener('submit', (e) => {
         e.preventDefault();
         saveCredentials('openai', new FormData(e.target));
-    });
-    
-    // Runway ML credential form
-    document.getElementById('runwayCredForm')?.addEventListener('submit', (e) => {
-        e.preventDefault();
-        saveCredentials('runway', new FormData(e.target));
-    });
-    
-    // ElevenLabs credential form
-    document.getElementById('elevenlabsCredForm')?.addEventListener('submit', (e) => {
-        e.preventDefault();
-        saveCredentials('elevenlabs', new FormData(e.target));
     });
     
     // Test connection buttons
@@ -7734,7 +5877,6 @@ function sleep(ms) {
 // Make functions available globally for onclick handlers
 window.exportJSON = exportJSON;
 window.exportMarkdown = exportMarkdown;
-window.resetGeneration = resetGeneration;
 window.viewHistoryPack = viewHistoryPack;
 window.deleteHistoryEntry = deleteHistoryEntry;
 window.exportHistoryPack = exportHistoryPack;

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -108,12 +108,6 @@
                         <path d="M12 5v14M5 12h14"/>
                     </svg>
                     <span>Generate</span>
-                </button>
-                <button class="nav-item" data-view="video">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polygon points="5 3 19 12 5 21 5 3"/>
-                    </svg>
-                    <span>Generate Video</span>
                 </button>
                 <button class="nav-item" data-view="history">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -366,17 +360,27 @@
                         <div class="step-line"></div>
                         <div class="step" data-step="3">
                             <div class="step-number">3</div>
-                            <span class="step-label">Generate Source Pack</span>
+                            <span class="step-label">Upload Docs</span>
                         </div>
                         <div class="step-line"></div>
                         <div class="step" data-step="4">
                             <div class="step-number">4</div>
-                            <span class="step-label">Add Additional Docs</span>
+                            <span class="step-label">Qualify</span>
                         </div>
                         <div class="step-line"></div>
                         <div class="step" data-step="5">
                             <div class="step-number">5</div>
-                            <span class="step-label">Narrative</span>
+                            <span class="step-label">Value Case</span>
+                        </div>
+                        <div class="step-line"></div>
+                        <div class="step" data-step="6">
+                            <div class="step-number">6</div>
+                            <span class="step-label">Provoke</span>
+                        </div>
+                        <div class="step-line"></div>
+                        <div class="step" data-step="7">
+                            <div class="step-number">7</div>
+                            <span class="step-label">Review</span>
                         </div>
                     </div>
 
@@ -543,963 +547,408 @@
                             </form>
                             <div class="panel-actions">
                                 <button class="btn btn-ghost" id="backToStep1">Back</button>
-                                <button class="btn btn-primary" id="proceedToGenerate">Continue to Generate</button>
+                                <button class="btn btn-primary" id="proceedToStep3">Continue</button>
                             </div>
                         </div>
 
-                        <!-- Step 3: Generation Progress -->
+                        <!-- Step 3: Upload Supporting Documents -->
                         <div class="step-panel" data-step="3">
-                            <div class="generation-progress">
-                                <div class="progress-header">
-                                    <div class="progress-icon spinning">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                                        </svg>
-                                    </div>
-                                    <h3>Generating Source Pack</h3>
-                                    <p id="progressMessage">Initializing...</p>
+                            <div class="panel-header" style="flex-direction:column;align-items:flex-start;">
+                                <h3>Upload Supporting Documents</h3>
+                                <p class="panel-subtitle">Add relevant materials — account decks, thought pieces, org charts, research — to enrich the final narrative.</p>
+                            </div>
+
+                            <!-- Drop zone -->
+                            <div class="doc-upload-zone" id="docUploadZone">
+                                <div class="drop-zone-content">
+                                    <svg class="drop-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                    <p class="drop-zone-text">Drag files here or <button type="button" class="btn-link" id="browseDocsBtn">browse</button></p>
+                                    <p class="drop-zone-hint">PPTX, PDF, DOCX, XLSX, CSV, MD, TXT, Images (JPG/PNG), Email (EML)</p>
                                 </div>
-                                <div class="progress-stages" id="progressStages">
-                                    <div class="progress-stage" data-stage="auth">
-                                        <div class="stage-indicator pending">
-                                            <svg class="progress-ring" viewBox="0 0 36 36">
-                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
-                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
-                                            </svg>
-                                            <span class="stage-icon"></span>
-                                        </div>
-                                        <span class="stage-label">Authenticating to data sources</span>
-                                        <span class="stage-status"></span>
+                            </div>
+
+                            <!-- Uploaded file list -->
+                            <div class="doc-file-list" id="docFileList">
+                                <!-- Files will be rendered here by JS -->
+                            </div>
+
+                            <!-- Processing status bar -->
+                            <div class="doc-process-bar hidden" id="docProcessBar">
+                                <div class="doc-process-info">
+                                    <span class="doc-process-label" id="docProcessLabel">Processing documents...</span>
+                                    <span class="doc-process-count" id="docProcessCount">0 / 0</span>
+                                </div>
+                                <div class="doc-progress-track">
+                                    <div class="doc-progress-fill" id="docProgressFill"></div>
+                                </div>
+                            </div>
+
+                            <!-- Corpus summary (shown after processing) -->
+                            <div class="doc-corpus-summary hidden" id="docCorpusSummary">
+                                <h4 class="corpus-title">Corpus Ready</h4>
+                                <div class="corpus-stats">
+                                    <div class="corpus-stat">
+                                        <span class="corpus-stat-value" id="corpusDocCount">0</span>
+                                        <span class="corpus-stat-label">Documents</span>
                                     </div>
-                                    <div class="progress-stage" data-stage="alphasense">
-                                        <div class="stage-indicator pending">
-                                            <svg class="progress-ring" viewBox="0 0 36 36">
-                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
-                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
-                                            </svg>
-                                            <span class="stage-icon"></span>
-                                        </div>
-                                        <span class="stage-label">Pulling AlphaSense insights</span>
-                                        <span class="stage-status"></span>
+                                    <div class="corpus-stat">
+                                        <span class="corpus-stat-value" id="corpusChunkCount">0</span>
+                                        <span class="corpus-stat-label">Chunks</span>
                                     </div>
-                                    <div class="progress-stage" data-stage="arc">
-                                        <div class="stage-indicator pending">
-                                            <svg class="progress-ring" viewBox="0 0 36 36">
-                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
-                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
-                                            </svg>
-                                            <span class="stage-icon"></span>
-                                        </div>
-                                        <span class="stage-label">Pulling ARC benchmarks</span>
-                                        <span class="stage-status"></span>
+                                    <div class="corpus-stat">
+                                        <span class="corpus-stat-value" id="corpusSuccessCount">0</span>
+                                        <span class="corpus-stat-label">Extracted</span>
                                     </div>
-                                    <div class="progress-stage" data-stage="internet">
-                                        <div class="stage-indicator pending">
-                                            <svg class="progress-ring" viewBox="0 0 36 36">
-                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
-                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
-                                            </svg>
-                                            <span class="stage-icon"></span>
-                                        </div>
-                                        <span class="stage-label">Compiling deep research report</span>
-                                        <span class="stage-status"></span>
-                                    </div>
-                                    <div class="progress-stage" data-stage="normalize">
-                                        <div class="stage-indicator pending">
-                                            <svg class="progress-ring" viewBox="0 0 36 36">
-                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
-                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
-                                            </svg>
-                                            <span class="stage-icon"></span>
-                                        </div>
-                                        <span class="stage-label">Normalising and validating</span>
-                                        <span class="stage-status"></span>
-                                    </div>
-                                    <div class="progress-stage" data-stage="complete">
-                                        <div class="stage-indicator pending">
-                                            <svg class="progress-ring" viewBox="0 0 36 36">
-                                                <circle class="progress-ring-bg" cx="18" cy="18" r="15.5"/>
-                                                <circle class="progress-ring-fill" cx="18" cy="18" r="15.5"/>
-                                            </svg>
-                                            <span class="stage-icon"></span>
-                                        </div>
-                                        <span class="stage-label">Finalising Source Pack</span>
-                                        <span class="stage-status"></span>
+                                    <div class="corpus-stat corpus-stat-error hidden" id="corpusErrorStat">
+                                        <span class="corpus-stat-value" id="corpusErrorCount">0</span>
+                                        <span class="corpus-stat-label">Failed</span>
                                     </div>
                                 </div>
-                                <div class="progress-timer">
-                                    <span>Elapsed: <span id="elapsedTime">0:00</span></span>
-                                </div>
+                            </div>
+
+                            <div class="panel-actions">
+                                <button class="btn btn-ghost" id="backToStep2">Back</button>
+                                <button class="btn btn-primary" id="proceedToStep4">Continue</button>
                             </div>
                         </div>
 
-                        <!-- Step 4: Add Additional Documents -->
+                        <!-- Step 4: Qualification Criteria -->
                         <div class="step-panel" data-step="4">
-                            <div class="add-documents-container">
-                                <div class="add-docs-header">
-                                    <div class="add-docs-icon">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                            <path d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                        </svg>
-                                    </div>
-                                    <h3>Review Sources & Add Documents</h3>
-                                    <p class="add-docs-subtitle">Review auto-generated sources and add any supplementary materials</p>
-                                </div>
-                                
-                                <div class="add-docs-content">
-                                    <!-- Source Status Section (always visible) -->
-                                    <div class="source-status-section" id="sourceStatusSection">
-                                        <h4 class="section-divider-title">Generated Sources</h4>
-                                        <div class="source-status-grid" id="sourceStatusGrid">
-                                            <!-- Dynamically populated with source status cards -->
-                                        </div>
-                                    </div>
+                            <div class="panel-header" style="flex-direction:column;align-items:flex-start;">
+                                <h3>Qualification Criteria</h3>
+                                <p class="panel-subtitle">Generate a qualification assessment using the uploaded supporting documents. Customise the prompt below or use the default.</p>
+                            </div>
 
-                                    <!-- Failed Source Replacement Section -->
-                                    <div class="placeholder-replacement-section hidden" id="placeholderReplacementSection">
-                                        <div class="placeholder-section-header">
-                                            <div class="placeholder-warning-icon">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <h4>Sources Requiring Replacement</h4>
-                                                <p>Some sources couldn't be generated. Upload replacement files below.</p>
-                                            </div>
-                                        </div>
-                                        <div class="placeholder-items-list" id="placeholderItemsList">
-                                            <!-- Dynamically populated -->
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Additional Documents Section -->
-                                    <div class="additional-docs-section">
-                                        <h4 class="section-divider-title">Additional Documents (Optional)</h4>
-                                        <div class="drop-zone" id="documentDropZone">
-                                        <div class="drop-zone-content">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                                <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                            <!-- Prompt Editor -->
+                            <div class="qual-prompt-section">
+                                <div class="qual-prompt-header">
+                                    <label for="qualPromptEditor">Qualification Criteria Prompt</label>
+                                    <button type="button" class="btn btn-ghost btn-sm" id="resetQualPromptBtn" title="Reset to default prompt">Reset Default</button>
+                                </div>
+                                <textarea id="qualPromptEditor" class="qual-prompt-textarea" placeholder="Enter the qualification criteria prompt...&#10;&#10;The uploaded supporting documents will be injected as context before this prompt is sent to the AI."></textarea>
+                                <p class="qual-prompt-hint">Available variables: <code>{{client_name}}</code>, <code>{{industry}}</code>, <code>{{geography}}</code>, <code>{{chunk_count}}</code></p>
+                            </div>
+
+                            <!-- Generate button area -->
+                            <div class="qual-generate-area">
+                                <button class="btn btn-primary btn-lg" id="generateQualBtn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;margin-right:8px;">
+                                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                                    </svg>
+                                    Generate Qualification Document
+                                </button>
+                            </div>
+
+                            <!-- Progress -->
+                            <div class="qual-progress hidden" id="qualProgress">
+                                <div class="qual-progress-info">
+                                    <span class="qual-progress-label" id="qualProgressLabel">Generating qualification document...</span>
+                                    <span class="qual-progress-elapsed" id="qualProgressElapsed">0:00</span>
+                                </div>
+                                <div class="doc-progress-track">
+                                    <div class="doc-progress-fill qual-progress-fill" id="qualProgressFill"></div>
+                                </div>
+                            </div>
+
+                            <!-- Preview area -->
+                            <div class="qual-preview hidden" id="qualPreview">
+                                <div class="qual-preview-header">
+                                    <h4>Qualification Document Preview</h4>
+                                    <div class="qual-preview-actions">
+                                        <button class="btn btn-secondary btn-sm" id="downloadQualDocBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:6px;">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                <polyline points="7 10 12 15 17 10"/>
+                                                <line x1="12" y1="15" x2="12" y2="3"/>
                                             </svg>
-                                            <p>Drag and drop files here</p>
-                                            <span class="drop-zone-or">or</span>
-                                            <button type="button" class="btn btn-secondary" id="browseFilesBtn">Browse Files</button>
-                                            <p class="drop-zone-hint">Supports PDF, DOCX, XLSX, PPTX, TXT, MD, CSV, JSON</p>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="added-files-section hidden" id="addedFilesSection">
-                                        <div class="added-files-header">
-                                            <h4>Added Documents</h4>
-                                            <span class="file-count" id="addedFileCount">0 files</span>
-                                        </div>
-                                        <div class="added-files-list" id="addedFilesList">
-                                            <!-- Files will be listed here -->
-                                        </div>
-                                    </div>
-                                    </div><!-- End additional-docs-section -->
-                                    
-                                    <div class="add-docs-info glass-card">
-                                        <div class="info-icon">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                            </svg>
-                                        </div>
-                                        <div class="info-content">
-                                            <p><strong>Source Pack Contents:</strong></p>
-                                            <ul style="font-size: 0.85rem; color: var(--text-secondary); margin: 8px 0; padding-left: 20px;">
-                                                <li>ChatGPT Research Report</li>
-                                                <li>ARC Assets Report</li>
-                                                <li>AlphaSense Market Report</li>
-                                                <li>Client PoC Document</li>
-                                                <li>Additional Materials (if added)</li>
-                                            </ul>
-                                        </div>
+                                            Download .docx
+                                        </button>
+                                        <button class="btn btn-ghost btn-sm" id="regenerateQualBtn">Regenerate</button>
                                     </div>
                                 </div>
-                                
-                                <div class="panel-actions panel-actions-end">
-                                    <button class="btn btn-primary" id="proceedWithDocs">
-                                        <span id="proceedWithDocsText">Continue to Review</span>
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-left: 8px;">
-                                            <path d="M13 7l5 5m0 0l-5 5m5-5H6"/>
-                                        </svg>
-                                    </button>
+                                <div class="qual-preview-content" id="qualPreviewContent">
+                                    <!-- Rendered HTML preview goes here -->
                                 </div>
+                            </div>
+
+                            <div class="panel-actions">
+                                <button class="btn btn-ghost" id="backToStep3">Back</button>
+                                <button class="btn btn-primary" id="proceedToStep5">Continue to Value Case</button>
                             </div>
                         </div>
 
-                        <!-- Step 5: Narrative Generation -->
+                        <!-- Step 5: Value Case -->
                         <div class="step-panel" data-step="5">
-                            <div class="narrative-container">
-                                <div class="narrative-scrollable-content">
-                                <div class="narrative-header">
-                                    <div class="narrative-icon">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                        </svg>
-                                    </div>
-                                    <h3>Generate Narrative Document</h3>
-                                    <p class="narrative-subtitle">Transform your Source Pack into a polished narrative using AI</p>
+                            <div class="panel-header" style="flex-direction:column;align-items:flex-start;">
+                                <h3>Value Case</h3>
+                                <p class="panel-subtitle">Generate a structured value case document that synthesises all supporting evidence and qualification findings into a compelling business case. Customise the prompt below or use the default.</p>
+                            </div>
+
+                            <!-- Prompt Editor -->
+                            <div class="qual-prompt-section">
+                                <div class="qual-prompt-header">
+                                    <label for="valueCasePromptEditor">Value Case Prompt</label>
+                                    <button type="button" class="btn btn-ghost btn-sm" id="resetValueCasePromptBtn" title="Reset to default prompt">Reset Default</button>
                                 </div>
-                                
-                                <div class="narrative-content">
-                                    <!-- Strategic Question (Optional but powerful) -->
-                                    <div class="narrative-section">
-                                        <label class="section-label">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                <textarea id="valueCasePromptEditor" class="qual-prompt-textarea" placeholder="Enter the value case prompt...&#10;&#10;The supporting documents and qualification output will be injected as context before this prompt is sent to the AI."></textarea>
+                                <p class="qual-prompt-hint">Available variables: <code>{{client_name}}</code>, <code>{{industry}}</code>, <code>{{geography}}</code>, <code>{{chunk_count}}</code></p>
+                            </div>
+
+                            <!-- Generate button area -->
+                            <div class="qual-generate-area">
+                                <button class="btn btn-primary btn-lg" id="generateValueCaseBtn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;margin-right:8px;">
+                                        <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                    Generate Value Case Document
+                                </button>
+                            </div>
+
+                            <!-- Progress -->
+                            <div class="qual-progress hidden" id="valueCaseProgress">
+                                <div class="qual-progress-info">
+                                    <span class="qual-progress-label" id="valueCaseProgressLabel">Generating value case document...</span>
+                                    <span class="qual-progress-elapsed" id="valueCaseProgressElapsed">0:00</span>
+                                </div>
+                                <div class="doc-progress-track">
+                                    <div class="doc-progress-fill qual-progress-fill" id="valueCaseProgressFill"></div>
+                                </div>
+                            </div>
+
+                            <!-- Preview area -->
+                            <div class="qual-preview hidden" id="valueCasePreview">
+                                <div class="qual-preview-header">
+                                    <h4>Value Case Document Preview</h4>
+                                    <div class="qual-preview-actions">
+                                        <button class="btn btn-secondary btn-sm" id="downloadValueCaseDocBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:6px;">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                <polyline points="7 10 12 15 17 10"/>
+                                                <line x1="12" y1="15" x2="12" y2="3"/>
                                             </svg>
-                                            Strategic Question
-                                            <span class="label-hint">(Optional - frames the entire narrative)</span>
-                                        </label>
-                                        <textarea id="strategicQuestion" class="agent-prompt-input strategic-question-input" rows="4" placeholder="Enter your strategic question here...&#10;&#10;Example: How might we build upon our customer data, route to market, and product innovation to win with the shopper and retailer in an AI-led market?&#10;&#10;This question becomes the central thesis that frames the entire narrative."></textarea>
-                                        <p class="field-hint">The narrative will be structured as an answer to this question. Key themes from the question will be woven throughout all sections.</p>
-                                    </div>
-                                    
-                                    <!-- Agent Instructions (Primary) -->
-                                    <div class="narrative-section">
-                                        <label class="section-label">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
-                                            </svg>
-                                            Narrative Instructions
-                                        </label>
-                                        <textarea id="narrativeAgentPrompt" class="agent-prompt-input" rows="12" placeholder="Enter your narrative template and instructions here...&#10;&#10;The AI will follow these instructions to generate the narrative from your Source Pack documents.&#10;&#10;Tip: Paste your full template structure here, including section headings and guidance for each section."></textarea>
-                                        <p class="field-hint">The AI will use your Source Pack documents to populate the narrative according to these instructions.</p>
-                                    </div>
-                                    
-                                    <!-- Source Pack Summary -->
-                                    <div class="narrative-section">
-                                        <label class="section-label">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-                                            </svg>
-                                            Source Pack Summary
-                                        </label>
-                                        <div class="source-pack-summary glass-card" id="sourcePackSummary">
-                                            <div class="summary-item">
-                                                <span class="summary-label">Client:</span>
-                                                <span class="summary-value" id="narrativeClientName">--</span>
-                                            </div>
-                                            <div class="summary-item">
-                                                <span class="summary-label">Documents:</span>
-                                                <span class="summary-value" id="narrativeDocCount">--</span>
-                                            </div>
-                                            <div class="summary-item">
-                                                <span class="summary-label">Generated:</span>
-                                                <span class="summary-value" id="narrativeGenDate">--</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Potential Client Contacts (researched during generation) -->
-                                    <div class="narrative-section contacts-section">
-                                        <label class="section-label">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 6px;">
-                                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                                                <circle cx="12" cy="7" r="4"/>
-                                            </svg>
-                                            <span id="currentContactsTitle">Current C-Suite Executives</span>
-                                            <span class="contacts-status" id="currentContactsStatus">
-                                                <span class="contacts-loading hidden" id="currentContactsLoading">
-                                                    <span class="mini-spinner"></span> Searching...
-                                                </span>
-                                            </span>
-                                        </label>
-                                        <p class="section-hint" id="currentContactsHint">Live web search for current leadership (researched in background)</p>
-                                        <div class="contacts-grid" id="currentContactsGrid">
-                                            <div class="contact-card" data-slot="1">
-                                                <div class="contact-placeholder">
-                                                    <span class="contact-placeholder-text">Searching...</span>
-                                                </div>
-                                            </div>
-                                            <div class="contact-card" data-slot="2">
-                                                <div class="contact-placeholder">
-                                                    <span class="contact-placeholder-text">Searching...</span>
-                                                </div>
-                                            </div>
-                                            <div class="contact-card" data-slot="3">
-                                                <div class="contact-placeholder">
-                                                    <span class="contact-placeholder-text">Searching...</span>
-                                                </div>
-                                            </div>
-                                            <div class="contact-card" data-slot="4">
-                                                <div class="contact-placeholder">
-                                                    <span class="contact-placeholder-text">Searching...</span>
-                                                </div>
-                                            </div>
-                                            <div class="contact-card" data-slot="5">
-                                                <div class="contact-placeholder">
-                                                    <span class="contact-placeholder-text">Searching...</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Recently Exited Senior Leaders -->
-                                    <div class="narrative-section contacts-section">
-                                        <label class="section-label">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 6px;">
-                                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                                                <circle cx="8.5" cy="7" r="4"/>
-                                                <path d="M20 8l-4 4m0-4l4 4"/>
-                                            </svg>
-                                            <span id="exitedContactsTitle">Recently Exited Senior Leaders</span>
-                                            <span class="contacts-status" id="exitedContactsStatus">
-                                                <span class="contacts-loading hidden" id="exitedContactsLoading">
-                                                    <span class="mini-spinner"></span> Searching...
-                                                </span>
-                                            </span>
-                                        </label>
-                                        <p class="section-hint" id="exitedContactsHint">Live web search for recent C-suite departures</p>
-                                        <div class="contacts-grid" id="exitedContactsGrid">
-                                            <div class="contact-card exited" data-slot="1">
-                                                <div class="contact-placeholder">
-                                                    <span class="contact-placeholder-text">Searching...</span>
-                                                </div>
-                                            </div>
-                                            <div class="contact-card exited" data-slot="2">
-                                                <div class="contact-placeholder">
-                                                    <span class="contact-placeholder-text">Searching...</span>
-                                                </div>
-                                            </div>
-                                            <div class="contact-card exited" data-slot="3">
-                                                <div class="contact-placeholder">
-                                                    <span class="contact-placeholder-text">Searching...</span>
-                                                </div>
-                                            </div>
-                                            <div class="contact-card exited" data-slot="4">
-                                                <div class="contact-placeholder">
-                                                    <span class="contact-placeholder-text">Searching...</span>
-                                                </div>
-                                            </div>
-                                            <div class="contact-card exited" data-slot="5">
-                                                <div class="contact-placeholder">
-                                                    <span class="contact-placeholder-text">Searching...</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                            Download .docx
+                                        </button>
+                                        <button class="btn btn-ghost btn-sm" id="regenerateValueCaseBtn">Regenerate</button>
                                     </div>
                                 </div>
-                                
-                                <!-- Generated Narrative Display - Split Layout -->
-                                <div class="narrative-display-section" id="narrativeDisplaySection" style="display: none;">
-                                    <div class="narrative-split-container">
-                                        <!-- Left Panel: Generated Narrative -->
-                                        <div class="narrative-split-left">
-                                            <div class="narrative-display-header">
-                                                <div class="narrative-display-title">
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
-                                                        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                                    </svg>
-                                                    <h4>Generated Narrative</h4>
-                                                </div>
-                                                <div class="narrative-display-actions">
-                                                    <button class="btn btn-sm btn-ghost" id="copyNarrativeBtn" title="Copy to clipboard">
-                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-                                                            <path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                                                        </svg>
-                                                    </button>
-                                                    <button class="btn btn-sm btn-ghost" id="downloadNarrativeBtn" title="Download as Word">
-                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-                                                            <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                                        </svg>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div class="narrative-display-meta" id="narrativeDisplayMeta">
-                                                <span class="narrative-meta-item">
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                                                        <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                                    </svg>
-                                                    <span id="narrativeTimestamp">--</span>
-                                                </span>
-                                            </div>
-                                            <div class="narrative-display-content glass-card" id="narrativeDisplayContent">
-                                                <!-- Narrative content will be rendered here -->
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Right Panel: Narrative Chat -->
-                                        <div class="narrative-split-right">
-                                            <div class="narrative-chat-container">
-                                                <div class="narrative-chat-header">
-                                                    <div class="narrative-chat-icon">
-                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                                            <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                                                        </svg>
-                                                    </div>
-                                                    <div class="narrative-chat-title">
-                                                        <h4>Ask questions & iterate</h4>
-                                                        <p>Interrogate your sources and narrative</p>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div class="narrative-chat-messages" id="narrativeChatMessages">
-                                                    <div class="chat-message assistant">
-                                                        <div class="chat-avatar">
-                                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                                                <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
-                                                            </svg>
-                                                        </div>
-                                                        <div class="chat-content">
-                                                            <div class="chat-bubble">
-                                                                <p>I can answer questions about the narrative and source documents. Ask me anything!</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div class="narrative-chat-input-area">
-                                                    <!-- Highlighted Text Context Box -->
-                                                    <div class="highlighted-context-box" id="highlightedContextBox" style="display: none;">
-                                                        <div class="highlighted-context-header">
-                                                            <div class="highlighted-context-label">
-                                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
-                                                                    <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                                                                </svg>
-                                                                <span>Selected Text Context</span>
-                                                            </div>
-                                                            <button class="highlighted-context-clear" id="clearHighlightedContext" title="Clear selection">
-                                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
-                                                                    <path d="M6 18L18 6M6 6l12 12"/>
-                                                                </svg>
-                                                            </button>
-                                                        </div>
-                                                        <div class="highlighted-context-content" id="highlightedContextContent"></div>
-                                                    </div>
-                                                    <!-- Mode Selection and Input -->
-                                                    <div class="narrative-chat-controls">
-                                                        <div class="chat-mode-selector">
-                                                            <select id="narrativeChatMode" class="chat-mode-dropdown">
-                                                                <option value="ask">💬 Ask</option>
-                                                                <option value="iterate">✏️ Iterate</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="narrative-chat-input-wrapper">
-                                                            <textarea id="narrativeChatInput" placeholder="Ask about the narrative or sources..." rows="1"></textarea>
-                                                            <button class="btn btn-primary narrative-chat-send" id="narrativeChatSendBtn" title="Send message">
-                                                                <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-                                                                </svg>
-                                                                <svg class="stop-icon hidden" viewBox="0 0 24 24" fill="currentColor">
-                                                                    <rect x="6" y="6" width="12" height="12" rx="2"/>
-                                                                </svg>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                <div class="qual-preview-content" id="valueCasePreviewContent">
+                                    <!-- Rendered HTML preview goes here -->
+                                </div>
+
+                                <!-- Assumptions Table -->
+                                <div class="assumptions-table-container hidden" id="assumptionsTableContainer">
+                                    <div class="assumptions-table-header">
+                                        <h4 class="assumptions-table-title">Assumptions Analysis</h4>
+                                        <span class="assumptions-loading" id="assumptionsLoading"><span class="spinner-inline"></span> Analysing…</span>
                                     </div>
-                                    
-                                    <!-- Previous Narratives -->
-                                    <div class="narrative-history-section" id="narrativeHistorySection" style="display: none;">
-                                        <div class="narrative-history-header">
-                                            <h5>Previous Narratives</h5>
-                                            <span class="narrative-history-count" id="narrativeHistoryCount">0</span>
-                                        </div>
-                                        <div class="narrative-history-list" id="narrativeHistoryList">
-                                            <!-- Previous narratives will be listed here -->
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Generate Client Intel Pack -->
-                                    <div class="client-intel-pack-section glass-card" id="clientIntelPackSection" style="display: none;">
-                                        <div class="intel-pack-header">
-                                            <div class="intel-pack-title">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
-                                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                                                    <circle cx="9" cy="7" r="4"/>
-                                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                                                </svg>
-                                                <h4>Generate Client Intel Pack</h4>
-                                            </div>
-                                            <p class="intel-pack-desc">Create a stakeholder cheat sheet for consultants approaching senior leaders</p>
-                                        </div>
-                                        
-                                        <button class="btn btn-secondary btn-lg intel-pack-btn" id="generateIntelPackBtn">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
-                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                                <polyline points="14 2 14 8 20 8"/>
-                                                <line x1="16" y1="13" x2="8" y2="13"/>
-                                                <line x1="16" y1="17" x2="8" y2="17"/>
-                                                <polyline points="10 9 9 9 8 9"/>
+                                    <table class="assumptions-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Assumption</th>
+                                                <th>Impact</th>
+                                                <th>Confidence</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="assumptionsTableBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="panel-actions">
+                                <button class="btn btn-ghost" id="backToStep4">Back</button>
+                                <button class="btn btn-primary" id="proceedToStep6">Continue to Provoke</button>
+                            </div>
+                        </div>
+
+                        <!-- Step 6: Provoke — Origination Engine -->
+                        <div class="step-panel" data-step="6">
+                            <div class="panel-header" style="flex-direction:column;align-items:flex-start;">
+                                <h3>Provoke — The Origination Engine</h3>
+                                <p class="panel-subtitle">Generate a client-specific strategic provocation document. Customise the prompt below or use the default.</p>
+                            </div>
+
+                            <!-- Prompt Editor -->
+                            <div class="qual-prompt-section">
+                                <div class="qual-prompt-header">
+                                    <label for="provokePromptEditor">Provocation Prompt</label>
+                                    <button type="button" class="btn btn-ghost btn-sm" id="resetProvokePromptBtn" title="Reset to default prompt">Reset Default</button>
+                                </div>
+                                <textarea id="provokePromptEditor" class="qual-prompt-textarea" placeholder="Enter the provocation prompt...&#10;&#10;The supporting documents and qualification output will be injected as context before this prompt is sent to the AI."></textarea>
+                                <p class="qual-prompt-hint">Available variables: <code>{{client_name}}</code>, <code>{{industry}}</code>, <code>{{geography}}</code>, <code>{{chunk_count}}</code></p>
+                            </div>
+
+                            <!-- Generate button area -->
+                            <div class="qual-generate-area">
+                                <button class="btn btn-primary btn-lg" id="generateProvokeBtn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;margin-right:8px;">
+                                        <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                    Generate Provocation Document
+                                </button>
+                            </div>
+
+                            <!-- Progress -->
+                            <div class="qual-progress hidden" id="provokeProgress">
+                                <div class="qual-progress-info">
+                                    <span class="qual-progress-label" id="provokeProgressLabel">Generating provocation document...</span>
+                                    <span class="qual-progress-elapsed" id="provokeProgressElapsed">0:00</span>
+                                </div>
+                                <div class="doc-progress-track">
+                                    <div class="doc-progress-fill qual-progress-fill" id="provokeProgressFill"></div>
+                                </div>
+                            </div>
+
+                            <!-- Preview area -->
+                            <div class="qual-preview hidden" id="provokePreview">
+                                <div class="qual-preview-header">
+                                    <h4>Provocation Document Preview</h4>
+                                    <div class="qual-preview-actions">
+                                        <button class="btn btn-secondary btn-sm" id="downloadProvokeDocBtn">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:6px;">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                <polyline points="7 10 12 15 17 10"/>
+                                                <line x1="12" y1="15" x2="12" y2="3"/>
                                             </svg>
-                                            <span>Generate Client Intel Pack</span>
+                                            Download .docx
                                         </button>
-                                        
-                                        <!-- Intel Pack Loading State -->
-                                        <div id="intelPackLoading" class="intel-pack-loading" style="display: none;">
-                                            <div class="intel-pack-spinner"></div>
-                                            <div class="intel-pack-loading-text">
-                                                <p class="loading-title">Analyzing stakeholders...</p>
-                                                <p class="loading-subtitle">Creating your executive briefing document</p>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Intel Pack Success -->
-                                        <div id="intelPackSuccess" class="intel-pack-success" style="display: none;">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 24px; height: 24px;">
-                                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                                                <polyline points="22 4 12 14.01 9 11.01"/>
-                                            </svg>
-                                            <p>Client Intel Pack generated successfully!</p>
-                                            <a id="intelPackDownloadLink" class="intel-pack-link" href="#">Open folder</a>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Generate Audio from Narrative -->
-                                    <div class="narrative-audio-section glass-card" id="narrativeAudioSection" style="display: none;">
-                                        <div class="narrative-audio-header">
-                                            <div class="narrative-audio-title">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
-                                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                                                    <line x1="12" y1="19" x2="12" y2="23"/>
-                                                    <line x1="8" y1="23" x2="16" y2="23"/>
-                                                </svg>
-                                                <h4>Generate Audio Narration</h4>
-                                            </div>
-                                            <p class="narrative-audio-desc">Transform your narrative into a compelling audio script, crafted for executive impact</p>
-                                        </div>
-                                        
-                                        <div class="narrative-audio-options">
-                                            <div class="narrative-audio-option-group">
-                                                <label>Voice</label>
-                                                <select id="narrativeAudioVoice">
-                                                    <option value="pNInz6obpgDQGcFmaJgB" selected>Adam (Male, Professional)</option>
-                                                    <option value="21m00Tcm4TlvDq8ikWAM">Rachel (Female, Warm)</option>
-                                                    <option value="yoZ06aMxZJJ28mfd3POQ">Sam (Male, Narrative)</option>
-                                                    <option value="EXAVITQu4vr4xnSDxMaL">Bella (Female, Soft)</option>
-                                                </select>
-                                            </div>
-                                            <div class="narrative-audio-option-group">
-                                                <label>Tone</label>
-                                                <select id="narrativeAudioTone">
-                                                    <option value="inspiring" selected>Inspiring & Visionary</option>
-                                                    <option value="confident">Confident & Authoritative</option>
-                                                    <option value="empathetic">Empathetic & Understanding</option>
-                                                    <option value="urgent">Urgent & Action-Oriented</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        
-                                        <button class="btn btn-secondary btn-lg narrative-audio-btn" id="generateNarrativeAudioBtn">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
-                                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                                            </svg>
-                                            <span id="generateNarrativeAudioText">Generate Audio Narrative</span>
-                                        </button>
-                                        
-                                        <!-- Audio Generation Status -->
-                                        <div id="narrativeAudioStatus" class="narrative-audio-status hidden">
-                                            <div class="narrative-audio-loading">
-                                                <div class="narrative-audio-spinner"></div>
-                                                <div class="narrative-audio-loading-text">
-                                                    <p class="loading-title" id="narrativeAudioLoadingTitle">Crafting your script...</p>
-                                                    <p class="loading-subtitle" id="narrativeAudioLoadingSubtitle">AI is transforming your narrative into an executive-ready script</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Generated Script Preview -->
-                                        <div id="narrativeScriptPreview" class="narrative-script-preview hidden">
-                                            <div class="script-preview-header">
-                                                <h5>
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-                                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                                        <polyline points="14 2 14 8 20 8"/>
-                                                    </svg>
-                                                    Generated Script
-                                                </h5>
-                                                <button class="btn btn-ghost btn-sm" id="toggleScriptPreview" title="Toggle preview">
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                                                        <path d="M19 9l-7 7-7-7"/>
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                            <div class="script-preview-content" id="scriptPreviewContent">
-                                                <!-- Script content will be shown here -->
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Audio Player -->
-                                        <div id="narrativeAudioPlayer" class="narrative-audio-player hidden">
-                                            <div class="audio-player-header">
-                                                <h5>Your Narrative Audio</h5>
-                                                <button class="btn btn-secondary btn-sm" id="downloadNarrativeAudioBtn">
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                                                    </svg>
-                                                    Download MP3
-                                                </button>
-                                            </div>
-                                            <audio id="narrativeAudioElement" controls class="narrative-audio-element">
-                                                Your browser does not support the audio element.
-                                            </audio>
-                                        </div>
-                                        
-                                        <!-- Error State -->
-                                        <div id="narrativeAudioError" class="narrative-audio-error hidden">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 24px; height: 24px;">
-                                                <circle cx="12" cy="12" r="10"/>
-                                                <line x1="12" y1="8" x2="12" y2="12"/>
-                                                <line x1="12" y1="16" x2="12.01" y2="16"/>
-                                            </svg>
-                                            <p id="narrativeAudioErrorText">Failed to generate audio</p>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Generate Video Narrative Section -->
-                                    <div class="narrative-video-section glass-card" id="narrativeVideoSection" style="display: none;">
-                                        <div class="narrative-video-header">
-                                            <div class="narrative-video-title">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
-                                                    <polygon points="23 7 16 12 23 17 23 7"/>
-                                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                                                </svg>
-                                                <h4>Generate Video Narrative</h4>
-                                            </div>
-                                            <p class="narrative-video-desc">Create a cinematic montage video with AI-generated scenes synchronized to your narration</p>
-                                        </div>
-                                        
-                                        <div class="narrative-video-input-section">
-                                            <label for="videoNarrationScript" class="video-script-label">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-                                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                                    <polyline points="14 2 14 8 20 8"/>
-                                                </svg>
-                                                Narration Script
-                                            </label>
-                                            <textarea id="videoNarrationScript" class="video-script-textarea" placeholder="Paste your narration script here...&#10;&#10;The script will be broken into segments, each converted into a cinematic video scene.&#10;&#10;Tip: Use clear, descriptive language that can inspire visual scenes."></textarea>
-                                            <div class="video-script-info">
-                                                <span id="videoScriptWordCount">0 words</span>
-                                                <span class="video-script-estimate" id="videoScriptEstimate">~0 segments, ~0s video</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="narrative-video-options">
-                                            <div class="narrative-video-option-group">
-                                                <label>Aspect Ratio</label>
-                                                <select id="videoNarrativeRatio">
-                                                    <option value="1920:1080" selected>16:9 (Landscape)</option>
-                                                    <option value="1080:1920">9:16 (Portrait)</option>
-                                                    <option value="1080:1080">1:1 (Square)</option>
-                                                </select>
-                                            </div>
-                                            <div class="narrative-video-option-group">
-                                                <label>Visual Style</label>
-                                                <select id="videoNarrativeStyle">
-                                                    <option value="cinematic" selected>Cinematic</option>
-                                                    <option value="corporate">Corporate</option>
-                                                    <option value="documentary">Documentary</option>
-                                                    <option value="abstract">Abstract/Artistic</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        
-                                        <button class="btn btn-secondary btn-lg narrative-video-btn" id="generateVideoNarrativeBtn">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
-                                                <polygon points="23 7 16 12 23 17 23 7"/>
-                                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                                            </svg>
-                                            <span id="generateVideoNarrativeText">Generate Video Narrative</span>
-                                        </button>
-                                        
-                                        <!-- Video Generation Progress -->
-                                        <div id="videoNarrativeProgress" class="video-narrative-progress hidden">
-                                            <div class="video-progress-header">
-                                                <h5>Generating Video Narrative</h5>
-                                                <span class="video-progress-stage" id="videoProgressStage">Initializing...</span>
-                                            </div>
-                                            <div class="video-progress-bar-container">
-                                                <div class="video-progress-bar">
-                                                    <div class="video-progress-bar-fill" id="videoProgressBarFill" style="width: 0%"></div>
-                                                </div>
-                                                <span class="video-progress-percent" id="videoProgressPercent">0%</span>
-                                            </div>
-                                            <div class="video-segment-list" id="videoSegmentList">
-                                                <!-- Segment progress items will be populated here -->
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Final Video Player -->
-                                        <div id="videoNarrativePlayer" class="video-narrative-player hidden">
-                                            <div class="video-player-header">
-                                                <h5>Your Video Narrative</h5>
-                                                <button class="btn btn-secondary btn-sm" id="downloadVideoNarrativeBtn">
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                                                    </svg>
-                                                    Download MP4
-                                                </button>
-                                            </div>
-                                            <video id="videoNarrativeElement" controls class="video-narrative-element">
-                                                Your browser does not support the video tag.
-                                            </video>
-                                        </div>
-                                        
-                                        <!-- Error State -->
-                                        <div id="videoNarrativeError" class="video-narrative-error hidden">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 24px; height: 24px;">
-                                                <circle cx="12" cy="12" r="10"/>
-                                                <line x1="12" y1="8" x2="12" y2="12"/>
-                                                <line x1="12" y1="16" x2="12.01" y2="16"/>
-                                            </svg>
-                                            <p id="videoNarrativeErrorText">Failed to generate video</p>
-                                        </div>
+                                        <button class="btn btn-ghost btn-sm" id="regenerateProvokeBtn">Regenerate</button>
                                     </div>
                                 </div>
-                                </div><!-- End narrative-scrollable-content -->
-                                
-                                <div class="panel-actions panel-actions-spread">
-                                    <button class="btn btn-ghost" id="backToReviewBtn">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
-                                            <path d="M11 17l-5-5m0 0l5-5m-5 5h12"/>
-                                        </svg>
-                                        Back
-                                    </button>
-                                    <div class="action-buttons-group">
-                                        <button class="btn btn-ghost" id="exportSourcePackBtnStep6">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
-                                                <path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                            </svg>
-                                            <span>Export Source Pack</span>
-                                        </button>
-                                        <button class="btn btn-secondary" id="downloadWorkshopBtn">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
-                                                <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                            </svg>
-                                            <span id="downloadWorkshopText">Download Workshop Materials</span>
-                                        </button>
-                                        <button class="btn btn-primary" id="generateNarrativeBtn">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
-                                                <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                                            </svg>
-                                            <span id="generateNarrativeText">Generate Narrative</span>
-                                        </button>
-                                        <button class="btn btn-danger hidden" id="cancelNarrativeBtn">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 8px;">
-                                                <circle cx="12" cy="12" r="10"/>
-                                                <path d="M15 9l-6 6M9 9l6 6"/>
-                                            </svg>
-                                            <span>Cancel</span>
-                                        </button>
+                                <div class="qual-preview-content" id="provokePreviewContent">
+                                    <!-- Rendered HTML preview goes here -->
+                                </div>
+                            </div>
+
+                            <div class="panel-actions">
+                                <button class="btn btn-ghost" id="backToStep5">Back</button>
+                                <button class="btn btn-primary" id="proceedToStep7">Continue to Review</button>
+                            </div>
+                        </div>
+
+                        <!-- Step 7: Review -->
+                        <div class="step-panel" data-step="7">
+                            <div class="panel-header" style="flex-direction:column;align-items:flex-start;">
+                                <h3>Review — Consistency &amp; Accuracy Check</h3>
+                                <p class="panel-subtitle">Select a C-suite perspective to review the qualification and provocation outputs for inconsistencies and strategic gaps. Click the edit icon to customise the reviewer's instructions.</p>
+                            </div>
+
+                            <!-- Asset Summary -->
+                            <div class="review-assets-section" id="reviewAssetsSection">
+                                <h4 class="review-assets-title">Generated Assets</h4>
+                                <div class="review-assets-grid" id="reviewAssetsGrid">
+                                    <!-- Dynamically populated -->
+                                </div>
+                            </div>
+
+                            <!-- C-Suite Reviewer Tiles -->
+                            <div class="csuite-section">
+                                <h4 class="review-assets-title">Choose Reviewer Perspective</h4>
+                                <div class="csuite-tiles-grid" id="csuiteTilesGrid">
+                                    <div class="csuite-tile" data-role="ceo">
+                                        <div class="csuite-tile-actions">
+                                            <button class="csuite-edit-btn" data-role="ceo" title="Edit CEO instructions">✏️</button>
+                                            <button class="csuite-review-btn" data-role="ceo" title="Run CEO review">🔍</button>
+                                            <button class="csuite-rewrite-btn hidden" data-role="ceo" title="Rewrite provoke using CEO review">🔄</button>
+                                        </div>
+                                        <div class="csuite-icon">👤</div>
+                                        <div class="csuite-label">CEO</div>
+                                        <div class="csuite-sublabel">Chief Executive Officer</div>
+                                    </div>
+                                    <div class="csuite-tile" data-role="cfo">
+                                        <div class="csuite-tile-actions">
+                                            <button class="csuite-edit-btn" data-role="cfo" title="Edit CFO instructions">✏️</button>
+                                            <button class="csuite-review-btn" data-role="cfo" title="Run CFO review">🔍</button>
+                                            <button class="csuite-rewrite-btn hidden" data-role="cfo" title="Rewrite provoke using CFO review">🔄</button>
+                                        </div>
+                                        <div class="csuite-icon">💰</div>
+                                        <div class="csuite-label">CFO</div>
+                                        <div class="csuite-sublabel">Chief Financial Officer</div>
+                                    </div>
+                                    <div class="csuite-tile" data-role="coo">
+                                        <div class="csuite-tile-actions">
+                                            <button class="csuite-edit-btn" data-role="coo" title="Edit COO instructions">✏️</button>
+                                            <button class="csuite-review-btn" data-role="coo" title="Run COO review">🔍</button>
+                                            <button class="csuite-rewrite-btn hidden" data-role="coo" title="Rewrite provoke using COO review">🔄</button>
+                                        </div>
+                                        <div class="csuite-icon">⚙️</div>
+                                        <div class="csuite-label">COO</div>
+                                        <div class="csuite-sublabel">Chief Operating Officer</div>
+                                    </div>
+                                    <div class="csuite-tile" data-role="cto">
+                                        <div class="csuite-tile-actions">
+                                            <button class="csuite-edit-btn" data-role="cto" title="Edit CTO instructions">✏️</button>
+                                            <button class="csuite-review-btn" data-role="cto" title="Run CTO review">🔍</button>
+                                            <button class="csuite-rewrite-btn hidden" data-role="cto" title="Rewrite provoke using CTO review">🔄</button>
+                                        </div>
+                                        <div class="csuite-icon">💻</div>
+                                        <div class="csuite-label">CTO</div>
+                                        <div class="csuite-sublabel">Chief Technology Officer</div>
+                                    </div>
+                                    <div class="csuite-tile" data-role="cmo">
+                                        <div class="csuite-tile-actions">
+                                            <button class="csuite-edit-btn" data-role="cmo" title="Edit CMO instructions">✏️</button>
+                                            <button class="csuite-review-btn" data-role="cmo" title="Run CMO review">🔍</button>
+                                            <button class="csuite-rewrite-btn hidden" data-role="cmo" title="Rewrite provoke using CMO review">🔄</button>
+                                        </div>
+                                        <div class="csuite-icon">📢</div>
+                                        <div class="csuite-label">CMO</div>
+                                        <div class="csuite-sublabel">Chief Marketing Officer</div>
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- C-Suite Prompt Editor (inline, hidden by default) -->
+                            <div class="csuite-prompt-editor hidden" id="csuitePromptEditor">
+                                <div class="csuite-prompt-header">
+                                    <h4 id="csuitePromptEditorTitle">Edit Instructions</h4>
+                                    <div style="display:flex;gap:8px;">
+                                        <button class="btn btn-primary btn-sm" id="saveCsuitePromptBtn">Save</button>
+                                        <button class="btn btn-ghost btn-sm" id="closeCsuitePromptBtn">Cancel</button>
+                                    </div>
+                                </div>
+                                <textarea id="csuitePromptTextarea" class="qual-prompt-textarea" placeholder="Enter the review instructions for this C-suite perspective..."></textarea>
+                            </div>
+
+                            <!-- Confirmation Modal -->
+                            <div class="csuite-confirm-overlay hidden" id="csuiteConfirmOverlay">
+                                <div class="csuite-confirm-modal">
+                                    <div class="csuite-confirm-icon" id="csuiteConfirmIcon"></div>
+                                    <h4 id="csuiteConfirmTitle">Run review?</h4>
+                                    <p id="csuiteConfirmDesc">This will review the documents from the perspective of the selected role.</p>
+                                    <div class="csuite-confirm-actions">
+                                        <button class="btn btn-primary" id="csuiteConfirmYes">Yes, Run Review</button>
+                                        <button class="btn btn-ghost" id="csuiteConfirmNo">Cancel</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Review Progress -->
+                            <div class="qual-progress hidden" id="reviewProgress">
+                                <div class="qual-progress-info">
+                                    <span class="qual-progress-label" id="reviewProgressLabel">Running consistency review...</span>
+                                    <span class="qual-progress-elapsed" id="reviewProgressElapsed">0:00</span>
+                                </div>
+                                <div class="doc-progress-track">
+                                    <div class="doc-progress-fill qual-progress-fill" id="reviewProgressFill"></div>
+                                </div>
+                            </div>
+
+                            <!-- Review Changes Checklists (one per role, rendered dynamically) -->
+                            <div id="reviewChecklistsContainer"></div>
+
+                            <div class="panel-actions">
+                                <button class="btn btn-ghost" id="backToStep6">Back</button>
+                            </div>
                         </div>
+
                     </div>
                 </div>
             </section>
 
-            <!-- Video Generation View -->
-            <section id="videoView" class="view hidden">
-                <header class="view-header">
-                    <div class="header-content">
-                        <h2>Generate Video</h2>
-                        <p class="header-subtitle">Create AI-generated videos using Runway ML</p>
-                    </div>
-                </header>
-                <div class="video-gen-container">
-                    <div class="video-gen-panel glass-card">
-                        <div class="video-prompt-section">
-                            <label for="videoPromptInput" class="video-prompt-label">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
-                                    <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                                </svg>
-                                Video Prompt
-                            </label>
-                            <textarea id="videoPromptInput" class="video-prompt-textarea" placeholder="Describe the video you want to create...&#10;&#10;Example: A cinematic aerial shot of a futuristic city at sunset, with flying cars and neon lights reflecting off glass buildings."></textarea>
-                            <div class="video-options">
-                                <div class="video-option-group">
-                                    <label>Duration</label>
-                                    <select id="videoDuration">
-                                        <option value="4">4 seconds</option>
-                                        <option value="6">6 seconds</option>
-                                        <option value="8" selected>8 seconds</option>
-                                    </select>
-                                </div>
-                                <div class="video-option-group">
-                                    <label>Aspect Ratio</label>
-                                    <select id="videoRatio">
-                                        <option value="1920:1080" selected>16:9 (Landscape)</option>
-                                        <option value="1080:1920">9:16 (Portrait)</option>
-                                        <option value="1280:720">HD 720p</option>
-                                        <option value="720:1280">HD 720p Portrait</option>
-                                    </select>
-                                </div>
-                                <div class="video-option-group">
-                                    <label>Audio</label>
-                                    <select id="videoAudio">
-                                        <option value="true" selected>With Audio</option>
-                                        <option value="false">No Audio</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <button id="generateVideoBtn" class="btn btn-primary btn-lg video-generate-btn">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
-                                    <polygon points="5 3 19 12 5 21 5 3"/>
-                                </svg>
-                                <span id="generateVideoText">Generate Video</span>
-                            </button>
-                        </div>
-                        
-                        <!-- Video Output Section -->
-                        <div id="videoOutputSection" class="video-output-section hidden">
-                            <div class="video-output-header">
-                                <h3>Generated Video</h3>
-                                <button id="downloadVideoBtn" class="btn btn-secondary btn-sm hidden">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                                    </svg>
-                                    Download
-                                </button>
-                            </div>
-                            <div id="videoLoadingState" class="video-loading-state">
-                                <div class="video-spinner"></div>
-                                <p class="video-loading-text">Generating your video...</p>
-                                <p class="video-loading-subtext">This may take 1-3 minutes</p>
-                            </div>
-                            <div id="videoPlayerContainer" class="video-player-container hidden">
-                                <video id="generatedVideoPlayer" controls class="generated-video-player">
-                                    Your browser does not support the video tag.
-                                </video>
-                            </div>
-                            <div id="videoErrorState" class="video-error-state hidden">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px; color: var(--error);">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <line x1="12" y1="8" x2="12" y2="12"/>
-                                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                                </svg>
-                                <p class="video-error-text" id="videoErrorText">Failed to generate video</p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Narration Generation Section -->
-                    <div class="narration-gen-panel glass-card">
-                        <div class="narration-header">
-                            <div class="narration-title">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 22px; height: 22px;">
-                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                                    <line x1="12" y1="19" x2="12" y2="23"/>
-                                    <line x1="8" y1="23" x2="16" y2="23"/>
-                                </svg>
-                                <h3>Generate Narration</h3>
-                            </div>
-                            <p class="narration-subtitle">Convert text to lifelike speech using ElevenLabs AI voices</p>
-                        </div>
-                        
-                        <div class="narration-prompt-section">
-                            <label for="narrationTextInput" class="narration-prompt-label">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                    <polyline points="14 2 14 8 20 8"/>
-                                    <line x1="16" y1="13" x2="8" y2="13"/>
-                                    <line x1="16" y1="17" x2="8" y2="17"/>
-                                    <polyline points="10 9 9 9 8 9"/>
-                                </svg>
-                                Narrative Text
-                            </label>
-                            <textarea id="narrationTextInput" class="narration-prompt-textarea" placeholder="Paste your narrative text here to convert to speech...&#10;&#10;The AI will generate a natural-sounding voice reading of your text."></textarea>
-                            <div class="narration-char-count">
-                                <span id="narrationCharCount">0</span> / 5,000 characters
-                            </div>
-                        </div>
-                        
-                        <div class="narration-options">
-                            <div class="narration-option-group">
-                                <label>Voice</label>
-                                <select id="narrationVoice">
-                                    <option value="21m00Tcm4TlvDq8ikWAM" selected>Rachel (Female, Warm)</option>
-                                    <option value="EXAVITQu4vr4xnSDxMaL">Bella (Female, Soft)</option>
-                                    <option value="ErXwobaYiN019PkySvjV">Antoni (Male, Neutral)</option>
-                                    <option value="VR6AewLTigWG4xSOukaG">Arnold (Male, Deep)</option>
-                                    <option value="pNInz6obpgDQGcFmaJgB">Adam (Male, Professional)</option>
-                                    <option value="yoZ06aMxZJJ28mfd3POQ">Sam (Male, Narrative)</option>
-                                </select>
-                            </div>
-                            <div class="narration-option-group">
-                                <label>Model</label>
-                                <select id="narrationModel">
-                                    <option value="eleven_multilingual_v2" selected>Multilingual v2 (Best)</option>
-                                    <option value="eleven_turbo_v2_5">Turbo v2.5 (Fast)</option>
-                                    <option value="eleven_monolingual_v1">English v1</option>
-                                </select>
-                            </div>
-                        </div>
-                        
-                        <button id="generateNarrationBtn" class="btn btn-primary btn-lg narration-generate-btn">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px;">
-                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                            </svg>
-                            <span id="generateNarrationText">Generate Narration</span>
-                        </button>
-                        
-                        <!-- Narration Output Section -->
-                        <div id="narrationOutputSection" class="narration-output-section hidden">
-                            <div class="narration-output-header">
-                                <h4>Generated Audio</h4>
-                                <button id="downloadNarrationBtn" class="btn btn-secondary btn-sm hidden">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                                    </svg>
-                                    Download MP3
-                                </button>
-                            </div>
-                            <div id="narrationLoadingState" class="narration-loading-state">
-                                <div class="narration-spinner"></div>
-                                <p class="narration-loading-text">Generating narration...</p>
-                                <p class="narration-loading-subtext">This usually takes 10-30 seconds</p>
-                            </div>
-                            <div id="narrationPlayerContainer" class="narration-player-container hidden">
-                                <audio id="generatedNarrationPlayer" controls class="generated-narration-player">
-                                    Your browser does not support the audio element.
-                                </audio>
-                            </div>
-                            <div id="narrationErrorState" class="narration-error-state hidden">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 32px; height: 32px; color: var(--error);">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <line x1="12" y1="8" x2="12" y2="12"/>
-                                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                                </svg>
-                                <p class="narration-error-text" id="narrationErrorText">Failed to generate narration</p>
-                            </div>
-                        </div>
-                        
-                        <!-- Narration History -->
-                        <div id="narrationHistorySection" class="narration-history-section">
-                            <div class="narration-history-header">
-                                <h4>
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-                                        <circle cx="12" cy="12" r="10"/>
-                                        <polyline points="12 6 12 12 16 14"/>
-                                    </svg>
-                                    Recent Narrations
-                                </h4>
-                                <button id="clearNarrationHistoryBtn" class="btn btn-ghost btn-sm hidden">
-                                    Clear All
-                                </button>
-                            </div>
-                            <div id="narrationHistoryEmpty" class="narration-history-empty">
-                                <p>No narrations generated yet</p>
-                            </div>
-                            <div id="narrationHistoryList" class="narration-history-list hidden">
-                                <!-- Narration history items will be populated here -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- History View -->
             <section id="historyView" class="view hidden">
                 <header class="view-header">
                     <div class="header-content">
@@ -1617,54 +1066,6 @@
                                     </div>
                                 </form>
                             </div>
-                            <!-- Runway ML -->
-                            <div class="credential-card">
-                                <div class="credential-header">
-                                    <div class="credential-icon runway">RW</div>
-                                    <div class="credential-title">
-                                        <span class="credential-name">Runway ML</span>
-                                        <span class="credential-status" id="credStatusRunway">Not Configured</span>
-                                    </div>
-                                </div>
-                                <form class="credential-form" id="runwayCredForm">
-                                    <div class="form-group">
-                                        <label>API Secret</label>
-                                        <input type="password" name="apiKey" placeholder="Enter Runway API secret">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Model</label>
-                                        <select name="model">
-                                            <option value="veo3" selected>Veo 3 (Best Quality)</option>
-                                            <option value="veo3.1">Veo 3.1</option>
-                                            <option value="veo3.1_fast">Veo 3.1 Fast</option>
-                                        </select>
-                                    </div>
-                                    <div class="credential-actions">
-                                        <button type="button" class="btn btn-ghost test-connection" data-provider="runway">Test</button>
-                                        <button type="submit" class="btn btn-primary">Save</button>
-                                    </div>
-                                </form>
-                            </div>
-                            <!-- ElevenLabs -->
-                            <div class="credential-card">
-                                <div class="credential-header">
-                                    <div class="credential-icon elevenlabs">11</div>
-                                    <div class="credential-title">
-                                        <span class="credential-name">ElevenLabs</span>
-                                        <span class="credential-status" id="credStatusElevenlabs">Not Configured</span>
-                                    </div>
-                                </div>
-                                <form class="credential-form" id="elevenlabsCredForm">
-                                    <div class="form-group">
-                                        <label>API Key</label>
-                                        <input type="password" name="apiKey" placeholder="Enter ElevenLabs API key">
-                                    </div>
-                                    <div class="credential-actions">
-                                        <button type="button" class="btn btn-ghost test-connection" data-provider="elevenlabs">Test</button>
-                                        <button type="submit" class="btn btn-primary">Save</button>
-                                    </div>
-                                </form>
-                            </div>
                         </div>
                     </div>
 
@@ -1685,95 +1086,106 @@
                             </button>
                         </div>
                         <p class="section-description">Set the default instructions that will be pre-populated for the narrative generation agent. Users can modify these instructions for individual generations.</p>
-                        <textarea id="adminDefaultPrompt" class="admin-prompt-textarea" placeholder="Enter default instructions for the narrative agent...&#10;&#10;Examples:&#10;• Maintain a professional executive tone&#10;• Focus on actionable insights and recommendations&#10;• Include relevant data points and metrics&#10;• Structure content with clear headings and sections"></textarea>
+                        <textarea id="adminDefaultPrompt" class="admin-prompt-textarea" placeholder="Enter default instructions for the narrative agent...&#10;&#10;Examples:&#10;â€¢ Maintain a professional executive tone&#10;â€¢ Focus on actionable insights and recommendations&#10;â€¢ Include relevant data points and metrics&#10;â€¢ Structure content with clear headings and sections"></textarea>
                     </div>
 
-                    <!-- AI Learned Preferences -->
+                    <!-- Qualification Criteria Default Prompt -->
                     <div class="admin-section glass-card">
                         <div class="section-header">
                             <h3>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px; margin-right: 8px;">
-                                    <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                                    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                                 </svg>
-                                AI Learned Preferences
+                                Qualification Criteria Prompt
                             </h3>
-                            <div class="learnings-header-actions">
-                                <button class="btn btn-ghost btn-sm" id="refreshLearningsBtn" title="Refresh">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                                        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                                    </svg>
-                                </button>
-                                <button class="btn btn-ghost btn-sm" id="clearLearningsBtn" title="Clear All Learnings">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                                        <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                    </svg>
-                                </button>
-                            </div>
+                            <button class="btn btn-primary btn-sm" id="saveQualPromptBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 6px;">
+                                    <path d="M5 13l4 4L19 7"/>
+                                </svg>
+                                Save
+                            </button>
                         </div>
-                        <p class="section-description">The AI learns from your narrative iterations to better match your writing preferences. These preferences are automatically applied to future narrative generations.</p>
-                        
-                        <div class="learnings-stats" id="learningsStats">
-                            <div class="learnings-stat">
-                                <span class="learnings-stat-value" id="learnStatIterations">0</span>
-                                <span class="learnings-stat-label">Total Iterations</span>
-                            </div>
-                            <div class="learnings-stat">
-                                <span class="learnings-stat-value" id="learnStatNarratives">0</span>
-                                <span class="learnings-stat-label">Narratives</span>
-                            </div>
-                            <div class="learnings-stat">
-                                <span class="learnings-stat-value" id="learnStatPreferences">0</span>
-                                <span class="learnings-stat-label">Preferences Learned</span>
-                            </div>
-                        </div>
+                        <p class="section-description">Set the default qualification criteria prompt. This prompt is combined with the uploaded supporting documents to generate a qualification assessment Word document. Users can edit the prompt per-generation.</p>
+                        <textarea id="adminQualPrompt" class="admin-prompt-textarea" placeholder="Enter the default qualification criteria prompt...&#10;&#10;This will be pre-populated in Step 4 and sent to the AI along with all supporting document chunks as context.&#10;&#10;Available variables: {{client_name}}, {{industry}}, {{geography}}, {{chunk_count}}"></textarea>
+                    </div>
 
-                        <div class="learnings-categories">
-                            <!-- Tone Preferences -->
-                            <div class="learnings-category" data-category="tone">
-                                <div class="learnings-category-header">
-                                    <span class="learnings-category-icon">🎯</span>
-                                    <span class="learnings-category-title">Tone</span>
-                                    <span class="learnings-category-count" id="learnCountTone">0</span>
-                                </div>
-                                <div class="learnings-list" id="learnListTone">
-                                    <p class="learnings-empty">No tone preferences learned yet</p>
-                                </div>
+                    <!-- Value Case Default Prompt -->
+                    <div class="admin-section glass-card">
+                        <div class="section-header">
+                            <h3>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px; margin-right: 8px;">
+                                    <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                                </svg>
+                                Value Case Prompt (Step 5)
+                            </h3>
+                            <button class="btn btn-primary btn-sm" id="saveValueCasePromptBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 6px;">
+                                    <path d="M5 13l4 4L19 7"/>
+                                </svg>
+                                Save
+                            </button>
+                        </div>
+                        <p class="section-description">Set the default value case prompt. This prompt structures the business case document that synthesises supporting evidence and qualification findings. The output is chunked and fed into the Provocation step. Users can edit per-generation.</p>
+                        <textarea id="adminValueCasePrompt" class="admin-prompt-textarea" placeholder="Enter the default value case prompt...&#10;&#10;This will be pre-populated in Step 5 and sent to the AI along with all document chunks (supporting docs + qualification output) as context.&#10;&#10;Available variables: {{client_name}}, {{industry}}, {{geography}}, {{chunk_count}}"></textarea>
+                    </div>
+
+                    <!-- Provocation / Origination Engine Default Prompt -->
+                    <div class="admin-section glass-card">
+                        <div class="section-header">
+                            <h3>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px; margin-right: 8px;">
+                                    <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                </svg>
+                                Provocation Prompt (Step 6)
+                            </h3>
+                            <button class="btn btn-primary btn-sm" id="saveProvokePromptBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 6px;">
+                                    <path d="M5 13l4 4L19 7"/>
+                                </svg>
+                                Save
+                            </button>
+                        </div>
+                        <p class="section-description">Set the default provocation prompt for "The Origination Engine" document. This prompt structures the strategic provocation with eight frameworks and forty-one diagnostic prompts. Users can edit per-generation.</p>
+                        <textarea id="adminProvokePrompt" class="admin-prompt-textarea" placeholder="Enter the default provocation prompt...&#10;&#10;This will be pre-populated in Step 6 and sent to the AI along with all document chunks (supporting docs + qualification output + value case) as context.&#10;&#10;Available variables: {{client_name}}, {{industry}}, {{geography}}, {{chunk_count}}"></textarea>
+                    </div>
+
+                    <!-- C-Suite Review Prompts (Step 7) -->
+                    <div class="admin-section glass-card">
+                        <div class="section-header">
+                            <h3>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px; margin-right: 8px;">
+                                    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+                                </svg>
+                                C-Suite Review Prompts (Step 7)
+                            </h3>
+                            <button class="btn btn-primary btn-sm" id="saveCsuitePromptsBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; margin-right: 6px;">
+                                    <path d="M5 13l4 4L19 7"/>
+                                </svg>
+                                Save All
+                            </button>
+                        </div>
+                        <p class="section-description">Configure the default persona instructions for each C-suite reviewer. These prompts are appended to the review system prompt to give the AI a specific executive perspective when reviewing documents.</p>
+                        <div class="csuite-admin-prompts">
+                            <div class="csuite-admin-prompt-card">
+                                <label>👤 CEO — Chief Executive Officer</label>
+                                <textarea id="adminCsuiteCeo" class="admin-prompt-textarea" placeholder="e.g. Review from the CEO's perspective. Focus on overall strategic alignment, competitive positioning, market opportunity size, and whether the narrative is compelling enough for a board-level presentation..."></textarea>
                             </div>
-                            
-                            <!-- Structure Preferences -->
-                            <div class="learnings-category" data-category="structure">
-                                <div class="learnings-category-header">
-                                    <span class="learnings-category-icon">📐</span>
-                                    <span class="learnings-category-title">Structure</span>
-                                    <span class="learnings-category-count" id="learnCountStructure">0</span>
-                                </div>
-                                <div class="learnings-list" id="learnListStructure">
-                                    <p class="learnings-empty">No structure preferences learned yet</p>
-                                </div>
+                            <div class="csuite-admin-prompt-card">
+                                <label>💰 CFO — Chief Financial Officer</label>
+                                <textarea id="adminCsuiteCfo" class="admin-prompt-textarea" placeholder="e.g. Review from the CFO's perspective. Scrutinise financial claims, ROI projections, payback periods, risk quantification, and whether the business case would withstand investor scrutiny..."></textarea>
                             </div>
-                            
-                            <!-- Content Preferences -->
-                            <div class="learnings-category" data-category="content">
-                                <div class="learnings-category-header">
-                                    <span class="learnings-category-icon">📝</span>
-                                    <span class="learnings-category-title">Content</span>
-                                    <span class="learnings-category-count" id="learnCountContent">0</span>
-                                </div>
-                                <div class="learnings-list" id="learnListContent">
-                                    <p class="learnings-empty">No content preferences learned yet</p>
-                                </div>
+                            <div class="csuite-admin-prompt-card">
+                                <label>⚙️ COO — Chief Operating Officer</label>
+                                <textarea id="adminCsuiteCoo" class="admin-prompt-textarea" placeholder="e.g. Review from the COO's perspective. Focus on operational feasibility, implementation complexity, change management requirements, and whether the transformation roadmap is realistic..."></textarea>
                             </div>
-                            
-                            <!-- Vocabulary Preferences -->
-                            <div class="learnings-category" data-category="vocabulary">
-                                <div class="learnings-category-header">
-                                    <span class="learnings-category-icon">💬</span>
-                                    <span class="learnings-category-title">Vocabulary</span>
-                                    <span class="learnings-category-count" id="learnCountVocabulary">0</span>
-                                </div>
-                                <div class="learnings-list" id="learnListVocabulary">
-                                    <p class="learnings-empty">No vocabulary preferences learned yet</p>
-                                </div>
+                            <div class="csuite-admin-prompt-card">
+                                <label>💻 CTO — Chief Technology Officer</label>
+                                <textarea id="adminCsuiteCto" class="admin-prompt-textarea" placeholder="e.g. Review from the CTO's perspective. Evaluate technology claims, architecture feasibility, AI/data readiness, integration complexity, and technical debt implications..."></textarea>
+                            </div>
+                            <div class="csuite-admin-prompt-card">
+                                <label>📢 CMO — Chief Marketing Officer</label>
+                                <textarea id="adminCsuiteCmo" class="admin-prompt-textarea" placeholder="e.g. Review from the CMO's perspective. Assess market positioning claims, customer insight depth, brand implications, go-to-market strategy, and competitive differentiation..."></textarea>
                             </div>
                         </div>
                     </div>
@@ -2113,7 +1525,7 @@
                         <label class="checkbox-label">
                             <input type="checkbox" id="placeholderResearch">
                             <span class="checkbox-custom"></span>
-                            <span class="checkbox-text">🔍 Enable Web Research</span>
+                            <span class="checkbox-text">ðŸ” Enable Web Research</span>
                         </label>
                         <p class="field-hint" id="researchHint">
                             When checked, the AI will use web search to research current information about the topic.

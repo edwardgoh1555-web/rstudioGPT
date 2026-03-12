@@ -66,6 +66,72 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('sourcePack:finalizeZip')
     },
 
+    // Supporting Documents – Upload & Chunking (Step 3)
+    supportingDocs: {
+        upload: () =>
+            ipcRenderer.invoke('supportingDocs:upload'),
+        process: () =>
+            ipcRenderer.invoke('supportingDocs:process'),
+        remove: (fileId) =>
+            ipcRenderer.invoke('supportingDocs:remove', { fileId }),
+        clear: () =>
+            ipcRenderer.invoke('supportingDocs:clear'),
+        getState: () =>
+            ipcRenderer.invoke('supportingDocs:getState'),
+        search: (query, limit) =>
+            ipcRenderer.invoke('supportingDocs:search', { query, limit }),
+        onProgress: (callback) =>
+            ipcRenderer.on('supportingDocs:progress', (event, data) => callback(data))
+    },
+
+    // Qualification Criteria (Step 4)
+    qualification: {
+        generate: (prompt, clientName, industry, geography) =>
+            ipcRenderer.invoke('qualification:generate', { prompt, clientName, industry, geography }),
+        download: () =>
+            ipcRenderer.invoke('qualification:download'),
+        onProgress: (callback) =>
+            ipcRenderer.on('qualification:progress', (event, data) => callback(data))
+    },
+
+    // Value Case (Step 5)
+    valueCase: {
+        generate: (prompt, clientName, industry, geography) =>
+            ipcRenderer.invoke('valueCase:generate', { prompt, clientName, industry, geography }),
+        download: () =>
+            ipcRenderer.invoke('valueCase:download'),
+        extractAssumptions: (clientName) =>
+            ipcRenderer.invoke('valueCase:extractAssumptions', { clientName }),
+        onProgress: (callback) =>
+            ipcRenderer.on('valueCase:progress', (event, data) => callback(data))
+    },
+
+    // Provocation / Origination Engine (Step 6)
+    provocation: {
+        generate: (prompt, clientName, industry, geography) =>
+            ipcRenderer.invoke('provocation:generate', { prompt, clientName, industry, geography }),
+        rewrite: (clientName, reviewRole, selectedChanges) =>
+            ipcRenderer.invoke('provocation:rewrite', { clientName, reviewRole, selectedChanges }),
+        download: () =>
+            ipcRenderer.invoke('provocation:download'),
+        downloadVersion: (versionIndex) =>
+            ipcRenderer.invoke('provocation:downloadVersion', { versionIndex }),
+        onProgress: (callback) =>
+            ipcRenderer.on('provocation:progress', (event, data) => callback(data))
+    },
+
+    // Review — Consistency & Accuracy Check (Step 7)
+    review: {
+        generate: (clientName, role, rolePrompt) =>
+            ipcRenderer.invoke('review:generate', { clientName, role, rolePrompt }),
+        downloadQuestions: (role) =>
+            ipcRenderer.invoke('review:downloadQuestions', { role }),
+        getAssets: () =>
+            ipcRenderer.invoke('review:getAssets'),
+        onProgress: (callback) =>
+            ipcRenderer.on('review:progress', (event, data) => callback(data))
+    },
+
     // Export Functions
     export: {
         toMarkdown: (sourcePack) => 
@@ -101,7 +167,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('ai-console-log', (event, data) => callback(data));
     },
 
-    // Narrative Builder (Step 5 - guided prompt creation)
+    // Narrative Builder (Step 6 - guided prompt creation)
     sourceChat: {
         sendMessage: (message) => 
             ipcRenderer.invoke('sourceChat:sendMessage', { message }),
@@ -109,7 +175,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('sourceChat:startConversation')
     },
 
-    // Narrative Chat (Step 6 - Q&A with sources + narrative)
+    // Narrative Chat (Step 7 - Q&A with sources + narrative)
     narrativeChat: {
         sendMessage: (message, narrativeContent, sourcePack, mode = 'ask', highlightedText = null, fullRewriteConfirmed = false) => 
             ipcRenderer.invoke('narrativeChat:sendMessage', { 
@@ -126,6 +192,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('narrativeChat:cancel'),
         setSourcePack: (sourcePack) =>
             ipcRenderer.invoke('narrativeChat:setSourcePack', sourcePack)
+    },
+
+    // Session restore
+    session: {
+        restoreDocState: (data) =>
+            ipcRenderer.invoke('session:restoreDocState', data)
     },
 
     // Persistent App Data
@@ -194,50 +266,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('narratives:delete', { clientId, narrativeId })
     },
 
-    // Video Generation (Runway ML)
-    video: {
-        generate: (options) => 
-            ipcRenderer.invoke('video:generate', options)
-    },
-
-    // Narration Generation (ElevenLabs)
-    narration: {
-        generate: (options) => 
-            ipcRenderer.invoke('narration:generate', options),
-        getHistory: () => 
-            ipcRenderer.invoke('narration:getHistory'),
-        clearHistory: () => 
-            ipcRenderer.invoke('narration:clearHistory'),
-        deleteHistoryItem: (id) => 
-            ipcRenderer.invoke('narration:deleteHistoryItem', id),
-        getAudio: (id) => 
-            ipcRenderer.invoke('narration:getAudio', id),
-        generateFromNarrative: (options) => 
-            ipcRenderer.invoke('narration:generateFromNarrative', options)
-    },
-
-    // Narrative Audio Progress
-    onNarrativeAudioProgress: (callback) => {
-        ipcRenderer.on('narrative-audio-progress', (event, data) => callback(data));
-    },
-
     // Client Intel Pack
     intelPack: {
         generate: (options) => 
             ipcRenderer.invoke('intelPack:generate', options)
-    },
-
-    // Video Narrative Generation (Script to Video Montage)
-    videoNarrative: {
-        generate: (options) => 
-            ipcRenderer.invoke('videoNarrative:generate', options),
-        cancel: () => 
-            ipcRenderer.invoke('videoNarrative:cancel')
-    },
-
-    // Video Narrative Progress
-    onVideoNarrativeProgress: (callback) => {
-        ipcRenderer.on('video-narrative-progress', (event, data) => callback(data));
     },
 
     // Settings (Admin)
@@ -249,25 +281,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getSourcePrompts: () => 
             ipcRenderer.invoke('settings:getSourcePrompts'),
         saveSourcePrompts: (prompts) => 
-            ipcRenderer.invoke('settings:saveSourcePrompts', prompts)
-    },
-
-    // Learning System - AI learns from user behavior
-    learnings: {
-        captureSignal: (signal) => 
-            ipcRenderer.invoke('learnings:captureSignal', signal),
-        get: () => 
-            ipcRenderer.invoke('learnings:get'),
-        runInference: () => 
-            ipcRenderer.invoke('learnings:runInference'),
-        getForPrompt: (client, industry) => 
-            ipcRenderer.invoke('learnings:getForPrompt', { client, industry }),
-        clear: () => 
-            ipcRenderer.invoke('learnings:clear'),
-        updatePreference: (category, key, value) => 
-            ipcRenderer.invoke('learnings:updatePreference', { category, key, value }),
-        getStats: () => 
-            ipcRenderer.invoke('learnings:getStats')
+            ipcRenderer.invoke('settings:saveSourcePrompts', prompts),
+        getQualPrompt: () =>
+            ipcRenderer.invoke('settings:getQualPrompt'),
+        saveQualPrompt: (prompt) =>
+            ipcRenderer.invoke('settings:saveQualPrompt', prompt),
+        getValueCasePrompt: () =>
+            ipcRenderer.invoke('settings:getValueCasePrompt'),
+        saveValueCasePrompt: (prompt) =>
+            ipcRenderer.invoke('settings:saveValueCasePrompt', prompt),
+        getProvokePrompt: () =>
+            ipcRenderer.invoke('settings:getProvokePrompt'),
+        saveProvokePrompt: (prompt) =>
+            ipcRenderer.invoke('settings:saveProvokePrompt', prompt),
+        getCsuitePrompts: () =>
+            ipcRenderer.invoke('settings:getCsuitePrompts'),
+        saveCsuitePrompts: (prompts) =>
+            ipcRenderer.invoke('settings:saveCsuitePrompts', prompts)
     },
 
     // File Operations
